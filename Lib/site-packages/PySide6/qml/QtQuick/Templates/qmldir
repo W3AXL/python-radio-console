@@ -1,6 +1,0 @@
-module QtQuick.Templates
-plugin qtquicktemplates2plugin
-classname QtQuickTemplates2Plugin
-typeinfo plugins.qmltypes
-depends QtQuick auto
-

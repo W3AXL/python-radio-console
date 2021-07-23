@@ -1,6 +1,0 @@
-module QtQuick.Scene3D
-plugin qtquickscene3dplugin
-classname QtQuickScene3DPlugin
-typeinfo plugins.qmltypes
-typeinfo plugins.qmltypes
-

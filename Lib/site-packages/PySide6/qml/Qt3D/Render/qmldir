@@ -1,6 +1,0 @@
-module Qt3D.Render
-plugin quick3drenderplugin
-classname Qt3DQuick3DRenderPlugin
-typeinfo plugins.qmltypes
-typeinfo plugins.qmltypes
-

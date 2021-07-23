@@ -1,6 +1,0 @@
-module QtQml.Models
-optional plugin modelsplugin
-classname QtQmlModelsPlugin
-designersupported
-typeinfo plugins.qmltypes
-

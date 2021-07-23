@@ -1,8 +1,0 @@
-module QtQml
-optional plugin qmlplugin
-classname QtQmlPlugin
-designersupported
-typeinfo plugins.qmltypes
-import QtQml.Models auto
-import QtQml.WorkerScript auto
-

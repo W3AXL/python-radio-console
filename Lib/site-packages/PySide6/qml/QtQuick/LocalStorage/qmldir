@@ -1,5 +1,0 @@
-module QtQuick.LocalStorage
-optional plugin qmllocalstorageplugin
-classname QQmlLocalStoragePlugin
-typeinfo plugins.qmltypes
-

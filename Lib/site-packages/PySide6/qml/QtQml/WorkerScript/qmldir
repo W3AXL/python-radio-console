@@ -1,6 +1,0 @@
-module QtQml.WorkerScript
-optional plugin workerscriptplugin
-classname QtQmlWorkerScriptPlugin
-designersupported
-typeinfo plugins.qmltypes
-

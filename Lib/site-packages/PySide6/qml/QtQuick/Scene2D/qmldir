@@ -1,6 +1,0 @@
-module QtQuick.Scene2D
-plugin qtquickscene2dplugin
-classname QtQuickScene2DPlugin
-typeinfo plugins.qmltypes
-typeinfo plugins.qmltypes
-
