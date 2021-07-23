@@ -5,7 +5,13 @@ class Radio():
                     "Motorola MCS (SB9600)",
                     "Motorola XTL (SB9600)"]
 
-    def __init__(self, name, desc, ctrlMode, ctrlDev, pttDev, txDev, rxDev, signalMode=None, signalId=None):
+    signallingModes = ["None",
+                       "MDC-1200",
+                       "ANI",
+                       "Single-tone",
+                       "Two-tone"]
+
+    def __init__(self, name, desc=None, ctrlMode=None, ctrlPort=None, pttDev=None, txDev=None, rxDev=None, signalMode=None, signalId=None):
         """Radio configuration object
 
         Args:
@@ -19,12 +25,12 @@ class Radio():
             signalMode (string): Optional signalling mode
             signalId (any): Optional signalling ID
         """
-        self.name = name,
-        self.desc = desc,
+        self.name = name
+        self.desc = desc
         self.ctrlMode = ctrlMode
-        self.ctrlDev = ctrlDev
+        self.ctrlPort = ctrlPort
         self.pttDev = pttDev
         self.txDev = txDev
         self.rxDev = rxDev
-        self.sigMode = signalMode,
+        self.sigMode = signalMode
         self.sigId = signalId
