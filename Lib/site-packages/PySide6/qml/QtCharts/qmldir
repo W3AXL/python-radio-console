@@ -1,0 +1,6 @@
+module QtCharts
+plugin qtchartsqml2
+classname QtChartsQml2Plugin
+typeinfo plugins.qmltypes
+typeinfo plugins.qmltypes
+

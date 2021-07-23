@@ -1,0 +1,7 @@
+[console_scripts]
+pyside6-designer = PySide6.scripts.pyside_tool:designer
+pyside6-genpyi = PySide6.scripts.pyside_tool:genpyi
+pyside6-lupdate = PySide6.scripts.pyside_tool:main
+pyside6-rcc = PySide6.scripts.pyside_tool:rcc
+pyside6-uic = PySide6.scripts.pyside_tool:uic
+

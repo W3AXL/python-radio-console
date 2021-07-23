@@ -1,0 +1,6 @@
+module Qt3D.Input
+plugin quick3dinputplugin
+classname Qt3DQuick3DInputPlugin
+typeinfo plugins.qmltypes
+typeinfo plugins.qmltypes
+

@@ -1,0 +1,122 @@
+
+<!DOCTYPE html>
+
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+
+    <title>Solving compilation problems</title>
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css" />
+    <link rel="stylesheet" type="text/css" href="_static/pyside.css" />
+    <link rel="stylesheet" type="text/css" href="_static/panels-bootstrap.5fd3999ee7762ccc51105388f4a9d115.css" />
+    <link rel="stylesheet" type="text/css" href="_static/panels-main.c949a650a448cc0ae9fd3441c0e17fb0.css" />
+    <link rel="stylesheet" type="text/css" href="_static/panels-variables.06eb56fa6e07937060861dad626602ad.css" />
+    <link rel="next" title="Sequence Protocol" href="typesystem_sequenceprotocol.html" />
+    <link rel="prev" title="Object ownership" href="typesystem_ownership.html" /> 
+  </head><body>
+<div id="container">
+<div class="header">
+    <div class="header_container">
+        <div class="logo"><a href="http://www.pyside.org"><img alt="PySide" src="_static/pysidelogo.png"/></a></div>
+  
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="typesystem_sequenceprotocol.html" title="Sequence Protocol"
+             accesskey="N">next</a></li>
+        <li class="right" >
+          <a href="typesystem_ownership.html" title="Object ownership"
+             accesskey="P">previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="index.html">Shiboken  documentation</a> &#187;</li>
+          <li class="nav-item nav-item-1"><a href="typesystem.html" accesskey="U">Type System Reference</a> &#187;</li>
+        <li class="nav-item nav-item-this"><a href="">Solving compilation problems</a></li> 
+      </ul>
+    </div>
+    </div>
+</div>
+
+    <div class="document">
+      <div class="documentwrapper">
+          <div class="body" role="main">
+            
+  <section id="solving-compilation-problems">
+<h1>Solving compilation problems</h1>
+<section id="suppress-warning">
+<span id="id1"></span><h2>suppress-warning</h2>
+<blockquote>
+<div><p>The generator will generate several warnings which may be irrelevant to the
+user. The <code class="docutils literal notranslate"><span class="pre">suppress-warning</span></code> node suppresses the specified warning, and it is
+a child of the <a class="reference internal" href="typesystem_specifying_types.html#typesystem"><span class="std std-ref">typesystem</span></a> node.</p>
+<div class="highlight-xml notranslate"><div class="highlight"><pre><span></span><span class="nt">&lt;typesystem&gt;</span>
+    <span class="nt">&lt;suppress-warning</span> <span class="na">text=</span><span class="s">&quot;...&quot;</span> <span class="nt">/&gt;</span>
+<span class="nt">&lt;/typesystem&gt;</span>
+</pre></div>
+</div>
+<p>The <strong>text</strong> attribute is the warning text to suppress, and may contain the *
+wildcard (use “” to escape regular expression matching if the warning contain
+a regular “*”).</p>
+</div></blockquote>
+</section>
+<section id="extra-includes">
+<span id="id2"></span><h2>extra-includes</h2>
+<blockquote>
+<div><p>The <code class="docutils literal notranslate"><span class="pre">extra-includes</span></code> node contains declarations of additional include files,
+and it can be a child of the <a class="reference internal" href="typesystem_specifying_types.html#namespace"><span class="std std-ref">namespace-type</span></a>, <a class="reference internal" href="typesystem_specifying_types.html#value-type"><span class="std std-ref">value-type</span></a> and
+<a class="reference internal" href="typesystem_specifying_types.html#object-type"><span class="std std-ref">object-type</span></a> nodes.</p>
+<p>The generator automatically tries to read the global header for each type but
+sometimes it is required to include extra files in the generated C++ code to
+make sure that the code compiles. These files must be listed using include
+nodes within the extra-include node:</p>
+<div class="highlight-xml notranslate"><div class="highlight"><pre><span></span><span class="nt">&lt;value-type&gt;</span>
+    <span class="nt">&lt;extra-includes&gt;</span>
+        <span class="nt">&lt;include</span> <span class="na">file-name=</span><span class="s">&quot;...&quot;</span> <span class="na">location=</span><span class="s">&quot;global | local&quot;</span><span class="nt">/&gt;</span>
+    <span class="nt">&lt;/extra-includes&gt;</span>
+<span class="nt">&lt;/value-type&gt;</span>
+</pre></div>
+</div>
+<p>The <strong>file-name</strong> attribute is the file to include, such as “QStringList”.
+The <strong>location</strong> attribute is where the file is located: <em>global</em> means that
+the file is located in $INCLUDEPATH and will be included using #include &lt;…&gt;,
+<em>local</em> means that the file is in a local directory and will be included
+using #include “…”.</p>
+</div></blockquote>
+</section>
+<section id="include">
+<h2>include</h2>
+<blockquote>
+<div><p>The <code class="docutils literal notranslate"><span class="pre">include</span></code> node specifies the name and location of a file that must be
+included, and it is a child of the <a class="reference internal" href="typesystem_specifying_types.html#namespace"><span class="std std-ref">namespace-type</span></a>, <a class="reference internal" href="typesystem_specifying_types.html#value-type"><span class="std std-ref">value-type</span></a>,
+<a class="reference internal" href="typesystem_specifying_types.html#object-type"><span class="std std-ref">object-type</span></a> or <a class="reference internal" href="#extra-includes"><span class="std std-ref">extra-includes</span></a> node.</p>
+<p>The generator automatically tries to read the global header for each type. Use
+the include node to override this behavior, providing an alternative file. The
+include node can also be used to specify extra include files.</p>
+<div class="highlight-xml notranslate"><div class="highlight"><pre><span></span><span class="nt">&lt;value-type&gt;</span>
+    <span class="nt">&lt;include</span> <span class="na">file-name=</span><span class="s">&quot;...&quot;</span>
+        <span class="na">location=</span><span class="s">&quot;global | local&quot;</span><span class="nt">/&gt;</span>
+<span class="nt">&lt;/value-type&gt;</span>
+</pre></div>
+</div>
+<p>The <strong>file-name</strong> attribute is the file to include, such as “QStringList”.
+The <strong>location</strong> attribute is where the file is located: <em>global</em> means that
+the file is located in $INCLUDEPATH and will be included using #include &lt;…&gt;,
+<em>local</em> means that the file is in a local directory and will be included
+using #include “…”.</p>
+</div></blockquote>
+</section>
+</section>
+
+
+            <div class="clearer"></div>
+          </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+    <a href="http://www.qt.io/"><img src="_static/logo_qt.png" alt="Qt" border="0" /></a>
+    <a href="http://www.python.org"><img src="_static/logo_python.jpg" alt="Python" border="0" /></a>
+    </div>
+</div>
+  </body>
+</html>

@@ -1,0 +1,5 @@
+module Qt.labs.animation
+optional plugin labsanimationplugin
+classname QtLabsAnimationPlugin
+typeinfo plugins.qmltypes
+

@@ -1,0 +1,6 @@
+module Qt5Compat.GraphicalEffects.private
+plugin qtgraphicaleffectsprivate
+classname QtGraphicalEffectsPrivatePlugin
+typeinfo plugins.qmltypes
+FastGlow 1.0 FastGlow.qml
+

@@ -1,0 +1,6 @@
+module QtQuick.Window
+plugin quickwindow
+classname QtQuick_WindowPlugin
+typeinfo plugins.qmltypes
+import QtQuick auto
+

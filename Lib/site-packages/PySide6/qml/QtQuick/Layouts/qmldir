@@ -1,0 +1,7 @@
+module QtQuick.Layouts
+optional plugin qquicklayoutsplugin
+classname QtQuickLayoutsPlugin
+designersupported
+typeinfo plugins.qmltypes
+depends QtQuick
+

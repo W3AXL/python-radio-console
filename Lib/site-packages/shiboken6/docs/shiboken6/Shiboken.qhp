@@ -1,0 +1,152 @@
+<?xml version="1.0" encoding="utf-8" ?>
+
+<QtHelpProject version="1.0">
+
+    <namespace>org.sphinx.shiboken</namespace>
+
+    <virtualFolder>shiboken6</virtualFolder>
+     <customFilter name="Shiboken ">
+
+        <filterAttribute>Shiboken</filterAttribute>
+
+        <filterAttribute></filterAttribute>
+
+    </customFilter>
+
+    <filterSection>
+
+        <filterAttribute>Shiboken</filterAttribute>
+
+        <filterAttribute></filterAttribute>
+
+        <toc>
+
+            <section title="Shiboken  documentation" ref="index.html">
+
+            </section>
+
+        </toc>
+
+        <keywords>
+
+            <keyword name="delete()" ref="shibokenmodule.html#delete"/>
+
+            <keyword name="dump()" ref="shibokenmodule.html#dump"/>
+
+            <keyword name="getCppPointer()" ref="shibokenmodule.html#getCppPointer"/>
+
+            <keyword name="isOwnedByPython()" ref="shibokenmodule.html#isOwnedByPython"/>
+
+            <keyword name="isValid()" ref="shibokenmodule.html#isValid"/>
+
+            <keyword name="wasCreatedByPython()" ref="shibokenmodule.html#wasCreatedByPython"/>
+
+            <keyword name="wrapInstance()" ref="shibokenmodule.html#wrapInstance"/>
+
+            <keyword name="built-in function" ref="shibokenmodule.html#delete"/>
+
+            <keyword name="built-in function" ref="shibokenmodule.html#dump"/>
+
+            <keyword name="built-in function" ref="shibokenmodule.html#getCppPointer"/>
+
+            <keyword name="built-in function" ref="shibokenmodule.html#isOwnedByPython"/>
+
+            <keyword name="built-in function" ref="shibokenmodule.html#isValid"/>
+
+            <keyword name="built-in function" ref="shibokenmodule.html#wasCreatedByPython"/>
+
+            <keyword name="built-in function" ref="shibokenmodule.html#wrapInstance"/>
+
+        </keywords>
+
+        <files>
+
+            <file>considerations.html</file>
+
+            <file>gettingstarted.html</file>
+
+            <file>index.html</file>
+
+            <file>shibokengenerator.html</file>
+
+            <file>shibokenmodule.html</file>
+
+            <file>typesystem.html</file>
+
+            <file>typesystem_arguments.html</file>
+
+            <file>typesystem_codegeneration.html</file>
+
+            <file>typesystem_codeinjection.html</file>
+
+            <file>typesystem_conversionrule.html</file>
+
+            <file>typesystem_converters.html</file>
+
+            <file>typesystem_documentation.html</file>
+
+            <file>typesystem_manipulating_objects.html</file>
+
+            <file>typesystem_modify_function.html</file>
+
+            <file>typesystem_ownership.html</file>
+
+            <file>typesystem_sequenceprotocol.html</file>
+
+            <file>typesystem_solving_compilation.html</file>
+
+            <file>typesystem_specifying_types.html</file>
+
+            <file>typesystem_templates.html</file>
+
+            <file>typesystem_variables.html</file>
+
+            <file>examples/index.html</file>
+
+            <file>examples/samplebinding.html</file>
+
+            <file>_images/bindinggen-development.png</file>
+
+            <file>_images/converter.png</file>
+
+            <file>_images/qtforpython-underthehood.png</file>
+
+            <file>_images/shibokenqtarch.png</file>
+
+            <file>_static/basic.css</file>
+
+            <file>_static/classic.css</file>
+
+            <file>_static/default.css</file>
+
+            <file>_static/fakebar.png</file>
+
+            <file>_static/file.png</file>
+
+            <file>_static/logo_python.jpg</file>
+
+            <file>_static/logo_qt.png</file>
+
+            <file>_static/minus.png</file>
+
+            <file>_static/panels-bootstrap.5fd3999ee7762ccc51105388f4a9d115.css</file>
+
+            <file>_static/panels-main.c949a650a448cc0ae9fd3441c0e17fb0.css</file>
+
+            <file>_static/panels-variables.06eb56fa6e07937060861dad626602ad.css</file>
+
+            <file>_static/plus.png</file>
+
+            <file>_static/pygments.css</file>
+
+            <file>_static/pyside.css</file>
+
+            <file>_static/pysidelogo.png</file>
+
+            <file>_static/relbar_bg.png</file>
+
+        </files>
+
+    </filterSection>
+
+</QtHelpProject>

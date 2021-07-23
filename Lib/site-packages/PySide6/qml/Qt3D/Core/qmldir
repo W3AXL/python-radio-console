@@ -1,0 +1,5 @@
+module Qt3D.Core
+plugin quick3dcoreplugin
+classname Qt3DQuick3DCorePlugin
+typeinfo plugins.qmltypes
+

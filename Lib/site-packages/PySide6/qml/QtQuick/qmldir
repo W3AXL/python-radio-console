@@ -1,0 +1,7 @@
+module QtQuick
+optional plugin qtquick2plugin
+classname QtQuick2Plugin
+designersupported
+typeinfo plugins.qmltypes
+import QtQml auto
+

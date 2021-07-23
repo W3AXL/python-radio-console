@@ -1,0 +1,7 @@
+module Qt3D.Extras
+plugin quick3dextrasplugin
+classname Qt3DQuick3DExtrasPlugin
+typeinfo plugins.qmltypes
+depends Qt3D.Logic 2.0
+typeinfo plugins.qmltypes
+

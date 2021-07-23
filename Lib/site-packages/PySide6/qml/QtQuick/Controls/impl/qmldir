@@ -1,0 +1,5 @@
+module QtQuick.Controls.impl
+plugin qtquickcontrols2implplugin
+classname QtQuickControls2ImplPlugin
+typeinfo plugins.qmltypes
+
