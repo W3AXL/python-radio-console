@@ -4,6 +4,8 @@ import distutils.core
 import distutils.errors
 import distutils.extension
 
+from setuptools.extern.six.moves import map
+
 from .monkey import get_unpatched
 
 

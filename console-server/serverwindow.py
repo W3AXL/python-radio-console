@@ -218,7 +218,7 @@ class Ui_ServerWindow(object):
         self.grpRadioList.setTitle(QCoreApplication.translate("ServerWindow", u"Radio List", None))
         self.fAddRadio.setText(QCoreApplication.translate("ServerWindow", u"Add Radio", None))
         self.fEditRadio.setText(QCoreApplication.translate("ServerWindow", u"Edit Radio", None))
-        self.fDeleteRadio.setText(QCoreApplication.translate("ServerWindow", u"Delete Radio", None))
+        self.fDeleteRadio.setText(QCoreApplication.translate("ServerWindow", u"Delete", None))
         self.grpRadioSettings.setTitle(QCoreApplication.translate("ServerWindow", u"Radio Settings", None))
         self.lblRadioPTT.setText(QCoreApplication.translate("ServerWindow", u"PTT Device", None))
         self.lblRadioSigMode.setText(QCoreApplication.translate("ServerWindow", u"Signalling", None))

@@ -47,16 +47,26 @@ class ServerWindow(QMainWindow):
         for mode in Radio.controlModes:
             self.ui.fEditRadioCtrlMode.addItem(mode)
 
+        # Populate sound devices
+        self.getSoundDevices()
+
+    def getSoundDevices(self):
+        print("Querying sound devices")
+        # Get available output devices
+        devs = sd.query_devices()
+        for dev in devs:
+            devString = "{}: {}".format(dev['hostapi'],dev['name'])
+            # output (TX device)
+            if dev['max_output_channels'] > 0:
+                self.ui.fEditRadioTxAud.addItem(devString)
+            # input (RX device)
+            if dev['max_input_channels'] > 0:
+                self.ui.fEditRadioRxAud.addItem(devString)
+
     # Enable/disable radio edit dialog
     def enableRadioEdit(self, enabled):
-        self.ui.fEditRadioName.setEnabled(enabled)
-        self.ui.fEditRadioDesc.setEnabled(enabled)
-        self.ui.fEditRadioCtrlMode.setEnabled(enabled)
-        self.ui.fEditRadioCtrlPort.setEnabled(enabled)
-        self.ui.fEditRadioTxAud.setEnabled(enabled)
-        self.ui.fEditRadioRxAud.setEnabled(enabled)
-        self.ui.fEditRadioSigMode.setEnabled(enabled)
-        self.ui.fEditRadioSigId.setEnabled(enabled)
+        for item in self.ui.grdRadioSettings.children():
+            item.setEnabled(enabled)
 
     # Add radio
     def addRadio(self):

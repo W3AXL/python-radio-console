@@ -3,7 +3,8 @@ from distutils import log
 from distutils.errors import DistutilsOptionError
 import distutils
 import os
-import configparser
+
+from setuptools.extern.six.moves import configparser
 
 from setuptools import Command
 

@@ -37,7 +37,7 @@ deactivate () {
 # unset irrelevant variables
 deactivate nondestructive
 
-VIRTUAL_ENV="C:\Users\psmcdonn\Documents\GitHub\python-radio-console"
+VIRTUAL_ENV="H:\Documents\GitHub\python-radio-console"
 export VIRTUAL_ENV
 
 _OLD_VIRTUAL_PATH="$PATH"
