@@ -3,7 +3,7 @@ import sys
 import os
 
 # QT stuff
-from PySide6.QtWidgets import QApplication, QMainWindow, QMessageBox, QFileDialog
+from PySide6.QtWidgets import QApplication, QMainWindow, QMessageBox, QFileDialog, QTreeWidgetItem
 from PySide6.QtCore import QThread, QThreadPool, Signal
 from PySide6.QtGui import QActionGroup, QAction
 
@@ -17,7 +17,7 @@ from serverwindow import Ui_ServerWindow
 import sounddevice as sd
 
 # Radio class
-from radioClass import Radio
+from radioClass import Radio, RadioStatus
 
 # Used for saving config
 import pickle
@@ -102,8 +102,13 @@ class ServerWindow(QMainWindow):
         self.ui.fRadioList.clear()
         # update list
         for radio in self.config.RadioList:
-            print(radio.name)
-            self.ui.fRadioList.addItem(radio.name)
+            # Create item for radio
+            radioItem = QTreeWidgetItem()
+            radioItem.setText(0, radio.name)
+            radioItem.setText(1, radio.desc)
+            radioStatus, statusText = radio.getStatus()
+            radioItem.setText(2, statusText)
+            self.ui.fRadioList.addTopLevelItem(radioItem)
 
     # Enable/disable radio edit dialog
     def enableRadioEdit(self, enabled):
@@ -133,8 +138,8 @@ class ServerWindow(QMainWindow):
         # Add a new radio entry to the radio list
         newRadio = Radio("New Radio")
         self.config.RadioList.append(newRadio)
-        # Add the radio name to the list view
-        self.ui.fRadioList.addItem(newRadio.name)
+        # Update radio list
+        self.updateRadioList()
         # Unsaved changes
         self.unsavedChanges = True
 
@@ -142,7 +147,7 @@ class ServerWindow(QMainWindow):
     def selectRadio(self):
         if self.ui.fRadioList.currentItem() != None:
             # get the currently selected item
-            selectedName = self.ui.fRadioList.currentItem().text()
+            selectedName = self.ui.fRadioList.currentItem().text(0)
             # get the associated radio from the list
             for radio in self.config.RadioList:
                 if radio.name == selectedName:
@@ -151,15 +156,31 @@ class ServerWindow(QMainWindow):
                 raise ValueError("Selected radio not present in radio list")
             # populate the radio info pane
             self.populateRadioFields(radio)
+            # Update radio status
+            radioStatus, statusString = radio.getStatus()
+            self.ui.lblSelectedRadioStatus.setText(statusString)
+            # enable connect button if not connected
+            if radio.status != RadioStatus.Idle or radio.status != RadioStatus.Transmitting or radio.status != RadioStatus.Receiving:
+                self.ui.fConnectRadio.setEnabled(True)
+                self.ui.fDisconnectRadio.setEnabled(False)
+            else:
+                self.ui.fConnectRadio.setEnabled(False)
+                self.ui.fDisconnectRadio.setEnabled(True)
         else:
+            # Clear radio fields
             self.populateRadioFields(None)
+            # Clear radio status
+            self.ui.lblSelectedRadioStatus.setText("No Radio Selected")
+            # Disabled connect/disconnect buttons
+            self.ui.fConnectRadio.setEnabled(False)
+            self.ui.fDisconnectRadio.setEnabled(False)
 
     # Edit radio button clicked
     def editRadio(self):
         # Start Editing
         if not self.editing:
             # get the selected radio
-            radioName = self.ui.fRadioList.currentItem().text()
+            radioName = self.ui.fRadioList.currentItem().text(0)
             print("Editing radio {}".format(radioName))
             # get the associated radio from the list
             for index, radio in enumerate(self.config.RadioList):

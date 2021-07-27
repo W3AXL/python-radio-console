@@ -1,3 +1,18 @@
+from enum import Enum
+
+class RadioStatus(Enum):
+    """Radio status enum
+    """
+    # Standard connection states
+    Disconnected = 0
+    Idle = 0
+    Receiving  = 1
+    Transmitting = 2
+    # Error states
+    ConnectError = 10
+    TransmitError = 11
+    ReceiveError = 12
+    UnknownError = 20
 
 class Radio():
 
@@ -35,6 +50,30 @@ class Radio():
         self.rxDev = rxDev
         self.sigMode = signalMode
         self.sigId = signalId
+
+        self.status = RadioStatus.Disconnected
+
+    def getStatus(self):
+        """Return current status of radio
+
+        Returns:
+            RadioStatus: current status of radio
+            StatusString: string representation of current status
+        """
+
+        if self.status.value < 10:
+            statusString = self.status.name
+        else:
+            if self.status == RadioStatus.ConnectError:
+                statusString = "Connection Error"
+            elif self.status == RadioStatus.TransmitError:
+                statusString = "Transmit Error"
+            elif self.status == RadioStatus.ReceiveError:
+                statusString = "Receive Error"
+            else:
+                statusString = "Unknown Error"
+
+        return self.status, statusString
 
     # JSON encode
     def encode(self):
