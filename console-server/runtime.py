@@ -3,7 +3,7 @@ import sys
 import os
 
 # QT stuff
-from PySide6.QtWidgets import QApplication, QMainWindow, QMessageBox
+from PySide6.QtWidgets import QApplication, QMainWindow, QMessageBox, QFileDialog
 from PySide6.QtCore import QThread, QThreadPool, Signal
 from PySide6.QtGui import QActionGroup, QAction
 
@@ -19,11 +19,24 @@ import sounddevice as sd
 # Radio class
 from radioClass import Radio
 
+# Used for saving config
+import pickle
+
+# Config class (saved/loaded to JSON)
+class Config():
+    # Init
+    def __init__(self):
+        # List of radio configs
+        self.RadioList = []
+
 # ServerWindow class for main server window
 class ServerWindow(QMainWindow):
 
     # Init function
     def __init__(self):
+
+        # Config variable
+        self.config = Config()
 
         # Setup window
         super(ServerWindow, self).__init__()
@@ -34,10 +47,10 @@ class ServerWindow(QMainWindow):
         self.setFixedSize(self.width(), self.height())
 
         # Init variables
-        self.radioList = []
         self.editing = False
         self.editingIndex = None
         self.editingRadio = None
+        self.unsavedChanges = False
 
         # Setup UI elements
         self.setupUI()
@@ -45,7 +58,9 @@ class ServerWindow(QMainWindow):
     # Connect UI elements to functions
     def setupUI(self):
         # Setup signals for menu items
-        self.ui.aMenuQuit.triggered.connect(self.quit)      # Quit program
+        self.ui.aMenuQuit.triggered.connect(self.quit)              # Quit program
+        self.ui.aMenuSaveConfig.triggered.connect(self.saveConfig)  # Save config file
+        self.ui.aMenuOpenConfig.triggered.connect(self.openConfig)  # Open config file
 
         # Setup signals for buttons
         self.ui.fAddRadio.clicked.connect(self.addNewRadio)
@@ -86,7 +101,7 @@ class ServerWindow(QMainWindow):
         # clear list
         self.ui.fRadioList.clear()
         # update list
-        for radio in self.radioList:
+        for radio in self.config.RadioList:
             print(radio.name)
             self.ui.fRadioList.addItem(radio.name)
 
@@ -117,9 +132,11 @@ class ServerWindow(QMainWindow):
     def addNewRadio(self):
         # Add a new radio entry to the radio list
         newRadio = Radio("New Radio")
-        self.radioList.append(newRadio)
+        self.config.RadioList.append(newRadio)
         # Add the radio name to the list view
         self.ui.fRadioList.addItem(newRadio.name)
+        # Unsaved changes
+        self.unsavedChanges = True
 
     # New radio in list selected
     def selectRadio(self):
@@ -127,7 +144,7 @@ class ServerWindow(QMainWindow):
             # get the currently selected item
             selectedName = self.ui.fRadioList.currentItem().text()
             # get the associated radio from the list
-            for radio in self.radioList:
+            for radio in self.config.RadioList:
                 if radio.name == selectedName:
                     break
             else:
@@ -145,21 +162,21 @@ class ServerWindow(QMainWindow):
             radioName = self.ui.fRadioList.currentItem().text()
             print("Editing radio {}".format(radioName))
             # get the associated radio from the list
-            for index, radio in enumerate(self.radioList):
+            for index, radio in enumerate(self.config.RadioList):
                 if radio.name == radioName:
                     break
             else:
                 raise ValueError("Selected radio not present in radio list")
             # Update the currently editing variables
             self.editingIndex = index
-            self.editingRadio = self.radioList[index]
+            self.editingRadio = self.config.RadioList[index]
             # enable editing
             self.enableRadioEdit(True)
         # Save edits
         else:
             # check if name already exists and isn't the one we're editing
             newName = self.ui.fEditRadioName.text()
-            for index, radio in enumerate(self.radioList):
+            for index, radio in enumerate(self.config.RadioList):
                 if radio.name == newName and index != self.editingIndex:
                     self.showError("Radio name already exists!")
                     return
@@ -176,7 +193,7 @@ class ServerWindow(QMainWindow):
                 signalId=self.ui.fEditRadioSigId.text()
             )
             # update the list with the new object
-            self.radioList[self.editingIndex] = newRadio
+            self.config.RadioList[self.editingIndex] = newRadio
             # reset the editing variables
             self.editingIndex = None
             self.editingRadio = None
@@ -184,6 +201,8 @@ class ServerWindow(QMainWindow):
             self.updateRadioList()
             # disable editing
             self.enableRadioEdit(False)
+            # unsaved changes
+            self.unsavedChanges = True
 
     def selectSignalMode(self):
         if self.editing:
@@ -215,11 +234,91 @@ class ServerWindow(QMainWindow):
             self.ui.fEditRadioSigMode.setCurrentText("")
             self.ui.fEditRadioSigId.setText("")
 
+    # Load config from json
+    def openConfig(self):
+        # Check if we have unsaved changed
+        if self.unsavedChanges:
+            answer = self.showYesNoCancel("Unsaved config changes", "Warning", "Save existing config file?", QMessageBox.Warning)
+            if answer == QMessageBox.Yes:
+                # if we don't actually save, don't do anything further
+                if not self.saveConfig():
+                    return False
+            elif answer == QMessageBox.Cancel:
+                return False
+
+        # Show dialog for open
+        filename, types = QFileDialog.getOpenFileName(self, caption='Open Config File', filter="Config files (*.cfg)")
+        # return if no file selected
+        if not filename:
+            return False
+        # Open and read file
+        with open(filename, 'rb') as inp:
+            newConfig = pickle.load(inp)
+            self.config = newConfig
+            print("Opened config file: {}".format(filename))
+            self.updateRadioList()
+        # return
+        return True
+            
+    # Save config to json
+    def saveConfig(self):
+        # Show save dialog
+        filename, types = QFileDialog.getSaveFileName(self, caption='Save Config File', filter="Config files (*.cfg)")
+        # return if no file selected
+        if not filename:
+            return False
+        # Save with pickle
+        with open(filename, 'wb') as outp:
+            pickle.dump(self.config, outp)
+        # Updated unsaved changes
+        self.unsavedChanges = False
+        # Log
+        print("Saved config file: {}".format(filename))
+        # return
+        return True
+
     # Show error dialog
-    def showError(self, message):
-        msgBox = QMessageBox(QMessageBox.Critical)
+    def showError(self, message, submessage=None, confirm=False):
+        msgBox = QMessageBox()
+        msgBox.setIcon(QMessageBox.Critical)
+        msgBox.setWindowTitle("Error")
         msgBox.setText(message)
-        msgBox.exec()
+        msgBox.setInformativeText(submessage)
+        if confirm:
+            msgBox.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
+            msgBox.setDefaultButton(QMessageBox.Cancel)
+        returnval = msgBox.exec()
+        if returnval == QMessageBox.Ok:
+            return True
+        else:
+            return False
+
+    # Show warning dialog
+    def showWarn(self, message, submessage=None, confirm=False):
+        msgBox = QMessageBox()
+        msgBox.setIcon(QMessageBox.Warning)
+        msgBox.setWindowTitle("Warning")
+        msgBox.setText(message)
+        msgBox.setInformativeText(submessage)
+        if confirm:
+            msgBox.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
+            msgBox.setDefaultButton(QMessageBox.Cancel)
+        returnval = msgBox.exec()
+        if returnval == QMessageBox.Ok:
+            return True
+        else:
+            return False
+
+    # Show yes/no/cancel
+    def showYesNoCancel(self, message, title, submessage=None, icon=None):
+        msgBox = QMessageBox()
+        msgBox.setIcon(icon)
+        msgBox.setWindowTitle(title)
+        msgBox.setText(message)
+        msgBox.setInformativeText(submessage)
+        msgBox.setStandardButtons(QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel)
+        msgBox.setDefaultButton(QMessageBox.Cancel)
+        return msgBox.exec()
 
     # Quit
     def quit(self):

@@ -11,6 +11,7 @@ class Radio():
                        "Single-tone",
                        "Two-tone"]
 
+    # Init class
     def __init__(self, name, desc=None, ctrlMode=None, ctrlPort=None, pttDev=None, txDev=None, rxDev=None, signalMode=None, signalId=None):
         """Radio configuration object
 
@@ -34,3 +35,7 @@ class Radio():
         self.rxDev = rxDev
         self.sigMode = signalMode
         self.sigId = signalId
+
+    # JSON encode
+    def encode(self):
+        return self.__dict__

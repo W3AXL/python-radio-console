@@ -340,7 +340,7 @@
      <string>&amp;File</string>
     </property>
     <addaction name="aMenuSaveConfig"/>
-    <addaction name="aMenuLoadConfig"/>
+    <addaction name="aMenuOpenConfig"/>
     <addaction name="separator"/>
     <addaction name="aMenuQuit"/>
    </widget>
@@ -359,7 +359,7 @@
     <string>&amp;Save Config</string>
    </property>
   </action>
-  <action name="aMenuLoadConfig">
+  <action name="aMenuOpenConfig">
    <property name="text">
     <string>&amp;Open Config</string>
    </property>
