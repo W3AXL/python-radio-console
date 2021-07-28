@@ -1,4 +1,5 @@
 from enum import Enum
+import json
 
 class RadioStatus(Enum):
     """Radio status enum
@@ -15,11 +16,19 @@ class RadioStatus(Enum):
     UnknownError = 20
 
 class Radio():
+    """Radio Class for generic radio control
+    """
+    
+    # Valid control modes for the radio
+    controlModes = ["None (RX only)",
+                    "SB9600: XTL O-Head",
+                    "SB9600: XTL W-Head",
+                    "SB9600: Astro Spectra",
+                    "SB9600: MCS2000",
+                    "Soundcard: CM108/119 PTT",
+                    "Soundcard: VOX PTT"]
 
-    controlModes = ["Motorola Astro Spectra (SB9600)",
-                    "Motorola MCS (SB9600)",
-                    "Motorola XTL (SB9600)"]
-
+    # Valid signalling modes for the radio
     signallingModes = ["None",
                        "MDC-1200",
                        "ANI",
@@ -27,7 +36,7 @@ class Radio():
                        "Two-tone"]
 
     # Init class
-    def __init__(self, name, desc=None, ctrlMode=None, ctrlPort=None, pttDev=None, txDev=None, rxDev=None, signalMode=None, signalId=None):
+    def __init__(self, name, desc=None, ctrlMode=None, ctrlPort=None, txDev=None, rxDev=None, signalMode=None, signalId=None):
         """Radio configuration object
 
         Args:
@@ -35,22 +44,23 @@ class Radio():
             desc (string): Radio description
             ctrlMode (string): Radio control mode (SB9600, CAT, etc)
             ctrlDev (string): Device for radio control (serial, USB, IP, etc)
-            pttDev (string): PTT device for keying radio
             txDev (string): Transmit audio device
             rxDev (string): Receieve audio device
             signalMode (string): Optional signalling mode
             signalId (any): Optional signalling ID
         """
+
+        # Save parameters
         self.name = name
         self.desc = desc
         self.ctrlMode = ctrlMode
         self.ctrlPort = ctrlPort
-        self.pttDev = pttDev
         self.txDev = txDev
         self.rxDev = rxDev
         self.sigMode = signalMode
         self.sigId = signalId
 
+        # Set starting status to disconnected
         self.status = RadioStatus.Disconnected
 
     def getStatus(self):
@@ -75,6 +85,29 @@ class Radio():
 
         return self.status, statusString
 
-    # JSON encode
-    def encode(self):
-        return self.__dict__
+    # encode radio config into dict
+    def encodeConfig(self):
+        # Create dict
+        config = {
+            "name": self.name,
+            "desc": self.desc,
+            "ctrlMode": self.ctrlMode,
+            "ctrlPort": self.ctrlPort,
+            "txDevice": self.txDev,
+            "rxDevice": self.rxDev,
+            "sigMode": self.sigMode,
+            "sigId": self.sigId
+        }
+        return config
+
+    # decode dict into radio object
+    def decodeConfig(radioDict):
+        # create a new radio object from config data
+        return Radio(radioDict['name'],
+                     radioDict['desc'],
+                     radioDict['ctrlMode'],
+                     radioDict['ctrlPort'],
+                     radioDict['txDevice'],
+                     radioDict['rxDevice'],
+                     radioDict['sigMode'],
+                     radioDict['sigId'])

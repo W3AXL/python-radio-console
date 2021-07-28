@@ -3,7 +3,7 @@ import sys
 import os
 
 # QT stuff
-from PySide6.QtWidgets import QApplication, QMainWindow, QMessageBox, QFileDialog, QTreeWidgetItem
+from PySide6.QtWidgets import QApplication, QMainWindow, QMessageBox, QFileDialog, QTreeWidgetItem, QAbstractItemView
 from PySide6.QtCore import QThread, QThreadPool, Signal
 from PySide6.QtGui import QActionGroup, QAction
 
@@ -16,11 +16,15 @@ from serverwindow import Ui_ServerWindow
 # Sound stuff
 import sounddevice as sd
 
+# Serial stuff
+import serial
+import serial.tools.list_ports
+
 # Radio class
 from radioClass import Radio, RadioStatus
 
 # Used for saving config
-import pickle
+import json
 
 # Config class (saved/loaded to JSON)
 class Config():
@@ -62,15 +66,19 @@ class ServerWindow(QMainWindow):
         self.ui.aMenuSaveConfig.triggered.connect(self.saveConfig)  # Save config file
         self.ui.aMenuOpenConfig.triggered.connect(self.openConfig)  # Open config file
 
-        # Setup signals for buttons
+        # Setup buttons
         self.ui.fAddRadio.clicked.connect(self.addNewRadio)
-
-        # Setup signals for radio list
         self.ui.fEditRadio.clicked.connect(self.editRadio)
+
+        # Setup radio list
         self.ui.fRadioList.currentItemChanged.connect(self.selectRadio)
+        self.ui.fRadioList.setColumnWidth(0,140)
+        self.ui.fRadioList.setColumnWidth(1,200)
+        self.ui.fRadioList.setSelectionMode(QAbstractItemView.SingleSelection)
 
         # Setup signals for radio editing GUI
         self.ui.fEditRadioSigMode.currentTextChanged.connect(self.selectSignalMode)
+        self.ui.fEditRadioCtrlMode.currentTextChanged.connect(self.selectControlMode)
 
         # Populate valid control modes
         for mode in Radio.controlModes:
@@ -82,6 +90,9 @@ class ServerWindow(QMainWindow):
 
         # Populate sound devices
         self.getSoundDevices()
+
+        # Populate serial devices
+        self.getSerialDevices()
 
     def getSoundDevices(self):
         print("Querying sound devices")
@@ -95,6 +106,14 @@ class ServerWindow(QMainWindow):
             # input (RX device)
             if dev['max_input_channels'] > 0:
                 self.ui.fEditRadioRxAud.addItem(devString)
+
+    def getSerialDevices(self):
+        print("Querying serial devices")
+        # Get ports
+        ports = serial.tools.list_ports.comports()
+        # Iterate and add to dropdown
+        for port in ports:
+            self.ui.fEditRadioCtrlPort.addItem(port.name)
 
     # Update the list of radios from the radio list object 
     def updateRadioList(self):
@@ -118,8 +137,12 @@ class ServerWindow(QMainWindow):
         self.ui.fEditRadioName.setEnabled(enabled)
         self.ui.fEditRadioDesc.setEnabled(enabled)
         self.ui.fEditRadioCtrlMode.setEnabled(enabled)
-        self.ui.fEditRadioCtrlPort.setEnabled(enabled)
-        self.ui.fEditRadioPTT.setEnabled(enabled)
+        # Enable control port selection if we're in a serial-based control mode (i.e. not a soundcard mode or "None")
+        if enabled:
+            self.selectControlMode()
+        else:
+            self.ui.fEditRadioCtrlPort.setEnabled(False)
+        # Enable the rest of the dropdowns
         self.ui.fEditRadioTxAud.setEnabled(enabled)
         self.ui.fEditRadioRxAud.setEnabled(enabled)
         self.ui.fEditRadioSigMode.setEnabled(enabled)
@@ -207,7 +230,6 @@ class ServerWindow(QMainWindow):
                 desc=self.ui.fEditRadioDesc.text(),
                 ctrlMode=self.ui.fEditRadioCtrlMode.currentText(),
                 ctrlPort=self.ui.fEditRadioCtrlPort.currentText(),
-                pttDev=self.ui.fEditRadioPTT.currentText(),
                 txDev=self.ui.fEditRadioTxAud.currentText(),
                 rxDev=self.ui.fEditRadioRxAud.currentText(),
                 signalMode=self.ui.fEditRadioSigMode.currentText(),
@@ -225,12 +247,22 @@ class ServerWindow(QMainWindow):
             # unsaved changes
             self.unsavedChanges = True
 
+    # Function triggered when signalling mode is changed in dropdown
     def selectSignalMode(self):
         if self.editing:
             if self.ui.fEditRadioSigMode.currentText() == "None":
                 self.ui.fEditRadioSigId.setEnabled(False)
             else:
                 self.ui.fEditRadioSigId.setEnabled(True)
+
+    # Function is called when control mode is changed in dropdown
+    def selectControlMode(self):
+        if self.editing:
+            currentMode = self.ui.fEditRadioCtrlMode.currentText()
+            if "Soundcard" not in currentMode and "None" not in currentMode:
+                self.ui.fEditRadioCtrlPort.setEnabled(True)
+            else:
+                self.ui.fEditRadioCtrlPort.setEnabled(False)
 
     # populate radio info UI elements
     def populateRadioFields(self, radio):
@@ -239,7 +271,6 @@ class ServerWindow(QMainWindow):
             self.ui.fEditRadioDesc.setText(radio.desc)
             self.ui.fEditRadioCtrlMode.setCurrentText(radio.ctrlMode)
             self.ui.fEditRadioCtrlPort.setCurrentText(radio.ctrlPort)
-            self.ui.fEditRadioPTT.setCurrentText(radio.pttDev)
             self.ui.fEditRadioTxAud.setCurrentText(radio.txDev)
             self.ui.fEditRadioRxAud.setCurrentText(radio.rxDev)
             self.ui.fEditRadioSigMode.setCurrentText(radio.sigMode)
@@ -249,7 +280,6 @@ class ServerWindow(QMainWindow):
             self.ui.fEditRadioDesc.setText("")
             self.ui.fEditRadioCtrlMode.setCurrentText("")
             self.ui.fEditRadioCtrlPort.setCurrentText("")
-            self.ui.fEditRadioPTT.setCurrentText("")
             self.ui.fEditRadioTxAud.setCurrentText("")
             self.ui.fEditRadioRxAud.setCurrentText("")
             self.ui.fEditRadioSigMode.setCurrentText("")
@@ -269,28 +299,55 @@ class ServerWindow(QMainWindow):
 
         # Show dialog for open
         filename, types = QFileDialog.getOpenFileName(self, caption='Open Config File', filter="Config files (*.cfg)")
+
         # return if no file selected
         if not filename:
             return False
+        
         # Open and read file
-        with open(filename, 'rb') as inp:
-            newConfig = pickle.load(inp)
-            self.config = newConfig
-            print("Opened config file: {}".format(filename))
-            self.updateRadioList()
-        # return
-        return True
+        with open(filename, 'r') as inp:
+            try:
+                # load JSON into dict
+                configDict = json.load(inp)
+
+                # create new blank config
+                self.config = Config()
+
+                # iterate through radios in dict
+                for radioDict in configDict["RadioList"]:
+                    self.config.RadioList.append(Radio.decodeConfig(radioDict))
+
+                # print on success
+                print("Opened config file: {}".format(filename))
+                self.updateRadioList()
+
+                # return
+                return True
+            except Exception as ex:
+                self.showError("Error loading config!",ex.args[0])
+                return False
             
     # Save config to json
     def saveConfig(self):
         # Show save dialog
         filename, types = QFileDialog.getSaveFileName(self, caption='Save Config File', filter="Config files (*.cfg)")
+
         # return if no file selected
         if not filename:
             return False
-        # Save with pickle
-        with open(filename, 'wb') as outp:
-            pickle.dump(self.config, outp)
+        
+        # Create dict from config
+        configDict = {
+            "RadioList": []
+        }
+        for radio in self.config.RadioList:
+            radioDict = radio.encodeConfig()
+            configDict["RadioList"].append(radioDict)
+        
+        # Save as JSON
+        with open(filename, 'w') as outp:
+            json.dump(configDict, outp)
+        
         # Updated unsaved changes
         self.unsavedChanges = False
         # Log

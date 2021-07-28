@@ -61,35 +61,17 @@ class Ui_ServerWindow(object):
         self.grdRadioSettings.setHorizontalSpacing(10)
         self.grdRadioSettings.setVerticalSpacing(5)
         self.grdRadioSettings.setContentsMargins(10, 5, 10, 5)
-        self.lblRadioPTT = QLabel(self.gridLayoutWidget)
-        self.lblRadioPTT.setObjectName(u"lblRadioPTT")
-        self.lblRadioPTT.setAlignment(Qt.AlignRight|Qt.AlignTrailing|Qt.AlignVCenter)
+        self.lblRadioRxAud = QLabel(self.gridLayoutWidget)
+        self.lblRadioRxAud.setObjectName(u"lblRadioRxAud")
+        self.lblRadioRxAud.setAlignment(Qt.AlignRight|Qt.AlignTrailing|Qt.AlignVCenter)
 
-        self.grdRadioSettings.addWidget(self.lblRadioPTT, 4, 0, 1, 1)
-
-        self.fEditRadioRxAud = QComboBox(self.gridLayoutWidget)
-        self.fEditRadioRxAud.setObjectName(u"fEditRadioRxAud")
-        self.fEditRadioRxAud.setEnabled(False)
-
-        self.grdRadioSettings.addWidget(self.fEditRadioRxAud, 6, 1, 1, 1)
-
-        self.lblRadioSigMode = QLabel(self.gridLayoutWidget)
-        self.lblRadioSigMode.setObjectName(u"lblRadioSigMode")
-        self.lblRadioSigMode.setAlignment(Qt.AlignRight|Qt.AlignTrailing|Qt.AlignVCenter)
-
-        self.grdRadioSettings.addWidget(self.lblRadioSigMode, 7, 0, 1, 1)
+        self.grdRadioSettings.addWidget(self.lblRadioRxAud, 5, 0, 1, 1)
 
         self.lblRadioSigId = QLabel(self.gridLayoutWidget)
         self.lblRadioSigId.setObjectName(u"lblRadioSigId")
         self.lblRadioSigId.setAlignment(Qt.AlignRight|Qt.AlignTrailing|Qt.AlignVCenter)
 
-        self.grdRadioSettings.addWidget(self.lblRadioSigId, 8, 0, 1, 1)
-
-        self.fEditRadioTxAud = QComboBox(self.gridLayoutWidget)
-        self.fEditRadioTxAud.setObjectName(u"fEditRadioTxAud")
-        self.fEditRadioTxAud.setEnabled(False)
-
-        self.grdRadioSettings.addWidget(self.fEditRadioTxAud, 5, 1, 1, 1)
+        self.grdRadioSettings.addWidget(self.lblRadioSigId, 7, 0, 1, 1)
 
         self.lblRadioDesc = QLabel(self.gridLayoutWidget)
         self.lblRadioDesc.setObjectName(u"lblRadioDesc")
@@ -97,29 +79,17 @@ class Ui_ServerWindow(object):
 
         self.grdRadioSettings.addWidget(self.lblRadioDesc, 1, 0, 1, 1)
 
-        self.fEditRadioCtrlPort = QComboBox(self.gridLayoutWidget)
-        self.fEditRadioCtrlPort.setObjectName(u"fEditRadioCtrlPort")
-        self.fEditRadioCtrlPort.setEnabled(False)
+        self.lblRadioTxAud = QLabel(self.gridLayoutWidget)
+        self.lblRadioTxAud.setObjectName(u"lblRadioTxAud")
+        self.lblRadioTxAud.setAlignment(Qt.AlignRight|Qt.AlignTrailing|Qt.AlignVCenter)
 
-        self.grdRadioSettings.addWidget(self.fEditRadioCtrlPort, 3, 1, 1, 1)
+        self.grdRadioSettings.addWidget(self.lblRadioTxAud, 4, 0, 1, 1)
 
         self.fEditRadioSigMode = QComboBox(self.gridLayoutWidget)
         self.fEditRadioSigMode.setObjectName(u"fEditRadioSigMode")
         self.fEditRadioSigMode.setEnabled(False)
 
-        self.grdRadioSettings.addWidget(self.fEditRadioSigMode, 7, 1, 1, 1)
-
-        self.lblRadioTxAud = QLabel(self.gridLayoutWidget)
-        self.lblRadioTxAud.setObjectName(u"lblRadioTxAud")
-        self.lblRadioTxAud.setAlignment(Qt.AlignRight|Qt.AlignTrailing|Qt.AlignVCenter)
-
-        self.grdRadioSettings.addWidget(self.lblRadioTxAud, 5, 0, 1, 1)
-
-        self.lblRadioRxAud = QLabel(self.gridLayoutWidget)
-        self.lblRadioRxAud.setObjectName(u"lblRadioRxAud")
-        self.lblRadioRxAud.setAlignment(Qt.AlignRight|Qt.AlignTrailing|Qt.AlignVCenter)
-
-        self.grdRadioSettings.addWidget(self.lblRadioRxAud, 6, 0, 1, 1)
+        self.grdRadioSettings.addWidget(self.fEditRadioSigMode, 6, 1, 1, 1)
 
         self.fEditRadioName = QLineEdit(self.gridLayoutWidget)
         self.fEditRadioName.setObjectName(u"fEditRadioName")
@@ -127,18 +97,30 @@ class Ui_ServerWindow(object):
 
         self.grdRadioSettings.addWidget(self.fEditRadioName, 0, 1, 1, 1)
 
-        self.fEditRadioSigId = QLineEdit(self.gridLayoutWidget)
-        self.fEditRadioSigId.setObjectName(u"fEditRadioSigId")
-        self.fEditRadioSigId.setEnabled(False)
-        self.fEditRadioSigId.setMaxLength(8)
+        self.fEditRadioCtrlPort = QComboBox(self.gridLayoutWidget)
+        self.fEditRadioCtrlPort.setObjectName(u"fEditRadioCtrlPort")
+        self.fEditRadioCtrlPort.setEnabled(False)
 
-        self.grdRadioSettings.addWidget(self.fEditRadioSigId, 8, 1, 1, 1)
+        self.grdRadioSettings.addWidget(self.fEditRadioCtrlPort, 3, 1, 1, 1)
 
         self.fEditRadioDesc = QLineEdit(self.gridLayoutWidget)
         self.fEditRadioDesc.setObjectName(u"fEditRadioDesc")
         self.fEditRadioDesc.setEnabled(False)
 
         self.grdRadioSettings.addWidget(self.fEditRadioDesc, 1, 1, 1, 1)
+
+        self.fEditRadioRxAud = QComboBox(self.gridLayoutWidget)
+        self.fEditRadioRxAud.setObjectName(u"fEditRadioRxAud")
+        self.fEditRadioRxAud.setEnabled(False)
+
+        self.grdRadioSettings.addWidget(self.fEditRadioRxAud, 5, 1, 1, 1)
+
+        self.fEditRadioSigId = QLineEdit(self.gridLayoutWidget)
+        self.fEditRadioSigId.setObjectName(u"fEditRadioSigId")
+        self.fEditRadioSigId.setEnabled(False)
+        self.fEditRadioSigId.setMaxLength(8)
+
+        self.grdRadioSettings.addWidget(self.fEditRadioSigId, 7, 1, 1, 1)
 
         self.lblRadioName = QLabel(self.gridLayoutWidget)
         self.lblRadioName.setObjectName(u"lblRadioName")
@@ -152,17 +134,23 @@ class Ui_ServerWindow(object):
 
         self.grdRadioSettings.addWidget(self.lblRadioCtrlPort, 3, 0, 1, 1)
 
-        self.fEditRadioPTT = QComboBox(self.gridLayoutWidget)
-        self.fEditRadioPTT.setObjectName(u"fEditRadioPTT")
-        self.fEditRadioPTT.setEnabled(False)
+        self.lblRadioSigMode = QLabel(self.gridLayoutWidget)
+        self.lblRadioSigMode.setObjectName(u"lblRadioSigMode")
+        self.lblRadioSigMode.setAlignment(Qt.AlignRight|Qt.AlignTrailing|Qt.AlignVCenter)
 
-        self.grdRadioSettings.addWidget(self.fEditRadioPTT, 4, 1, 1, 1)
+        self.grdRadioSettings.addWidget(self.lblRadioSigMode, 6, 0, 1, 1)
 
         self.lblRadioCtrlMode = QLabel(self.gridLayoutWidget)
         self.lblRadioCtrlMode.setObjectName(u"lblRadioCtrlMode")
         self.lblRadioCtrlMode.setAlignment(Qt.AlignRight|Qt.AlignTrailing|Qt.AlignVCenter)
 
         self.grdRadioSettings.addWidget(self.lblRadioCtrlMode, 2, 0, 1, 1)
+
+        self.fEditRadioTxAud = QComboBox(self.gridLayoutWidget)
+        self.fEditRadioTxAud.setObjectName(u"fEditRadioTxAud")
+        self.fEditRadioTxAud.setEnabled(False)
+
+        self.grdRadioSettings.addWidget(self.fEditRadioTxAud, 4, 1, 1, 1)
 
         self.fEditRadioCtrlMode = QComboBox(self.gridLayoutWidget)
         self.fEditRadioCtrlMode.setObjectName(u"fEditRadioCtrlMode")
@@ -193,6 +181,19 @@ class Ui_ServerWindow(object):
         self.statusbar = QStatusBar(ServerWindow)
         self.statusbar.setObjectName(u"statusbar")
         ServerWindow.setStatusBar(self.statusbar)
+        QWidget.setTabOrder(self.fRadioList, self.fAddRadio)
+        QWidget.setTabOrder(self.fAddRadio, self.fEditRadio)
+        QWidget.setTabOrder(self.fEditRadio, self.fDeleteRadio)
+        QWidget.setTabOrder(self.fDeleteRadio, self.fEditRadioName)
+        QWidget.setTabOrder(self.fEditRadioName, self.fEditRadioDesc)
+        QWidget.setTabOrder(self.fEditRadioDesc, self.fEditRadioCtrlMode)
+        QWidget.setTabOrder(self.fEditRadioCtrlMode, self.fEditRadioCtrlPort)
+        QWidget.setTabOrder(self.fEditRadioCtrlPort, self.fEditRadioTxAud)
+        QWidget.setTabOrder(self.fEditRadioTxAud, self.fEditRadioRxAud)
+        QWidget.setTabOrder(self.fEditRadioRxAud, self.fEditRadioSigMode)
+        QWidget.setTabOrder(self.fEditRadioSigMode, self.fEditRadioSigId)
+        QWidget.setTabOrder(self.fEditRadioSigId, self.fConnectRadio)
+        QWidget.setTabOrder(self.fConnectRadio, self.fDisconnectRadio)
 
         self.menubar.addAction(self.menu_File.menuAction())
         self.menubar.addAction(self.menu_Help.menuAction())
@@ -222,14 +223,13 @@ class Ui_ServerWindow(object):
         ___qtreewidgetitem.setText(1, QCoreApplication.translate("ServerWindow", u"Description", None));
         ___qtreewidgetitem.setText(0, QCoreApplication.translate("ServerWindow", u"Name", None));
         self.grpRadioSettings.setTitle(QCoreApplication.translate("ServerWindow", u"Radio Settings", None))
-        self.lblRadioPTT.setText(QCoreApplication.translate("ServerWindow", u"PTT Device", None))
-        self.lblRadioSigMode.setText(QCoreApplication.translate("ServerWindow", u"Signalling", None))
+        self.lblRadioRxAud.setText(QCoreApplication.translate("ServerWindow", u"Receive Audio", None))
         self.lblRadioSigId.setText(QCoreApplication.translate("ServerWindow", u"Signalling ID", None))
         self.lblRadioDesc.setText(QCoreApplication.translate("ServerWindow", u"Description", None))
         self.lblRadioTxAud.setText(QCoreApplication.translate("ServerWindow", u"Transmit Audio", None))
-        self.lblRadioRxAud.setText(QCoreApplication.translate("ServerWindow", u"Receive Audio", None))
         self.lblRadioName.setText(QCoreApplication.translate("ServerWindow", u"Name", None))
         self.lblRadioCtrlPort.setText(QCoreApplication.translate("ServerWindow", u"Control Port", None))
+        self.lblRadioSigMode.setText(QCoreApplication.translate("ServerWindow", u"Signalling", None))
         self.lblRadioCtrlMode.setText(QCoreApplication.translate("ServerWindow", u"Control Mode", None))
         self.fConnectRadio.setText(QCoreApplication.translate("ServerWindow", u"Connect", None))
         self.fDisconnectRadio.setText(QCoreApplication.translate("ServerWindow", u"Disconnect", None))

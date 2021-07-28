@@ -96,15 +96,24 @@
       <property name="text">
        <string>Name</string>
       </property>
+      <property name="toolTip">
+       <string extracomment="Name of radio"/>
+      </property>
      </column>
      <column>
       <property name="text">
        <string>Description</string>
       </property>
+      <property name="toolTip">
+       <string extracomment="Description of radio"/>
+      </property>
      </column>
      <column>
       <property name="text">
        <string>Status</string>
+      </property>
+      <property name="toolTip">
+       <string extracomment="Status of radio"/>
       </property>
      </column>
     </widget>
@@ -149,47 +158,23 @@
       <property name="verticalSpacing">
        <number>5</number>
       </property>
-      <item row="4" column="0">
-       <widget class="QLabel" name="lblRadioPTT">
+      <item row="5" column="0">
+       <widget class="QLabel" name="lblRadioRxAud">
         <property name="text">
-         <string>PTT Device</string>
+         <string>Receive Audio</string>
         </property>
         <property name="alignment">
          <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-        </property>
-       </widget>
-      </item>
-      <item row="6" column="1">
-       <widget class="QComboBox" name="fEditRadioRxAud">
-        <property name="enabled">
-         <bool>false</bool>
         </property>
        </widget>
       </item>
       <item row="7" column="0">
-       <widget class="QLabel" name="lblRadioSigMode">
-        <property name="text">
-         <string>Signalling</string>
-        </property>
-        <property name="alignment">
-         <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-        </property>
-       </widget>
-      </item>
-      <item row="8" column="0">
        <widget class="QLabel" name="lblRadioSigId">
         <property name="text">
          <string>Signalling ID</string>
         </property>
         <property name="alignment">
          <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-        </property>
-       </widget>
-      </item>
-      <item row="5" column="1">
-       <widget class="QComboBox" name="fEditRadioTxAud">
-        <property name="enabled">
-         <bool>false</bool>
         </property>
        </widget>
       </item>
@@ -203,21 +188,7 @@
         </property>
        </widget>
       </item>
-      <item row="3" column="1">
-       <widget class="QComboBox" name="fEditRadioCtrlPort">
-        <property name="enabled">
-         <bool>false</bool>
-        </property>
-       </widget>
-      </item>
-      <item row="7" column="1">
-       <widget class="QComboBox" name="fEditRadioSigMode">
-        <property name="enabled">
-         <bool>false</bool>
-        </property>
-       </widget>
-      </item>
-      <item row="5" column="0">
+      <item row="4" column="0">
        <widget class="QLabel" name="lblRadioTxAud">
         <property name="text">
          <string>Transmit Audio</string>
@@ -227,13 +198,10 @@
         </property>
        </widget>
       </item>
-      <item row="6" column="0">
-       <widget class="QLabel" name="lblRadioRxAud">
-        <property name="text">
-         <string>Receive Audio</string>
-        </property>
-        <property name="alignment">
-         <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+      <item row="6" column="1">
+       <widget class="QComboBox" name="fEditRadioSigMode">
+        <property name="enabled">
+         <bool>false</bool>
         </property>
        </widget>
       </item>
@@ -244,13 +212,10 @@
         </property>
        </widget>
       </item>
-      <item row="8" column="1">
-       <widget class="QLineEdit" name="fEditRadioSigId">
+      <item row="3" column="1">
+       <widget class="QComboBox" name="fEditRadioCtrlPort">
         <property name="enabled">
          <bool>false</bool>
-        </property>
-        <property name="maxLength">
-         <number>8</number>
         </property>
        </widget>
       </item>
@@ -258,6 +223,23 @@
        <widget class="QLineEdit" name="fEditRadioDesc">
         <property name="enabled">
          <bool>false</bool>
+        </property>
+       </widget>
+      </item>
+      <item row="5" column="1">
+       <widget class="QComboBox" name="fEditRadioRxAud">
+        <property name="enabled">
+         <bool>false</bool>
+        </property>
+       </widget>
+      </item>
+      <item row="7" column="1">
+       <widget class="QLineEdit" name="fEditRadioSigId">
+        <property name="enabled">
+         <bool>false</bool>
+        </property>
+        <property name="maxLength">
+         <number>8</number>
         </property>
        </widget>
       </item>
@@ -281,10 +263,13 @@
         </property>
        </widget>
       </item>
-      <item row="4" column="1">
-       <widget class="QComboBox" name="fEditRadioPTT">
-        <property name="enabled">
-         <bool>false</bool>
+      <item row="6" column="0">
+       <widget class="QLabel" name="lblRadioSigMode">
+        <property name="text">
+         <string>Signalling</string>
+        </property>
+        <property name="alignment">
+         <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
         </property>
        </widget>
       </item>
@@ -295,6 +280,13 @@
         </property>
         <property name="alignment">
          <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+        </property>
+       </widget>
+      </item>
+      <item row="4" column="1">
+       <widget class="QComboBox" name="fEditRadioTxAud">
+        <property name="enabled">
+         <bool>false</bool>
         </property>
        </widget>
       </item>
@@ -403,6 +395,22 @@
    </property>
   </action>
  </widget>
+ <tabstops>
+  <tabstop>fRadioList</tabstop>
+  <tabstop>fAddRadio</tabstop>
+  <tabstop>fEditRadio</tabstop>
+  <tabstop>fDeleteRadio</tabstop>
+  <tabstop>fEditRadioName</tabstop>
+  <tabstop>fEditRadioDesc</tabstop>
+  <tabstop>fEditRadioCtrlMode</tabstop>
+  <tabstop>fEditRadioCtrlPort</tabstop>
+  <tabstop>fEditRadioTxAud</tabstop>
+  <tabstop>fEditRadioRxAud</tabstop>
+  <tabstop>fEditRadioSigMode</tabstop>
+  <tabstop>fEditRadioSigId</tabstop>
+  <tabstop>fConnectRadio</tabstop>
+  <tabstop>fDisconnectRadio</tabstop>
+ </tabstops>
  <resources/>
  <connections/>
 </ui>
