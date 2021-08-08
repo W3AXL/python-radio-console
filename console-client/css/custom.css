@@ -1,0 +1,148 @@
+:root {
+    --color-bg-dark: #111;
+    --color-bg-mid: #2A2A2A;
+    --color-bg-light: #555;
+
+    --color-accent-dark: rgb(30, 38, 44);
+    --color-accent-mid: rgb(43, 58, 66);
+    --color-accent-light: rgb(62, 81, 95);
+
+
+    --color-txt-light: #DDD;
+    --color-txt-mid: #AAA;
+    --color-txt-dark: #777;
+
+    --color-lcd-light: #5AC;
+}
+
+html {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+}
+
+body {
+    background-color: var(--color-bg-dark)
+}
+
+#navbar {
+    width: 100%;
+    height: 48px;
+    background-color: var(--color-bg-mid);
+}
+
+#navbar button {
+    height: 80%;
+    padding: 8px;
+    margin-top: 5px;
+    --ggs: 0.8;
+}
+
+#navbar_logo {
+    padding: 4px;
+    margin-left: 8px;
+    margin-top: 4px;
+    color: var(--color-txt-light);
+    font-size: 24px;
+}
+
+#navbar_version {
+    color: var(--color-txt-mid);
+    font-size: 12px;
+    margin-top: 20px;
+}
+
+#navbar_clock {
+    margin-right: 8px;
+    margin-top: 8px;
+    height: 32px;
+    width: 192px;
+    border-radius: 4px;
+    background-color: #000;
+    float:right;
+}
+
+#clock {
+    font-family: monospace;
+    color: var(--color-lcd-light);
+    font-size: 26px;
+    margin-left: 8px;
+    margin-top: 1px;
+}
+
+.navbar_item {
+    float:left;
+    height: 100%;
+    padding-left: 8px;
+    color: var(--color-txt-light);
+}
+
+.navbar_clear {
+    clear:both;
+}
+
+#body {
+    position: absolute;
+    width: 100%;
+    height: calc(100% - (48px + 64px));
+}
+
+#text-placeholder {
+    width: 100%;
+    text-align: center;
+}
+
+#text-placeholder h2 {
+    color: var(--color-txt-mid);
+}
+
+.sidebar {
+    position: fixed;
+    top: 48px;
+    left: 0;
+    width: 256px;
+    transition: all 0.25s ease;
+    background-color: var(--color-accent-mid);
+}
+
+.sidebar ul {
+    padding: 0;
+    margin: 0;
+}
+
+.sidebar ul li {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+.sidebar ul li a {
+    display: block;
+    padding: 12px 32px;
+    border-bottom: 1px solid var(--color-accent-light);
+    color: var(--color-txt-light);
+    font-size: 20px;
+    position: relative;
+    text-decoration: none;
+    --ggs: 0.8;
+}
+
+.sidebar ul li a:hover,
+.sidebar ul li a.active {
+    background-color: var(--color-accent-dark);
+}
+
+.sidebar ul li a:hover:before,
+.sidebar ul li a.active:before {
+    display: block;
+}
+
+#controlbar {
+    position: absolute;
+    bottom: 0;
+    height: 64px;
+    width: 100%;
+    background-color: var(--color-bg-mid);
+}

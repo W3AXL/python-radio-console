@@ -1,0 +1,81 @@
+<html>
+    <head>
+        <title>Python Radio Console</title>
+
+        <!-- Topcoat CSS -->
+        <link rel="stylesheet" type="text/css" href="css/topcoat-mobile-dark.css">
+
+        <!-- CSS.gg Icons -->
+        <link href='https://css.gg/css' rel='stylesheet'>
+
+        <!-- Custom CSS -->
+        <link rel="stylesheet" type="text/css" href="css/custom.css">
+
+        <!-- JQuery -->
+        <script type="text/javascript" src="jquery-3.6.0.min.js"></script>
+        <!-- DayJS -->
+        <script type="text/javascript" src="dayjs.min.js"></script>
+    </head>
+    <body>
+        <!-- Top Nav Bar -->
+        <div id="navbar">
+
+            <!-- Menu Dropdown -->
+            <div class="navbar_item">
+                <button class="topcoat-button--quiet">
+                    <i class="gg-menu"></i>
+                </button>
+            </div>
+
+            <!-- Logo and Title -->
+            <div id="navbar_logo" class="navbar_item">RadioConsole</div>
+
+            <!-- Version -->
+            <div id="navbar_version" class="navbar_item">v0.1</div>
+
+            <!-- Clock -->
+            <div id="navbar_clock">
+                <div id="clock"></div>>
+            </div>
+
+            <!-- Clear Float -->
+            <br class="navbar_clear" />
+        </div>
+
+        <!-- Main Body -->
+        <div id="body">
+            <!-- Sidebar Menu -->
+            <div class="sidebar">
+                <ul>
+                    <li>
+                        <a href="#">
+                            <span class="sidebar-item">Server Config</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="#">
+                            <span class="sidebar-item">Client Config</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="#">
+                            <span class="sidebar-item">About</span>
+                        </a>
+                    </li>
+                </ul>
+            </div>
+
+            <!-- Placeholder text before connection to server -->
+            <div id="text-placeholder">
+                <h2>Please connect to a server to begin.</h2>
+            </div>
+        </div>
+
+        <!-- Control Footer -->
+        <div id="controlbar">
+
+        </div>
+    </body>
+    <!-- Runtime Script -->
+    <script type="text/javascript" src="client.js"></script>
+</html>
