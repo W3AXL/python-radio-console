@@ -7,6 +7,20 @@ var config = {
     timeFormat: "Local",
 }
 
+// Radio List (TODO: This will be populated from the server)
+var radioList = [
+    {
+        name: "VHF XTL5000",
+        muted: false,
+        error: false,
+    },
+    {
+        name: "UHF XTL5000",
+        muted: false,
+        error: false,
+    },
+];
+
 /*****************************************************
     State variables
 *****************************************************/
@@ -119,6 +133,14 @@ function deselectRadios() {
     selectedRadio = null;
 }
 
+function toggleMute(obj) {
+    // Get ID of radio to mute
+    var radio = $(obj).closest(".radio-card").attr('id');
+    console.log()
+    // Update the UI to show muted
+    $(obj).find("ion-icon").attr("name","volume-mute-sharp");
+}
+
 /*****************************************************
     Radio Backend Functions
 *****************************************************/
@@ -199,6 +221,44 @@ function updateClock() {
     } else {
         console.error("Invalid time format!")
     }
+}
+
+/**
+ * Populate radio cards based on the radios in radioList[]
+ */
+function populateRadios() {
+    radioList.foreach((radio, index) => {
+        addRadioCard("radio" + String(index), radio.name);
+    });
+}
+
+/**
+ * Add a radio card with the specified id and name
+ * @param {string} id ID of the card element
+ * @param {string} name Name to display in header
+ */
+function addRadioCard(id, name) {
+    var newCardHtml = `
+        <div class="radio-card" id="${id}">
+            <div class="header">
+                <h2>${name}</h2>
+                <div class="icon-stack">
+                    <a href="#"><ion-icon name="volume-high-sharp" onclick="muteRadio(this)"></ion-icon></a>
+                    <a href="#"><ion-icon name="warning-sharp"></ion-icon></ion-icon></ion-icon></a>
+                </div>
+            </div>
+            <div class="content">
+                <div class="channel">
+                    <h3>Channel</h3>
+                    <span class="channel-text">Channel Text</span>
+                </div>
+                <div class="last-id">
+                    <h3>Last ID</h3>
+                    <span class="id-text">ID Text</span>
+                </div>
+            </div>
+        </div>
+    `;
 }
 
 /*****************************************************
