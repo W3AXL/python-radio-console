@@ -21,25 +21,25 @@
         <div id="navbar">
 
             <!-- Menu Dropdown -->
-            <div class="navbar_item">
+            <div class="navbar-item">
                 <button id="button-mainmenu" class="topcoat-button--quiet" onclick="toggleMainMenu()">
                     <ion-icon name="menu-sharp"></ion-icon>
                 </button>
             </div>
 
             <!-- Logo and Title -->
-            <div id="navbar_logo" class="navbar_item">RadioConsole</div>
+            <div id="navbar-logo" class="navbar-item">RadioConsole</div>
 
             <!-- Version -->
-            <div id="navbar_version" class="navbar_item">v0.1</div>
+            <div id="navbar-version" class="navbar-item">v0.1</div>
 
             <!-- Clock -->
-            <div id="navbar_clock">
+            <div id="navbar-clock">
                 <div id="clock"></div>>
             </div>
 
             <!-- Clear Float -->
-            <br class="navbar_clear" />
+            <br class="navbar-clear" />
         </div>
 
         <!-- Main Body -->
@@ -54,7 +54,7 @@
                         </a>
                     </li>
                     <li>
-                        <a href="#">
+                        <a href="#" onclick="showPopup('#client-config-popup');toggleMainMenu();">
                             <span class="sidebar-icon"><ion-icon name="settings-sharp"></ion-icon></span>
                             <span class="sidebar-item">Client Config</span>
                         </a>
@@ -72,52 +72,67 @@
             <div id="main-layout">
                 <div class="radio-card" id="radio1">
                     <div class="header">
-                        <a href="#" class="minimize-radio-card"><ion-icon name="remove-circle-sharp"></ion-icon></a>
                         <h2>Radio 1</h2>
+                        <div class="icon-stack">
+                            <a href="#"><ion-icon name="volume-off-sharp" class="enabled"></ion-icon></a>
+                            <a href="#"><ion-icon name="warning-sharp" class="alerting"></ion-icon></ion-icon></ion-icon></a>
+                        </div>
                     </div>
                     <div class="content">
+                        <div class="channel">
 
+                        </div>
+                        <div class="last-id">
+
+                        </div>
                     </div>
                 </div>
                 <div class="radio-card" id="radio2">
                     <div class="header">
-                        <a href="#" class="minimize-radio-card"><ion-icon name="remove-circle-sharp"></ion-icon></a>
                         <h2>Radio 2</h2>
+                        <div class="icon-stack">
+                            <a href="#"><ion-icon name="volume-off-sharp" class="enabled"></ion-icon></a>
+                            <a href="#"><ion-icon name="warning-sharp" class="alerting"></ion-icon></ion-icon></ion-icon></a>
+                        </div>
                     </div>
                     <div class="content">
+                        <div class="channel">
 
-                    </div>
-                </div>
-                <div class="radio-card" id="radio3">
-                    <div class="header">
-                        <a href="#" class="minimize-radio-card"><ion-icon name="remove-circle-sharp"></ion-icon></a>
-                        <h2>Radio 3</h2>
-                    </div>
-                    <div class="content">
+                        </div>
+                        <div class="last-id">
 
-                    </div>
-                </div>
-                <div class="radio-card" id="radio4">
-                    <div class="header">
-                        <a href="#" class="minimize-radio-card"><ion-icon name="remove-circle-sharp"></ion-icon></a>
-                        <h2>Radio 4</h2>
-                    </div>
-                    <div class="content">
-
+                        </div>
                     </div>
                 </div>
             </div>
 
             <!-- Placeholder text before connection to server -->
-            <div id="text-placeholder">
+            <div id="text-placeholder" style="display: none;">
                 <h2>Please connect to a server to begin.</h2>
             </div>
+
+            <!-- Main Body Dimming Div -->
+            <div id="body-dimmer" style="display: none;" onclick="closePopup()"></div>
         </div>
 
         <!-- Control Footer -->
         <div id="controlbar">
 
         </div>
+
+        <!-- Client Config Popup -->
+        <div id="client-config-popup" class="popup" style="display: none;">
+            <div class="popup-header">
+                <h2>Client Config</h2>
+                <div class="popup-buttons">
+                    <a href="#" onclick="closePopup(this)"><ion-icon name="close-circle-sharp"></ion-icon></a>
+                </div>
+            </div>
+            <div class="popup-content">
+
+            </div>
+        </div>
+
         <!-- Icon Script -->
         <script type="module" src="https://unpkg.com/ionicons@5.5.2/dist/ionicons/ionicons.esm.js"></script>
         <script nomodule src="https://unpkg.com/ionicons@5.5.2/dist/ionicons/ionicons.js"></script>
