@@ -22,8 +22,8 @@
 
             <!-- Menu Dropdown -->
             <div class="navbar_item">
-                <button class="topcoat-button--quiet">
-                    <i class="gg-menu"></i>
+                <button id="button-mainmenu" class="topcoat-button--quiet" onclick="toggleMainMenu()">
+                    <ion-icon name="menu-sharp"></ion-icon>
                 </button>
             </div>
 
@@ -45,24 +45,67 @@
         <!-- Main Body -->
         <div id="body">
             <!-- Sidebar Menu -->
-            <div class="sidebar">
+            <div class="sidebar sidebar-closed" id="sidebar-mainmenu">
                 <ul>
                     <li>
                         <a href="#">
+                            <span class="sidebar-icon"><ion-icon name="server-sharp"></ion-icon></span>
                             <span class="sidebar-item">Server Config</span>
                         </a>
                     </li>
                     <li>
                         <a href="#">
+                            <span class="sidebar-icon"><ion-icon name="settings-sharp"></ion-icon></span>
                             <span class="sidebar-item">Client Config</span>
                         </a>
                     </li>
                     <li>
                         <a href="#">
+                            <span class="sidebar-icon"><ion-icon name="information-circle-sharp"></ion-icon></span>
                             <span class="sidebar-item">About</span>
                         </a>
                     </li>
                 </ul>
+            </div>
+
+            <!-- Main Layout for Radio Entries -->
+            <div id="main-layout">
+                <div class="radio-card" id="radio1">
+                    <div class="header">
+                        <a href="#" class="minimize-radio-card"><ion-icon name="remove-circle-sharp"></ion-icon></a>
+                        <h2>Radio 1</h2>
+                    </div>
+                    <div class="content">
+
+                    </div>
+                </div>
+                <div class="radio-card" id="radio2">
+                    <div class="header">
+                        <a href="#" class="minimize-radio-card"><ion-icon name="remove-circle-sharp"></ion-icon></a>
+                        <h2>Radio 2</h2>
+                    </div>
+                    <div class="content">
+
+                    </div>
+                </div>
+                <div class="radio-card" id="radio3">
+                    <div class="header">
+                        <a href="#" class="minimize-radio-card"><ion-icon name="remove-circle-sharp"></ion-icon></a>
+                        <h2>Radio 3</h2>
+                    </div>
+                    <div class="content">
+
+                    </div>
+                </div>
+                <div class="radio-card" id="radio4">
+                    <div class="header">
+                        <a href="#" class="minimize-radio-card"><ion-icon name="remove-circle-sharp"></ion-icon></a>
+                        <h2>Radio 4</h2>
+                    </div>
+                    <div class="content">
+
+                    </div>
+                </div>
             </div>
 
             <!-- Placeholder text before connection to server -->
@@ -75,7 +118,11 @@
         <div id="controlbar">
 
         </div>
+        <!-- Icon Script -->
+        <script type="module" src="https://unpkg.com/ionicons@5.5.2/dist/ionicons/ionicons.esm.js"></script>
+        <script nomodule src="https://unpkg.com/ionicons@5.5.2/dist/ionicons/ionicons.js"></script>
+        <!-- Runtime Script -->
+        <script type="text/javascript" src="client.js"></script>
     </body>
-    <!-- Runtime Script -->
-    <script type="text/javascript" src="client.js"></script>
+    
 </html>
