@@ -14,6 +14,12 @@
     --color-alert-red-mid: rgb(133, 0, 33);
     --color-alert-red-light: rgb(200, 0, 50);
 
+    --color-alert-green-mid: rgb(0, 133, 50);
+    --color-alert-green-light: rgb(0, 200, 75);
+
+    --color-alert-blue-mid: rgb(0, 50, 133);
+    --color-alert-blue-light: rgb(0, 75, 200);
+
     --color-txt-light: #DDD;
     --color-txt-mid: #AAA;
     --color-txt-dark: #777;
@@ -214,7 +220,7 @@ ion-icon {
 .radio-card {
     display: inline-block;
     margin-left: 16px;
-    margin-top: 16px;
+    margin-top: 20px;
     width: calc(25% - 28px);
     max-width: 320px;
     border-radius: 6px;
@@ -222,7 +228,7 @@ ion-icon {
 }
 
 .radio-card.selected {
-    border: 2px solid var(--color-alert-mid);
+    border: 2px solid var(--color-txt-dark);
     border-radius: 8px;
 }
 
@@ -265,16 +271,16 @@ ion-icon {
 }
 
 .icon-stack ion-icon {
-    color: var(--color-accent-dark);
-}
-
-.icon-stack ion-icon.enabled {
     color: var(--color-txt-light);
 }
 
+.icon-stack #icon-alert {
+    color: var(--color-accent-dark);
+}
+
 .icon-stack ion-icon.alerting {
-    -webkit-animation: iconAlertRed 1s ease infinite;
-    animation: iconAlertRed 1s ease infinite;
+    -webkit-animation: iconAlertRed 0.7s ease infinite;
+    animation: iconAlertRed 0.7s ease infinite;
 }
 
 .radio-card a {
@@ -284,9 +290,8 @@ ion-icon {
 
 .radio-card .content {
     width: 100%;
-    height: 168px;
+    height: 128px;
     background-color: var(--color-bg-mid);
-    border-radius: 0 0 6px 6px;
     padding: 8px;
     box-sizing: border-box;
 }
@@ -304,11 +309,11 @@ ion-icon {
 .radio-card .value-frame {
     color: var(--color-lcd-light);
     font-family: "Share Tech Mono";
-    font-size: 26px;
+    font-size: 22px;
     margin-top: 4px;
     margin-bottom: 4px;
     width: 100%;
-    height: 40px;
+    height: 32px;
     margin-left: auto;
     margin-right: auto;
     background-color: black;
@@ -319,6 +324,14 @@ ion-icon {
     box-sizing: border-box;
 }
 
+.radio-card .footer {
+    width: 100%;
+    height: 4px;
+    margin-bottom: 0;
+    background-color: var(--color-accent-mid);
+    border-radius: 0 0 6px 6px;
+}
+
 /********************************
     Bottom Control Bar Styling
 ********************************/
@@ -326,9 +339,72 @@ ion-icon {
 #controlbar {
     position: absolute;
     bottom: 0;
-    height: 64px;
+    height: 72px;
     width: 100%;
     background-color: var(--color-bg-mid);
+    display: flex;
+}
+
+#radio-controls {
+    margin-left: auto;
+    margin-right: auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#radio-controls button {
+    height: 48px;
+    width: 48px;
+    padding: 8px;
+    box-sizing: border-box;
+    font-size: 22px;
+}
+
+#radio-controls button span {
+    margin: 0;
+    padding: 0;
+    line-height: normal;
+    font-weight: bolder;
+}
+
+#radio-controls .button-active {
+    color: var(--color-lcd-light);
+    text-shadow: 0 -1px rgb(0 0 0 / 69%);
+    background-color: #3f4041;
+    border: 1px solid #333434;
+    box-shadow: inset 0 1px rgb(0 0 0 / 5%);
+}
+
+#radio-controls .button-active:hover {
+    background-color: rgb(70, 70, 70);
+}
+
+#radio-controls .lcd {
+    height: 47px;
+    width: 256px;
+    background-color: black;
+    color: var(--color-lcd-light);
+    border-radius: 6px;
+    margin-left: 8px;
+    margin-right: 8px;
+    padding: 4px;
+    box-sizing: border-box;
+}
+
+#selected-zone-text,
+#selected-chan-text {
+    color: var(--color-lcd-light);
+    font-family: "Share Tech Mono"; 
+    margin-left: 2px;
+}
+
+#selected-zone-text {
+    font-size: 12px;
+}
+
+#selected-chan-text {
+    font-size: 26px;
 }
 
 /********************************
@@ -407,7 +483,7 @@ ion-icon {
         border-radius: 8px;
     }
     75% {
-        border: 2px solid var(--color-alert-light);
+        border: 2px solid var(--color-alert-green-light);
         border-radius: 8px;
     }
 }
@@ -417,7 +493,7 @@ ion-icon {
         border-radius: 8px;
     }
     75% {
-        border: 2px solid var(--color-alert-light);
+        border: 2px solid var(--color-alert-green-light);
         border-radius: 8px;
     }
 }

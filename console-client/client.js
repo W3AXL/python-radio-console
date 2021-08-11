@@ -11,13 +11,27 @@ var config = {
 var radioList = [
     {
         name: "VHF XTL5000",
+        zone: "Eastern Iowa",
+        chan: "W0GQ Cedar Rpd",
+        id: "4597",
         muted: false,
         error: false,
+        scanning: true,
+        talkaround: false,
+        monitor: true,
+        lowpower: true
     },
     {
         name: "UHF XTL5000",
+        zone: "Eastern Iowa",
+        chan: "K0LVB CR MMDVM",
+        id: "3118336",
         muted: false,
         error: false,
+        scanning: true,
+        talkaround: false,
+        monitor: false,
+        lowpower: true
     },
 ];
 
@@ -46,6 +60,8 @@ function pageLoad() {
     // Get client timezone
     const d = new Date();
     timeZone = d.toLocaleString('en', {timeZoneName: 'short'}).split(' ').pop();
+    // Populate radio cards
+    populateRadios();
     // Setup clock timer
     setInterval(updateClock, 250);
     // Bind buttons
@@ -119,6 +135,8 @@ function selectRadio(id) {
     $(`#${id}`).addClass("selected");
     // Update the variable
     selectedRadio = id;
+    // Update controls
+    updateRadioControls();
 }
 
 /**
@@ -131,20 +149,66 @@ function deselectRadios() {
     $(".radio-card").removeClass("selected");
     // Set selected radio to null
     selectedRadio = null;
+    // Update controls
+    updateRadioControls();
 }
 
-function toggleMute(obj) {
-    // Get ID of radio to mute
-    var radio = $(obj).closest(".radio-card").attr('id');
-    console.log()
-    // Update the UI to show muted
-    $(obj).find("ion-icon").attr("name","volume-mute-sharp");
+function updateRadioCard(idx) {
+    var radio = radioList[idx];
+    // Get card object
+    var radioCard = $("#radio" + String(idx));
+    // Update text boxes
+    radioCard.find("#channel-text").html(radio.chan);
+    radioCard.find("#id-text").html(radio.id);
+    // Update mute icon
+    if (radio.muted) {
+        radioCard.find("#icon-mute").attr('name', 'volume-mute-sharp');
+    } else {
+        radioCard.find("#icon-mute").attr('name', 'volume-high-sharp');
+    }
+    // Update alert icon
+    if (radio.error) {
+        radioCard.find("#icon-alert").addClass("alerting");
+    } else {
+        radioCard.find("#icon-alert").removeClass("alerting");
+    }
+}
+
+function updateRadioControls() {
+    // Update if we have a selected radio
+    if (selectedRadio) {
+        // Get the radio index
+        var idx = getRadioIndex(selectedRadio);
+        // Get the radio from the list
+        var radio = radioList[idx];
+        // Populate text
+        $("#selected-zone-text").html(radio.zone);
+        $("#selected-chan-text").html(radio.chan);
+        // Enable buttons
+        $("#radio-controls button").prop("disabled", false);
+        // Set buttons to active based on state
+        if (radio.scanning) {$("#control-scan").addClass("button-active")} else {$("#control-scan").removeClass("button-active")}
+        if (radio.talkaround) {$("#control-dir").addClass("button-active")} else {$("#control-dir").removeClass("button-active")}
+        if (radio.monitor) {$("#control-mon").addClass("button-active")} else {$("#control-mon").removeClass("button-active")}
+        if (radio.lowpower) {$("#control-lpwr").addClass("button-active")} else {$("#control-lpwr").removeClass("button-active")}
+    // Clear if we don't
+    } else {
+        // Clear text
+        $("#selected-zone-text").html("");
+        $("#selected-chan-text").html("");
+        // Disable buttons
+        $("#radio-controls button").prop('disabled', true);
+        $("#radio-controls button").removeClass("button-active");
+    }
 }
 
 /*****************************************************
     Radio Backend Functions
 *****************************************************/
 
+/**
+ * Start radio PTT
+ */
 function startPtt() {
     if (!pttActive && selectedRadio) {
         console.log("Starting PTT on " + selectedRadio);
@@ -156,12 +220,38 @@ function startPtt() {
     }
 }
 
+/**
+ * Stop radio PTT
+ */
 function stopPtt() {
     if (pttActive) {
         $("#" + selectedRadio).removeClass("transmitting");
         console.log("PTT released");
         pttActive = false;
     }
+}
+
+/**
+ * Toggle the status of radio mute
+ * @param {string} obj element whose parent radio to toggle mute on
+ */
+ function toggleMute(event, obj) {
+    // Get ID of radio to mute
+    var radioId = $(obj).closest(".radio-card").attr('id');
+    // Get index of radio in list
+    var idx = getRadioIndex(radioId);
+    // Change mute status
+    if (radioList[idx].muted) {
+        console.log("Unmuting " + radioId);
+        radioList[idx].muted = false;
+    } else {
+        console.log("Muting " + radioId);
+        radioList[idx].muted = true;
+    }
+    // Update card
+    updateRadioCard(idx);
+    // Stop propagation so we don't also select the muted radio
+    event.stopPropagation();
 }
 
 /*****************************************************
@@ -227,8 +317,12 @@ function updateClock() {
  * Populate radio cards based on the radios in radioList[]
  */
 function populateRadios() {
-    radioList.foreach((radio, index) => {
+    radioList.forEach((radio, index) => {
+        console.log("Adding radio " + radio.name);
+        // Add the radio card
         addRadioCard("radio" + String(index), radio.name);
+        // Populate its text
+        updateRadioCard(index);
     });
 }
 
@@ -243,22 +337,25 @@ function addRadioCard(id, name) {
             <div class="header">
                 <h2>${name}</h2>
                 <div class="icon-stack">
-                    <a href="#"><ion-icon name="volume-high-sharp" onclick="muteRadio(this)"></ion-icon></a>
-                    <a href="#"><ion-icon name="warning-sharp"></ion-icon></ion-icon></ion-icon></a>
+                    <a href="#" onclick="toggleMute(event, this)" class="enabled"><ion-icon name="volume-high-sharp" id="icon-mute"></ion-icon></a>
+                    <a href="#"><ion-icon name="warning-sharp" id="icon-alert"></ion-icon></a>
                 </div>
             </div>
             <div class="content">
-                <div class="channel">
-                    <h3>Channel</h3>
-                    <span class="channel-text">Channel Text</span>
+                <div>
+                    <h3>CHANNEL</h3>
+                    <div id="channel-text" class="value-frame"></div>
                 </div>
-                <div class="last-id">
-                    <h3>Last ID</h3>
-                    <span class="id-text">ID Text</span>
+                <div>
+                    <h3>LAST ID</h3>
+                    <div id="id-text" class="value-frame"></div>
                 </div>
             </div>
+            <div class="footer"></div>
         </div>
     `;
+
+    $("#main-layout").append(newCardHtml);
 }
 
 /*****************************************************
@@ -285,4 +382,13 @@ function getTimeLocal(formatString) {
     // Get local time
     var now = dayjs();
     return now.format(formatString);
+}
+
+/**
+ * Get radio index from id string (radio1 returns 1)
+ * @param {string} id radio id
+ * @returns index of radio
+ */
+function getRadioIndex(id) {
+    return idx = parseInt(id.replace("radio",""));
 }

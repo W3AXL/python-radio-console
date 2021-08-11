@@ -70,25 +70,9 @@
 
             <!-- Main Layout for Radio Entries -->
             <div id="main-layout">
-                <div class="radio-card" id="radio1">
-                    <div class="header">
-                        <h2>Radio 1</h2>
-                        <div class="icon-stack">
-                            <a href="#"><ion-icon name="volume-high-sharp" class="enabled" onclick="muteRadio(this)"></ion-icon></a>
-                            <a href="#"><ion-icon name="warning-sharp" class="alerting"></ion-icon></ion-icon></ion-icon></a>
-                        </div>
-                    </div>
-                    <div class="content">
-                        <div class="channel">
-                            <h3>CHANNEL</h3>
-                            <div class="value-frame">Channel Text</div>
-                        </div>
-                        <div class="last-id">
-                            <h3>LAST ID</h3>
-                            <div class="value-frame">ID Text</div>
-                        </div>
-                    </div>
-                </div>
+
+                <!-- Radio Cards will populate here -->
+
             </div>
 
             <!-- Placeholder text before connection to server -->
@@ -103,6 +87,71 @@
         <!-- Control Footer -->
         <div id="controlbar">
 
+            <!-- Radio Controls -->
+            <div id="radio-controls">
+                <!-- Left Button Bar -->
+                <div class="topcoat-button-bar">
+                    <!-- Zone Button -->
+                    <div class="topcoat-button-bar__item">
+                        <button id="control-zone" title="Zone" class="topcoat-button-bar__button--large" disabled>
+                            <ion-icon name="copy-outline"></ion-icon>
+                        </button>
+                    </div>
+                    <!-- Scan Button -->
+                    <div class="topcoat-button-bar__item">
+                        <button id="control-scan" title="Scan" class="topcoat-button-bar__button--large" disabled>
+                            <ion-icon name="reload-sharp"></ion-icon>
+                        </button>
+                    </div>
+                    <!-- Nuis Button -->
+                    <div class="topcoat-button-bar__item">
+                        <button id="control-nuis" title="Nuisance Delete" class="topcoat-button-bar__button--large" disabled>
+                            <ion-icon name="ban-sharp"></ion-icon>
+                        </button>
+                    </div>
+                    <!-- Dir Button -->
+                    <div class="topcoat-button-bar__item">
+                        <button id="control-dir" title="Talkaround" class="topcoat-button-bar__button--large" disabled>
+                            <ion-icon name="exit-sharp"></ion-icon>
+                        </button>
+                    </div>
+                    <!-- Mon Button -->
+                    <div class="topcoat-button-bar__item">
+                        <button id="control-mon" title="Monitor" class="topcoat-button-bar__button--large" disabled>
+                            <ion-icon name="volume-off-sharp"></ion-icon>
+                        </button>
+                    </div>
+                    <!-- Low Power Button -->
+                    <div class="topcoat-button-bar__item">
+                        <button id="control-lpwr" title="Low Power" class="topcoat-button-bar__button--large" disabled>
+                            <span>L</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Selected Channel LCD screen -->
+                <div class="lcd">
+                    <div id="selected-zone-text"></div>
+                    <div id="selected-chan-text"></div>
+                </div>
+
+                <!-- Right Button Bar -->
+                <div class="topcoat-button-bar">
+                    <!-- Channel Down -->
+                    <div class="topcoat-button-bar__item">
+                        <button id="control-chanup" title="Channel Down" class="topcoat-button-bar__button--large" disabled>
+                            <ion-icon name="caret-down-sharp"></ion-icon>
+                        </button>
+                    </div>
+                    <!-- Channel Up -->
+                    <div class="topcoat-button-bar__item">
+                        <button id="control-chandn" title="Channel Up" class="topcoat-button-bar__button--large" disabled>
+                            <ion-icon name="caret-up-sharp"></ion-icon>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
         </div>
 
         <!-- Client Config Popup -->
