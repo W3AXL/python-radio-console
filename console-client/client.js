@@ -41,15 +41,20 @@ function pageLoad() {
     console.log("Starting client-side runtime");
     // Read config
     readConfig();
+
     // Get client timezone
     const d = new Date();
     timeZone = d.toLocaleString('en', { timeZoneName: 'short' }).split(' ').pop();
-    // Populate radio cards
-    populateRadios();
+
     // Setup clock timer
     setInterval(updateClock, 250);
-    // Bind buttons
-    bindRadioCardButtons();
+
+    // Connect and load if autoconnect is true
+    if (config.serverAutoConn) {
+        // Connect
+        connectServer();
+    }
+
     // Bind body click to deselecting radios
     $("#body").click(function () {
         deselectRadios();
@@ -488,9 +493,45 @@ function readConfig() {
  * Connect to the server's websocket
  */
 function connectServer() {
-    serverSocket = new WebSocket("ws://localhost:9995");
+    // Setup socket
+    serverSocket = new WebSocket("ws://" + config.serverAddress + ":" + config.serverPort);
     serverSocket.onerror = handleConnectionError;
     serverSocket.onmessage = recvServerMessage;
+    // Wait for connection
+    console.log("Connecting to " + config.serverAddress + ":" + config.serverPort);
+    waitForConnect(serverSocket, onConnect);
+}
+
+/**
+ * Wait for websocket connection to be active
+ * @param {WebSocket} websocket 
+ * @param {function} callback callback function to execute once connected
+ */
+function waitForConnect(socket, callback=null) {
+    setTimeout(
+        function() {
+            if (socket.readyState === 1) {
+                console.log("Connected!");
+                if (callback != null) {
+                    callback();
+                }
+            } else {
+                waitForConnect(socket, callback);
+            }
+        },
+    5); // 5 ms timeout
+}
+
+/**
+ * Called once the websocket connection is active
+ */
+function onConnect() {
+    // Query for radios
+    sendServerMessage('?radios');
+    // Populate radio cards
+    populateRadios();
+    // Bind buttons
+    bindRadioCardButtons();
 }
 
 /**
@@ -511,9 +552,9 @@ function recvServerMessage(event) {
     // Response to ?radios request
     if (event.data.startsWith("radios:")) {
         // get the JSON of the current radios
-        var statusJson = event.data.substring(7);
+        var radioListJson = event.data.substring(7);
         // set our radio list to the new status
-        radioList = JSON.parse(statusJson);
+        radioList = JSON.parse(radioListJson);
         // Populate radio cards
         populateRadios()
     }
