@@ -54,7 +54,7 @@
             <div class="sidebar sidebar-closed" id="sidebar-mainmenu">
                 <ul>
                     <li>
-                        <a href="#">
+                        <a href="#" onclick="showPopup('#server-config-popup');toggleMainMenu();">
                             <span class="sidebar-icon"><ion-icon name="server-sharp"></ion-icon></span>
                             <span class="sidebar-item">Server Config</span>
                         </a>
@@ -170,6 +170,7 @@
             </div>
             <div class="popup-content">
                 <table class="popup-table">
+                    <!-- Server address -->
                     <tr>
                         <td width="33%">
                             <h3>Server Address</h3>
@@ -178,6 +179,7 @@
                             <input type="text" class="topcoat-text-input" id="server-address" value="" placeholder="IP address or hostname">
                         </td>
                     </tr>
+                    <!-- Server Port -->
                     <tr>
                         <td>
                             <h3>Server Port</h3>
@@ -186,6 +188,19 @@
                             <input type="text" class="topcoat-text-input" id="server-port" value="" placeholder="Port number">
                         </td>
                     </tr>
+                    <!-- Auto-connect -->
+                    <tr>
+                        <td>
+                            <h3>Auto-Connect</h3>
+                        </td>
+                        <td>
+                            <label class="topcoat-checkbox">
+                                <input type="checkbox" id="server-autoconnect">
+                                <div class="topcoat-checkbox__checkmark"></div>
+                            </label>
+                        </td>
+                    </tr>
+                    <!-- Save Button -->
                     <tr>
                         <td></td>
                         <td>
@@ -206,6 +221,7 @@
             </div>
             <div class="popup-content">
                 <table class="popup-table">
+                    <!-- Time Format -->
                     <tr>
                         <td width="33%">
                             <h3>Time Format</h3>

@@ -12,6 +12,10 @@ import queue
 import websockets
 import asyncio
 
+# HTTP server stuff
+import socketserver
+import http.server
+
 # Colorized logs
 from colorama import init, Fore, Back, Style
 
@@ -45,7 +49,8 @@ parser = argparse.ArgumentParser()
 # Global variables
 verbose = False
 address = None
-port = None
+serverport = None
+webguiport = None
 
 # Status message queue
 statusQueue = queue.Queue()
@@ -69,14 +74,16 @@ def addArguments():
     parser.add_argument("-c","--config", help="Config file to load", metavar="config.json")
     parser.add_argument("-ls","--list-sound", help="List available sound devices", action="store_true")
     parser.add_argument("-lp","--list-ports", help="List available com ports", action="store_true")
-    parser.add_argument("-p","--port", help="Server port")
+    parser.add_argument("-sp","--serverport", help="Websocket server port")
     parser.add_argument("-v","--verbose", help="Enable verbose logging", action="store_true")
+    parser.add_argument("-wp","--webguiport", help="Web GUI port")
 
 def parseArguments():
     
     global verbose
     global address
-    global port
+    global serverport
+    global webguiport
 
     # Parse the args
     args = parser.parse_args()
@@ -106,15 +113,21 @@ def parseArguments():
         loadConfig(args.config)
 
     # Make sure port and optionally an address were specified
-    if not args.port:
+    if not args.serverport:
         logError("No server port specified!")
         exit(1)
     else:
-        port = int(args.port)
+        serverport = int(args.serverport)
         if not args.address:
             address = "localhost"
         else:
             address = args.address
+
+    if not args.webguiport:
+        logError("No web GUI port specified!")
+        exit(1)
+    else:
+        webguiport = int(args.webguiport)
 
 """-------------------------------------------------------------------------------
     Config Parsing Functions
@@ -269,7 +282,7 @@ def getDeviceName(type, idx):
 
 async def websocketHandler(websocket, path):
     """
-    Main hander for data sent to the server from the client
+    Main hander for data sent to the websocket server from the client
     """
 
     while True:
@@ -290,14 +303,37 @@ async def websocketHandler(websocket, path):
 
         # Send the response
         await websocket.send(response)
+        
+class httpServerHandler(http.server.SimpleHTTPRequestHandler):
+    """
+    Main handler for http server hosting the web gui
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, directory="console-client", **kwargs)
+
+    def log_message(self, format, *args):
+        """
+        Surpress log messages for GET/POST requests
+        """
+        return
 
 def startServer():
+    """
+    Start the websocket server and the http web gui server
+    """
 
-    logInfo("Starting server on address {}, port {}".format(address, port))
+    logInfo("Starting websocket server on address {}, port {}".format(address, serverport))
     # create server object
-    server = websockets.serve(websocketHandler, address, port)
+    server = websockets.serve(websocketHandler, address, serverport)
     # start server in thread
     asyncio.get_event_loop().run_until_complete(server)
+
+    logInfo("Starting web GUI server on address {}, port {}".format(address, webguiport))
+    # bind to socket server
+    httpServer = socketserver.TCPServer((address, webguiport), httpServerHandler)
+    # create thread
+    httpThread = threading.Thread(target=httpServer.serve_forever, daemon=True).start()
 
 """-------------------------------------------------------------------------------
     Logging Print Functions

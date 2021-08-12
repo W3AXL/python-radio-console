@@ -7,7 +7,8 @@ var config = {
     timeFormat: "Local",
 
     serverAddress: "",
-    serverPort: 0
+    serverPort: 0,
+    serverAutoConn: false
 }
 
 // Radio List (populated from server)
@@ -414,18 +415,23 @@ function saveServerConfig() {
     // Disconnect from existing server
 
     // Get values
-    var adddress = $("#server-address").val();
+    var address = $("#server-address").val();
     var port = $("#server-port").val();
+    var autoconnect = $("#server-autoconnect").prop('checked');
+
+    // Remove invalid class
+    $("#server-port").removeClass("invalid");
 
     // Validate port
     if (parseInt(port) < 1 || parseInt(port) > 65535) {
-        $("#server-port").attr("invalid", true);
+        $("#server-port").addClass("invalid");
         return
     }
 
     // Save config info
     config.serverAddress = address;
     config.serverPort = port;
+    config.serverAutoConn = autoconnect;
 
     // Save config to cookie
     saveConfig();
@@ -463,9 +469,11 @@ function readConfig() {
     if (configJson) {
         // Convert to config object
         config = JSON.parse(configJson);
-        // Update popup values
+        // Update server popup values
         $("#server-address").val(config.serverAddress);
         $("#server-port").val(config.serverPort);
+        $("#server-autoconnect").prop('checked',config.serverAutoConn);
+        // Update client popup values
         $("#client-timeformat").val(config.timeFormat);
     } else {
         console.warn("No config cookie detected, using defaults");
