@@ -5,9 +5,12 @@ import argparse
 import platform
 import threading
 import time
+import json
+import queue
 
 # TCP Socket Server
-import socketserver
+import websockets
+import asyncio
 
 # Colorized logs
 from colorama import init, Fore, Back, Style
@@ -20,10 +23,7 @@ import serial
 import serial.tools.list_ports
 
 # Radio class
-from radioClass import Radio, RadioStatus
-
-# TCP handler class
-from tcpServer import serverTCPHandler
+from radioClass import Radio, RadioState
 
 # Used for loading config
 import json
@@ -47,6 +47,9 @@ verbose = False
 address = None
 port = None
 
+# Status message queue
+statusQueue = queue.Queue()
+
 # Sound device lists
 inputs = []
 outputs = []
@@ -55,9 +58,9 @@ hostapis = []
 # Detect operating system
 osType = platform.system()
 
-"""-----------------------------------------
+"""-------------------------------------------------------------------------------
     Command Line Argument Functions
------------------------------------------"""
+-------------------------------------------------------------------------------"""
 
 def addArguments():
     """Add command line arguments
@@ -113,9 +116,9 @@ def parseArguments():
         else:
             address = args.address
 
-"""-----------------------------------------
+"""-------------------------------------------------------------------------------
     Config Parsing Functions
------------------------------------------"""
+-------------------------------------------------------------------------------"""
 
 def loadConfig(filename):
     """Load JSON config file and parse to config objects
@@ -158,9 +161,31 @@ def printRadios():
         print("                Tx Audio dev: {} ({})".format(radio.txDev, getDeviceName('output',radio.txDev)))
         print("                Rx Audio dev: {} ({})".format(radio.rxDev, getDeviceName('input',radio.rxDev)))
 
-"""-----------------------------------------
+"""-------------------------------------------------------------------------------
+    Radio Functions
+-------------------------------------------------------------------------------"""
+
+def getRadioStatusJson():
+    """Gets status of all radios and returns a JSON string
+
+    Returns:
+        string: JSON string of all radio statuses
+    """    
+
+    # Create an empty status list
+    statusList = []
+
+    # Get the status of each radio
+    for radio in config.RadioList:
+        statusList.append(radio.encodeClientStatus())
+
+    # Convert into a json string
+    return json.dumps(statusList)
+    
+
+"""-------------------------------------------------------------------------------
     Sound Device Functions
------------------------------------------"""
+-------------------------------------------------------------------------------"""
 
 def getSoundDevices():
     """Get available system sound devices
@@ -238,21 +263,45 @@ def getDeviceName(type, idx):
     else:
         raise Exception("Invalid audio device type specified: {}".format(type))
 
-"""-----------------------------------------
-    TCP Server Functions
------------------------------------------"""
+"""-------------------------------------------------------------------------------
+    Websocket Server Functions
+-------------------------------------------------------------------------------"""
+
+async def websocketHandler(websocket, path):
+    """
+    Main hander for data sent to the server from the client
+    """
+
+    while True:
+        # Send status updates if there are any in the queue
+        #if statusQueue.not_empty:
+        #    status = statusQueue.get()
+
+        # Wait for data
+        data = await websocket.recv()
+
+        # Process the received command
+        if data == "?radios":
+            logVerbose("sending radio list to {}".format(websocket.remote_address[0]))
+            response = "radios:" + getRadioStatusJson()
+        else:
+            logWarn("invalid command ({}) received from {}".format(data,websocket.remote_address[0]))
+            response = "NACK"
+
+        # Send the response
+        await websocket.send(response)
 
 def startServer():
 
     logInfo("Starting server on address {}, port {}".format(address, port))
     # create server object
-    server = socketserver.TCPServer((address, port), serverTCPHandler)
+    server = websockets.serve(websocketHandler, address, port)
     # start server in thread
-    threading.Thread(target=server.serve_forever, daemon=True).start()
+    asyncio.get_event_loop().run_until_complete(server)
 
-"""-----------------------------------------
+"""-------------------------------------------------------------------------------
     Logging Print Functions
------------------------------------------"""
+-------------------------------------------------------------------------------"""
 
 def logVerbose(msg):
     if verbose:
@@ -267,9 +316,9 @@ def logWarn(msg):
 def logError(msg):
     print(Fore.RED + "ERROR: " + msg + Style.RESET_ALL)
 
-"""-----------------------------------------
+"""-------------------------------------------------------------------------------
     Main Runtime
------------------------------------------"""
+-------------------------------------------------------------------------------"""
 
 if __name__ == "__main__":
     # init colorized logs
@@ -295,8 +344,7 @@ if __name__ == "__main__":
 
     # Runtime loop
     try:
-        while True:
-            time.sleep(1)
+        asyncio.get_event_loop().run_forever()
     except KeyboardInterrupt:
         logWarn("Caught KeyboardInterrupt, shutting down")
         exit(0)

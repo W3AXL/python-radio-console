@@ -242,6 +242,10 @@ ion-icon {
     animation: txBorderBlink 0.2s ease infinite;
 }
 
+.radio-card.disconnected {
+    opacity: 50%;
+}
+
 .radio-card .header {
     width: 100%;
     height: 28px;
@@ -424,7 +428,7 @@ ion-icon {
 
 .popup {
     position: fixed;
-    width: 512px;
+    width: 480px;
     top: 128px;
     left: 0;
     right: 0;
@@ -465,11 +469,39 @@ ion-icon {
     margin-right: 4px;
 }
 
+.popup-buttons-bottom {
+    width: 100%;
+    display: inline-flex;
+    justify-content: center;
+    align-items: center;
+    margin-top: 16px;
+}
+
 .popup-content {
     padding: 16px;
     box-sizing: border-box;
     background-color: var(--color-bg-mid);
     border-radius: 0 0 6px 6px;
+}
+
+.popup-table {
+    width: 100%;
+}
+
+.popup-table td {
+    padding: 4px 8px;
+}
+
+.popup-table input {
+    width: 100%;
+}
+
+.popup-content h3 {
+    margin: 0;
+    padding: 0;
+    color: var(--color-txt-light);
+    font-weight: normal;
+    text-align: right;
 }
 
 /********************************

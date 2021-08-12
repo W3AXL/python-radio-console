@@ -13,8 +13,14 @@
 
         <!-- JQuery -->
         <script type="text/javascript" src="jquery-3.6.0.min.js"></script>
+
         <!-- DayJS -->
         <script type="text/javascript" src="dayjs.min.js"></script>
+        <script type="text/javascript" src="https://unpkg.com/dayjs@1.8.21/plugin/utc.js"></script>
+        <script>dayjs.extend(window.dayjs_plugin_utc)</script>
+
+        <!-- js-cookie -->
+        <script type="text/javascript" src="js.cookie.min.js"></script>
     </head>
     <body>
         <!-- Top Nav Bar -->
@@ -154,6 +160,42 @@
             
         </div>
 
+        <!-- Server Config Popup -->
+        <div id="server-config-popup" class="popup" style="display: none;">
+            <div class="popup-header">
+                <h2>Server Config</h2>
+                <div class="popup-buttons">
+                    <a href="#" onclick="closePopup(this)"><ion-icon name="close-circle-sharp"></ion-icon></a>
+                </div>
+            </div>
+            <div class="popup-content">
+                <table class="popup-table">
+                    <tr>
+                        <td width="33%">
+                            <h3>Server Address</h3>
+                        </td>
+                        <td width="67%">
+                            <input type="text" class="topcoat-text-input" id="server-address" value="" placeholder="IP address or hostname">
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>
+                            <h3>Server Port</h3>
+                        </td>
+                        <td>
+                            <input type="text" class="topcoat-text-input" id="server-port" value="" placeholder="Port number">
+                        </td>
+                    </tr>
+                    <tr>
+                        <td></td>
+                        <td>
+                            <button class="topcoat-button--cta" onclick="saveServerConfig()">Save</button>
+                        </td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+
         <!-- Client Config Popup -->
         <div id="client-config-popup" class="popup" style="display: none;">
             <div class="popup-header">
@@ -163,7 +205,25 @@
                 </div>
             </div>
             <div class="popup-content">
-
+                <table class="popup-table">
+                    <tr>
+                        <td width="33%">
+                            <h3>Time Format</h3>
+                        </td>
+                        <td width="67%">
+                            <select id="client-timeformat">
+                                <option value="Local">Local</option>
+                                <option value="UTC">UTC</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td></td>
+                        <td>
+                            <button class="topcoat-button--cta" onclick="saveClientConfig()">Save</button>
+                        </td>
+                    </tr>
+                </table>
             </div>
         </div>
 

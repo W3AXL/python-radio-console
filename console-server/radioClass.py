@@ -1,13 +1,13 @@
 from enum import Enum
 import json
 
-class RadioStatus(Enum):
+class RadioState(Enum):
     """Radio status enum
     """
     # Standard connection states
     Disconnected = 0
     Idle = 0
-    Receiving  = 1
+    Receiving = 1
     Transmitting = 2
     # Error states
     ConnectError = 10
@@ -72,29 +72,31 @@ class Radio():
         self.lowpower = False
 
         # Set starting status to disconnected
-        self.status = RadioStatus.Disconnected
+        self.state = RadioState.Disconnected
 
-    def getStatus(self):
-        """Return current status of radio
+    def getState(self):
+        """Return current state of radio
 
         Returns:
-            RadioStatus: current status of radio
-            StatusString: string representation of current status
+            RadioState: current status of radio
+            StateString: string representation of current status
         """
 
-        if self.status.value < 10:
-            statusString = self.status.name
+        if self.state.value < 10:
+            stateString = self.state.name
+            self.error = False
         else:
-            if self.status == RadioStatus.ConnectError:
-                statusString = "Connection Error"
-            elif self.status == RadioStatus.TransmitError:
-                statusString = "Transmit Error"
-            elif self.status == RadioStatus.ReceiveError:
-                statusString = "Receive Error"
+            self.error = True
+            if self.state == RadioState.ConnectError:
+                stateString = "Connection Error"
+            elif self.state == RadioState.TransmitError:
+                stateString = "Transmit Error"
+            elif self.state == RadioState.ReceiveError:
+                stateString = "Receive Error"
             else:
-                statusString = "Unknown Error"
+                stateString = "Unknown Error"
 
-        return self.status, statusString
+        return self.state, stateString
 
     def encodeClientStatus(self):
         """Encode radio status into a dict for sending to the client
@@ -103,10 +105,14 @@ class Radio():
             dict: Dict of radio status variables
         """
         # Get overall radio status
-        status, statusString = self.getStatus()
-        if status >= 10:
-            errorText = statusString
+        state, stateString = self.getState()
+
+        # Send error text if there's an error, or state text otherwise
+        if state.value >= 10:
+            stateText = "Error"
+            errorText = stateString
         else:
+            stateText = stateString
             errorText = ""
 
         # Encode status variables into a dict
@@ -115,6 +121,7 @@ class Radio():
             "zone": self.zone,
             "chan": self.chan,
             "lastid": self.lastid,
+            "state": stateText,
             "muted": self.muted,
             "error": self.error,
             "errorText": errorText,
