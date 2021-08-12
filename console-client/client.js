@@ -10,28 +10,30 @@ var config = {
 // Radio List (TODO: This will be populated from the server)
 var radioList = [
     {
-        name: "VHF XTL5000",
-        zone: "Eastern Iowa",
-        chan: "W0GQ Cedar Rpd",
-        id: "4597",
-        muted: false,
-        error: false,
-        scanning: true,
-        talkaround: false,
-        monitor: true,
-        lowpower: true
+        "name": "VHF XTL5000",
+        "zone": "Eastern Iowa",
+        "chan": "W0GQ Cedar Rpd",
+        "lastid": "4597",
+        "muted": false,
+        "error": false,
+        "errorText": "",
+        "scanning": true,
+        "talkaround": false,
+        "monitor": true,
+        "lowpower": true
     },
     {
-        name: "UHF XTL5000",
-        zone: "Eastern Iowa",
-        chan: "K0LVB CR MMDVM",
-        id: "3118336",
-        muted: false,
-        error: false,
-        scanning: true,
-        talkaround: false,
-        monitor: false,
-        lowpower: true
+        "name": "UHF XTL5000",
+        "zone": "Eastern Iowa",
+        "chan": "K0LVB CR MMDVM",
+        "lastid": "3118336",
+        "muted": false,
+        "error": false,
+        "errorText": "",
+        "scanning": true,
+        "talkaround": false,
+        "monitor": false,
+        "lowpower": true
     },
 ];
 
@@ -159,7 +161,7 @@ function updateRadioCard(idx) {
     var radioCard = $("#radio" + String(idx));
     // Update text boxes
     radioCard.find("#channel-text").html(radio.chan);
-    radioCard.find("#id-text").html(radio.id);
+    radioCard.find("#id-text").html(radio.lastid);
     // Update mute icon
     if (radio.muted) {
         radioCard.find("#icon-mute").attr('name', 'volume-mute-sharp');

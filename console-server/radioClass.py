@@ -20,20 +20,20 @@ class Radio():
     """
     
     # Valid control modes for the radio
-    controlModes = ["None (RX only)",
-                    "SB9600: XTL O-Head",
-                    "SB9600: XTL W-Head",
-                    "SB9600: Astro Spectra",
-                    "SB9600: MCS2000",
-                    "Soundcard: CM108/119 PTT",
-                    "Soundcard: VOX PTT"]
+    controlModes = ["None",             # No PTT control
+                    "SB9600-XTL-O",     # XTL O-head
+                    "SB9600-XTL-W",     # XTL W-head
+                    "SB9600-SPECTRA",   # Astro Spectra W-head
+                    "SB9600-MCS",       # MCS2000
+                    "Soundcard-CM108",  # CM108 GPIO PTT
+                    "Soundcard-VOX"]    # Radio-controlled VOX PTT
 
     # Valid signalling modes for the radio
     signallingModes = ["None",
-                       "MDC-1200",
+                       "MDC",
                        "ANI",
-                       "Single-tone",
-                       "Two-tone"]
+                       "Singletone",
+                       "QCII"]
 
     # Init class
     def __init__(self, name, desc=None, ctrlMode=None, ctrlPort=None, txDev=None, rxDev=None, signalMode=None, signalId=None):
@@ -60,6 +60,17 @@ class Radio():
         self.sigMode = signalMode
         self.sigId = signalId
 
+        # Init client-facing parameters
+        self.zone = ""
+        self.chan = ""
+        self.lastid = ""
+        self.muted = False
+        self.error = False
+        self.scanning = False
+        self.talkaround = False
+        self.monitor = False
+        self.lowpower = False
+
         # Set starting status to disconnected
         self.status = RadioStatus.Disconnected
 
@@ -85,8 +96,43 @@ class Radio():
 
         return self.status, statusString
 
-    # encode radio config into dict
+    def encodeClientStatus(self):
+        """Encode radio status into a dict for sending to the client
+
+        Returns:
+            dict: Dict of radio status variables
+        """
+        # Get overall radio status
+        status, statusString = self.getStatus()
+        if status >= 10:
+            errorText = statusString
+        else:
+            errorText = ""
+
+        # Encode status variables into a dict
+        clientStatus = {
+            "name": self.name,
+            "zone": self.zone,
+            "chan": self.chan,
+            "lastid": self.lastid,
+            "muted": self.muted,
+            "error": self.error,
+            "errorText": errorText,
+            "scanning": self.scanning,
+            "talkaround": self.talkaround,
+            "monitor": self.monitor,
+            "lowpower": self.lowpower
+        }
+        
+        # Return the dict
+        return clientStatus
+
     def encodeConfig(self):
+        """Encode radio parameters into config dict for JSON parsing
+
+        Returns:
+            dict: radio config parameters in dict form
+        """
         # Create dict
         config = {
             "name": self.name,
@@ -100,8 +146,15 @@ class Radio():
         }
         return config
 
-    # decode dict into radio object
     def decodeConfig(radioDict):
+        """Decode a dict of config parameters into a new radio object
+
+        Args:
+            radioDict (dict): Dict of radio parameters
+
+        Returns:
+            Radio: a new Radio object
+        """
         # create a new radio object from config data
         return Radio(radioDict['name'],
                      radioDict['desc'],
