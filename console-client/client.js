@@ -574,6 +574,8 @@ function recvServerMessage(event) {
         radioList[radioIndex] = radioStatus;
         // Update radio card
         updateRadioCard(radioIndex);
+        // Update bottom controls
+        updateRadioControls();
     }
 
     // Message error
