@@ -27,7 +27,10 @@ import serial
 import serial.tools.list_ports
 
 # Radio class
-from radioClass import Radio, RadioState
+from radioClass import Radio
+
+# Radio State
+from radioState import RadioState
 
 # Used for loading config
 import json
@@ -52,8 +55,12 @@ address = None
 serverport = None
 webguiport = None
 
-# Status message queue
-statusQueue = queue.Queue()
+# Websocket server and event loop
+server = None
+serverLoop = None
+
+# Message queue for sending to client
+messageQueue = asyncio.Queue()
 
 # Sound device lists
 inputs = []
@@ -68,7 +75,8 @@ osType = platform.system()
 -------------------------------------------------------------------------------"""
 
 def addArguments():
-    """Add command line arguments
+    """
+    Add command line arguments
     """
     parser.add_argument("-a","--address", help="Server address to bind to")
     parser.add_argument("-c","--config", help="Config file to load", metavar="config.json")
@@ -154,8 +162,8 @@ def loadConfig(filename):
             configDict = json.load(inp)
 
             # Iterate through radios in idct
-            for radioDict in configDict["RadioList"]:
-                config.RadioList.append(Radio.decodeConfig(radioDict))
+            for index, radioDict in enumerate(configDict["RadioList"]):
+                config.RadioList.append(Radio.decodeConfig(index, radioDict))
 
             # Print on success
             logInfo("Sucessfully loaded config file {}".format(filename))
@@ -178,8 +186,50 @@ def printRadios():
     Radio Functions
 -------------------------------------------------------------------------------"""
 
-def getRadioStatusJson():
-    """Gets status of all radios and returns a JSON string
+def connectRadios():
+    """
+    Connect to each radio in the master RadioList
+    """
+    for idx, radio in enumerate(config.RadioList):
+        # Log
+        logInfo("Connecting to radio {}".format(radio.name))
+        # Connect
+        radio.connect(radioStatusUpdate)
+
+def radioStatusUpdate(index):
+    """
+    Status callback the radio interface calls when it has a new status
+        simply puts the index of the radio with a new status into the status update queue
+
+    Args:
+        index (int): index of the radio in the master RadioList with a new status
+    """
+
+    # Add the index to the queue
+    serverLoop.call_soon_threadsafe(messageQueue.put_nowait,"status:{}".format(index))
+    
+
+
+def getRadioStatusJson(index):
+    """
+    Gets status of specified radio index in the RadioList and returns a json string
+
+    Args:
+        index (int): index of radio in RadioList
+
+    Returns:
+        string: JSON of radio status
+    """
+    
+    # Get the status of the specified radio
+    status = config.RadioList[index].encodeClientStatus()
+
+    return json.dumps(status)
+
+
+def getAllRadiosStatusJson():
+    """
+    Gets status of all radios and returns a JSON string
 
     Returns:
         string: JSON string of all radio statuses
@@ -201,7 +251,8 @@ def getRadioStatusJson():
 -------------------------------------------------------------------------------"""
 
 def getSoundDevices():
-    """Get available system sound devices
+    """
+    Get available system sound devices
     """
 
     global inputs
@@ -231,7 +282,8 @@ def getSoundDevices():
             outputs.append(device)
 
 def printSoundDevices():
-    """Print queried sound devices
+    """
+    Print queried sound devices
     """
 
     # Print inputs first
@@ -252,7 +304,8 @@ def printSoundDevices():
     print()
 
 def getDeviceName(type, idx):
-    """Return name of audio device specified by type and idnex
+    """
+    Return name of audio device specified by type and idnex
 
     Args:
         type (string): "input" or "output"
@@ -282,28 +335,67 @@ def getDeviceName(type, idx):
 
 async def websocketHandler(websocket, path):
     """
-    Main hander for data sent to the websocket server from the client
+    Sets up handlers for websocket
+    """
+
+    consumer_task = asyncio.ensure_future(consumer_handler(websocket, path))
+
+    producer_task = asyncio.ensure_future(producer_hander(websocket, path))
+
+    done, pending = await asyncio.wait(
+        [consumer_task, producer_task],
+        return_when=asyncio.FIRST_COMPLETED,
+    )
+    for task in pending:
+        task.cancel()
+    
+
+async def consumer_handler(websocket, path):
+    """
+    Websocket handler for data received from client
+
+    Args:
+        websocket (websocket): websocket object
+        path (path): not sure what this does, we don't use it
     """
 
     while True:
-        # Send status updates if there are any in the queue
-        #if statusQueue.not_empty:
-        #    status = statusQueue.get()
-
         # Wait for data
         data = await websocket.recv()
 
         # Process the received command
         if data == "?radios":
-            logVerbose("sending radio list to {}".format(websocket.remote_address[0]))
-            response = "radios:" + getRadioStatusJson()
+            await messageQueue.put("allradios")
         else:
-            logWarn("invalid command ({}) received from {}".format(data,websocket.remote_address[0]))
-            response = "NACK"
+            await messageQueue.put("NACK")
 
-        # Send the response
-        await websocket.send(response)
-        
+
+async def producer_hander(websocket, path):
+    """
+    Websocket handler for sending data to client
+
+    Args:
+        websocket (websocket): socket object
+        path (path): still not sure what this does
+    """
+    while True:
+        # Wait for new data in queue
+        message = await messageQueue.get()
+
+        # get message type
+        if message == "allradios":
+            logInfo("sending radio list to {}".format(websocket.remote_address[0]))
+            response = "radios:" + getAllRadiosStatusJson()
+            await websocket.send(response)
+        elif "status:" in message:
+            index = int(message[7:])
+            logInfo("Sending status update for radio{}".format(index))
+            await websocket.send("radio{}:".format(index) + getRadioStatusJson(index))
+        elif "NACK" in message:
+            logWarn("invalid command received from {}".format(websocket.remote_address[0]))
+            await websocket.send("NACK")
+
+
 class httpServerHandler(http.server.SimpleHTTPRequestHandler):
     """
     Main handler for http server hosting the web gui
@@ -323,11 +415,15 @@ def startServer():
     Start the websocket server and the http web gui server
     """
 
+    global server
+    global serverLoop
+
     logInfo("Starting websocket server on address {}, port {}".format(address, serverport))
     # create server object
     server = websockets.serve(websocketHandler, address, serverport)
-    # start server in thread
-    asyncio.get_event_loop().run_until_complete(server)
+    # start server async loop
+    serverLoop = asyncio.get_event_loop()
+    serverLoop.run_until_complete(server)
 
     logInfo("Starting web GUI server on address {}, port {}".format(address, webguiport))
     # bind to socket server
@@ -341,16 +437,20 @@ def startServer():
 
 def logVerbose(msg):
     if verbose:
-        print(Fore.WHITE + Style.DIM + "INFO: " + msg + Style.RESET_ALL)
+        timeString = time.strftime("%Y%m%d %H:%M:%S")
+        print(Fore.WHITE + Style.DIM + "[{}] VERB: {}".format(timeString, msg) + Style.RESET_ALL)
 
 def logInfo(msg):
-    print(Fore.WHITE + "INFO: " + msg + Style.RESET_ALL)
+    timeString = time.strftime("%Y%m%d %H:%M:%S")
+    print(Fore.WHITE + "[{}] INFO: {}".format(timeString, msg) + Style.RESET_ALL)
 
 def logWarn(msg):
-    print(Fore.YELLOW + "WARN: " + msg + Style.RESET_ALL)
+    timeString = time.strftime("%Y%m%d %H:%M:%S")
+    print(Fore.YELLOW + "[{}]WARN: {}".format(timeString, msg) + Style.RESET_ALL)
 
 def logError(msg):
-    print(Fore.RED + "ERROR: " + msg + Style.RESET_ALL)
+    timeString = time.strftime("%Y%m%d %H:%M:%S")
+    print(Fore.RED + "[{}] ERROR: {}".format(timeString, msg) + Style.RESET_ALL)
 
 """-------------------------------------------------------------------------------
     Main Runtime
@@ -377,6 +477,9 @@ if __name__ == "__main__":
 
     # Start server
     startServer()
+
+    # Connect to radios
+    connectRadios()
 
     # Runtime loop
     try:

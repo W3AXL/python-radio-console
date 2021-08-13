@@ -1,19 +1,7 @@
-from enum import Enum
-import json
 
-class RadioState(Enum):
-    """Radio status enum
-    """
-    # Standard connection states
-    Disconnected = 0
-    Idle = 0
-    Receiving = 1
-    Transmitting = 2
-    # Error states
-    ConnectError = 10
-    TransmitError = 11
-    ReceiveError = 12
-    UnknownError = 20
+from interface.xtl import XTL
+
+from radioState import RadioState
 
 class Radio():
     """Radio Class for generic radio control
@@ -35,11 +23,11 @@ class Radio():
                        "Singletone",
                        "QCII"]
 
-    # Init class
-    def __init__(self, name, desc=None, ctrlMode=None, ctrlPort=None, txDev=None, rxDev=None, signalMode=None, signalId=None):
+    def __init__(self, index, name, desc=None, ctrlMode=None, ctrlPort=None, txDev=None, rxDev=None, signalMode=None, signalId=None):
         """Radio configuration object
 
         Args:
+            index (int): index of the radio in the global radio list
             name (string): Radio name
             desc (string): Radio description
             ctrlMode (string): Radio control mode (SB9600, CAT, etc)
@@ -50,7 +38,16 @@ class Radio():
             signalId (any): Optional signalling ID
         """
 
+        # Make sure control mode is valid
+        if ctrlMode not in self.controlModes:
+            raise ValueError("Invalid control mode specified: {}".format(ctrlMode))
+
+        # Make sure signalling mode is valid
+        if signalMode not in self.signallingModes:
+            raise ValueError("Invalid signalling mode specified: {}".format(signalMode))
+
         # Save parameters
+        self.index = index
         self.name = name
         self.desc = desc
         self.ctrlMode = ctrlMode
@@ -71,10 +68,44 @@ class Radio():
         self.monitor = False
         self.lowpower = False
 
+        # Radio interface class
+        self.interface = None
+
+        # Radio connection object
+        self.connection = None
+
         # Set starting status to disconnected
         self.state = RadioState.Disconnected
 
-    def getState(self):
+    def connect(self, statusCallback):
+        """Connect to radio using specified communication scheme
+
+        Args:
+            statusCallback (function): callback to fire when radio status is updated, must take one integer argument
+        """
+
+        # XTL5000 O-head
+        if self.ctrlMode == "SB9600-XTL-O":
+            self.interface = XTL(self.index, self.ctrlPort, 'O5', statusCallback)
+            self.interface.connect()
+        
+    def getStatus(self):
+        """
+        Get status from the radio interface object
+        """
+
+        if self.state != self.interface.state:
+            print("{} status now {} ({})".format(self.name, self.interface.state.name, self.interface.state.value))
+
+        self.state = self.interface.state
+        self.chan = self.interface.chanText
+        self.zone = self.interface.zoneText
+        self.scanning = self.interface.scanning
+        self.talkaround = self.interface.talkaround
+        self.monitor = self.interface.monitor
+        self.lowpower = self.interface.lowpower
+
+    def parseState(self):
         """Return current state of radio
 
         Returns:
@@ -104,8 +135,12 @@ class Radio():
         Returns:
             dict: Dict of radio status variables
         """
-        # Get overall radio status
-        state, stateString = self.getState()
+
+        # Get status from interface
+        self.getStatus()
+
+        # Parse radio status
+        state, stateString = self.parseState()
 
         # Send error text if there's an error, or state text otherwise
         if state.value >= 10:
@@ -153,7 +188,7 @@ class Radio():
         }
         return config
 
-    def decodeConfig(radioDict):
+    def decodeConfig(index, radioDict):
         """Decode a dict of config parameters into a new radio object
 
         Args:
@@ -163,7 +198,8 @@ class Radio():
             Radio: a new Radio object
         """
         # create a new radio object from config data
-        return Radio(radioDict['name'],
+        return Radio(index,
+                     radioDict['name'],
                      radioDict['desc'],
                      radioDict['ctrlMode'],
                      radioDict['ctrlPort'],

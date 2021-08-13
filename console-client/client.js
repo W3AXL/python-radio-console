@@ -528,10 +528,6 @@ function waitForConnect(socket, callback=null) {
 function onConnect() {
     // Query for radios
     sendServerMessage('?radios');
-    // Populate radio cards
-    populateRadios();
-    // Bind buttons
-    bindRadioCardButtons();
 }
 
 /**
@@ -551,12 +547,33 @@ function recvServerMessage(event) {
 
     // Response to ?radios request
     if (event.data.startsWith("radios:")) {
+        console.log("Got master radio list update");
         // get the JSON of the current radios
         var radioListJson = event.data.substring(7);
         // set our radio list to the new status
         radioList = JSON.parse(radioListJson);
         // Populate radio cards
-        populateRadios()
+        populateRadios();
+        // Bind buttons
+        bindRadioCardButtons();
+    }
+
+    // single adio status update
+    else if (event.data.startsWith("radio")) {
+        // Get radio ID from status message
+        var radioIndex = event.data.substring(5, event.data.lastIndexOf(':{'));
+        console.log("Got status update for radio" + radioIndex);
+        // Slice JSON from message and parse
+        var radioStatusJson = event.data.substring(6 + radioIndex.length);
+        var radioStatus = JSON.parse(radioStatusJson);
+        // Strip out \u0000's from strings (TODO: figure out why python's decode method adds these and how to get rid of them)
+        radioStatus['zone'] = radioStatus['zone'].replace(/\0/g, '');
+        radioStatus['chan'] = radioStatus['chan'].replace(/\0/g, '');
+        //console.log(radioStatus);
+        // Update radio entry
+        radioList[radioIndex] = radioStatus;
+        // Update radio card
+        updateRadioCard(radioIndex);
     }
 
     // Message error

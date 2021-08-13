@@ -9,16 +9,6 @@
             "rxDevice": 3,
             "sigMode": "MDC",
             "sigId": "4597"
-        },
-        {
-            "name": "Desk UHF XTL",
-            "desc": "UHF XTL2500",
-            "ctrlMode": "SB9600-XTL-O",
-            "ctrlPort": "COM3",
-            "txDevice": 2,
-            "rxDevice": 4,
-            "sigMode": "MDC",
-            "sigId": "4597"
         }
     ]
 }

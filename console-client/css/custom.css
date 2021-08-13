@@ -16,6 +16,7 @@
 
     --color-alert-green-mid: rgb(0, 133, 50);
     --color-alert-green-light: rgb(0, 200, 75);
+    --color-alert-green-light-half: rgba(0, 200, 75, 0.5);
 
     --color-alert-blue-mid: rgb(0, 50, 133);
     --color-alert-blue-light: rgb(0, 75, 200);
@@ -233,8 +234,8 @@ ion-icon {
 }
 
 .radio-card.receiving {
-    -webkit-animation: rxBorderBlink 0.4s ease-out infinite;
-    animation: rxBorderBlink 0.4s ease-out infinite;
+    -webkit-animation: rxBorderBlink 0.5s ease-out infinite;
+    animation: rxBorderBlink 0.5s ease-out infinite;
 }
 
 .radio-card.transmitting {
@@ -519,20 +520,20 @@ ion-icon {
 /* Animation for radio card RX state */
 @-webkit-keyframes rxBorderBlink {
     from, to {
-        border: 2px solid transparent;
+        border: 2px solid var(--color-alert-green-light-half);
         border-radius: 8px;
     }
-    75% {
+    50% {
         border: 2px solid var(--color-alert-green-light);
         border-radius: 8px;
     }
 }
 @keyframes rxBorderBlink {
     from, to {
-        border: 2px solid transparent;
+        border: 2px solid var(--color-alert-green-light-half);
         border-radius: 8px;
     }
-    75% {
+    50% {
         border: 2px solid var(--color-alert-green-light);
         border-radius: 8px;
     }
