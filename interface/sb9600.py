@@ -69,6 +69,13 @@ def sbep_CRC(data):
 class Serial:
     """SB9600 serial routines"""
 
+    # SBEP module codes
+    sbep_modules = {
+        'BCAST': 0x00,
+        'RADIO': 0x01,
+        'PANEL': 0x05
+    }
+
     def __init__(self, port="/dev/ttyUSB0", busy_is_RTS=False):
 
         # Open serial port

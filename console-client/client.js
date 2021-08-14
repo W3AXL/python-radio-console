@@ -15,7 +15,7 @@ var config = {
 var radioList = [];
 
 // TCP Connection to server
-var serverSocket;
+var serverSocket = null;
 
 /*****************************************************
     State variables
@@ -277,8 +277,11 @@ function updateRadioControls() {
 function startPtt() {
     if (!pttActive && selectedRadio) {
         console.log("Starting PTT on " + selectedRadio);
-        $("#" + selectedRadio).addClass("transmitting");
         pttActive = true;
+        // Only send the TX command if we have a valid socket
+        if (serverSocket) {
+            serverSocket.send("!startTx:" + String(getRadioIndex(selectedRadio)));
+        }
     } else if (!pttActive && !selectedRadio) {
         pttActive = true;
         console.log("No radio selected, ignoring PTT");
@@ -290,9 +293,11 @@ function startPtt() {
  */
 function stopPtt() {
     if (pttActive) {
-        $("#" + selectedRadio).removeClass("transmitting");
         console.log("PTT released");
         pttActive = false;
+        if (serverSocket && selectedRadio) {
+            serverSocket.send("!stopTx:" + String(getRadioIndex(selectedRadio)));
+        }
     }
 }
 

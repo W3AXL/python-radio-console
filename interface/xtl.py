@@ -63,6 +63,9 @@ class XTL:
         self.headType = headType
         self.statusCallback = statusCallback
 
+        # Listener thread variables
+        self.doListen = False
+
         """
         These variables are common to all radio interface classes and are 
         queried by the base RadioClass whenever statusCallback() is called
@@ -77,9 +80,12 @@ class XTL:
         self.lowpower = False
 
 
-    def connect(self):
+    def connect(self, reset=True):
         """
-        Connect and initialize radio
+        Connect and optionally reset the radio
+
+        Args:
+            reset (bool, optional): Whether to reset the radio. Defaults to True.
         """
 
         # Create and flush serial bus
@@ -92,13 +98,28 @@ class XTL:
 
         # Create listener thread and start it
         self.listenerThread = threading.Thread(target=self.listen, daemon=True)
+        self.doListen = True
         self.listenerThread.start()
 
         # Reset the radio to init all the statuses
-        self.bus.sb9600_reset()
+        if reset:
+            self.bus.sb9600_reset()
 
         # Update radio state
         self.state = RadioState.Idle
+
+
+    def disconnect(self):
+        """
+        Disconnect and close cleanly
+        """
+        # Stop any TX if it's happening
+        self.transmit(False)
+        # Stop listener thread
+        self.doListen = False
+        # Set status to disconnected
+        self.state = RadioState.Disconnected
+        self.updateStatus()
 
 
     def listen(self):
@@ -109,7 +130,7 @@ class XTL:
             callback (function): [description]
         """
 
-        while True:
+        while self.doListen:
             # Read message if there's one waiting
             if self.bus.ser.in_waiting > 0:
                 # Read message
@@ -137,7 +158,22 @@ class XTL:
                     print("SB9600 CRC failure")
 
     def updateStatus(self):
+        """
+        Call the status callback with the index of the radio
+        """
         self.statusCallback(self.index)
+
+    def transmit(self, transmit):
+        """
+        Start or stop PTT to the radio
+
+        Args:
+            transmit (bool): PTT state
+        """
+        if transmit:
+            self.sendButton(self.O5Address.button_map['ptt'], 0x01)
+        else:
+            self.sendButton(self.O5Address.button_map['ptt'], 0x00)
 
     def processSBEP(self, msg):
         """
@@ -250,8 +286,10 @@ class XTL:
                         self.updateStatus()
                         return
                     else:
-                        self.state = RadioState.Idle
-                        self.updateStatus()
+                        # Change to idle as long as we're not receiving
+                        if self.state != RadioState.Receiving:
+                            self.state = RadioState.Idle
+                            self.updateStatus()
                         return
             
             # Fallback for unknown message
@@ -309,8 +347,10 @@ class XTL:
             elif function == 0x1e:
                 # Channel idle
                 if param1 == 0x00 and param2 == 0x00:
-                    self.state = RadioState.Idle
-                    self.updateStatus()
+                    # Change to idle as long as we're not transmitting
+                    if self.state != RadioState.Transmitting:
+                        self.state = RadioState.Idle
+                        self.updateStatus()
                     return
                 # Channel RX
                 if param2 == 0x03:
@@ -370,6 +410,16 @@ class XTL:
             return "{} (Unknown)".format(hex(code))
         else:
             raise ValueError("Invalid head specified")
+
+    def sendButton(self, code, value):
+        """
+        Send a button command to the radio
+
+        Args:
+            code (byte): button code
+            value (byte): value to send
+        """
+        self.bus.sb9600_send(self.bus.sbep_modules['PANEL'], code, value, 0x57)
 
     def getDisplaySubDev(self, code):
         """Lookup display subdevice by hex code

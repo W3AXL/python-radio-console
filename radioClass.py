@@ -3,6 +3,8 @@ from interface.xtl import XTL
 
 from radioState import RadioState
 
+from logger import Logger
+
 class Radio():
     """Radio Class for generic radio control
     """
@@ -77,17 +79,28 @@ class Radio():
         # Set starting status to disconnected
         self.state = RadioState.Disconnected
 
-    def connect(self, statusCallback):
+        # Create logger
+        self.logger = Logger()
+
+    def connect(self, statusCallback, reset=True):
         """Connect to radio using specified communication scheme
 
         Args:
             statusCallback (function): callback to fire when radio status is updated, must take one integer argument
+            reset (bool, optional): whether to reset the radio on connect or not. Defaults to True.
         """
 
         # XTL5000 O-head
         if self.ctrlMode == "SB9600-XTL-O":
             self.interface = XTL(self.index, self.ctrlPort, 'O5', statusCallback)
-            self.interface.connect()
+        
+        self.interface.connect(reset=reset)
+
+    def disconnect(self):
+        """
+        Disconnect the radio
+        """
+        self.interface.disconnect()
         
     def getStatus(self):
         """
@@ -95,7 +108,7 @@ class Radio():
         """
 
         if self.state != self.interface.state:
-            print("{} status now {} ({})".format(self.name, self.interface.state.name, self.interface.state.value))
+            self.logger.logInfo("{} status now {} ({})".format(self.name, self.interface.state.name, self.interface.state.value))
 
         self.state = self.interface.state
         self.chan = self.interface.chanText
@@ -104,6 +117,15 @@ class Radio():
         self.talkaround = self.interface.talkaround
         self.monitor = self.interface.monitor
         self.lowpower = self.interface.lowpower
+
+    def transmit(self, transmit):
+        """
+        Start or stop transmit
+
+        Args:
+            transmit (bool): transmit state
+        """
+        self.interface.transmit(transmit) 
 
     def parseState(self):
         """Return current state of radio

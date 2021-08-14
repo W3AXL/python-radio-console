@@ -16,9 +16,6 @@ import asyncio
 import socketserver
 import http.server
 
-# Colorized logs
-from colorama import init, Fore, Back, Style
-
 # Sound stuff
 import sounddevice as sd
 
@@ -31,6 +28,9 @@ from radioClass import Radio
 
 # Radio State
 from radioState import RadioState
+
+# Logger
+from logger import Logger
 
 # Used for loading config
 import json
@@ -54,6 +54,7 @@ verbose = False
 address = None
 serverport = None
 webguiport = None
+noreset = False
 
 # Websocket server and event loop
 server = None
@@ -70,6 +71,10 @@ hostapis = []
 # Detect operating system
 osType = platform.system()
 
+# Create logger object
+logger = Logger()
+logger.initLogs()
+
 """-------------------------------------------------------------------------------
     Command Line Argument Functions
 -------------------------------------------------------------------------------"""
@@ -82,6 +87,7 @@ def addArguments():
     parser.add_argument("-c","--config", help="Config file to load", metavar="config.json")
     parser.add_argument("-ls","--list-sound", help="List available sound devices", action="store_true")
     parser.add_argument("-lp","--list-ports", help="List available com ports", action="store_true")
+    parser.add_argument("-nr","--no-reset", help="Don't reset connected radios on start", action="store_true")
     parser.add_argument("-sp","--serverport", help="Websocket server port")
     parser.add_argument("-v","--verbose", help="Enable verbose logging", action="store_true")
     parser.add_argument("-wp","--webguiport", help="Web GUI port")
@@ -92,6 +98,7 @@ def parseArguments():
     global address
     global serverport
     global webguiport
+    global noreset
 
     # Parse the args
     args = parser.parse_args()
@@ -100,12 +107,12 @@ def parseArguments():
 
     # Verbose logging
     if args.verbose:
-        verbose = True
-        logInfo("Verbose logging enabled")
+        logger.setVerbose(args.verbose)
+        logger.logInfo("Verbose logging enabled")
 
     # List available serial devices
     if args.list_ports:
-        logInfo("Listing available serial ports")
+        logger.logInfo("Listing available serial ports")
 
     # List available sound devices
     if args.list_sound:
@@ -115,14 +122,14 @@ def parseArguments():
 
     # Make sure a config file was specified
     if not args.config:
-        logWarn("No config file specified, exiting")
+        Logger.logWarn("No config file specified, exiting")
         exit(0)
     else:
         loadConfig(args.config)
 
     # Make sure port and optionally an address were specified
     if not args.serverport:
-        logError("No server port specified!")
+        logger.logError("No server port specified!")
         exit(1)
     else:
         serverport = int(args.serverport)
@@ -132,10 +139,13 @@ def parseArguments():
             address = args.address
 
     if not args.webguiport:
-        logError("No web GUI port specified!")
+        logger.logError("No web GUI port specified!")
         exit(1)
     else:
         webguiport = int(args.webguiport)
+
+    if args.no_reset:
+        noreset = True
 
 """-------------------------------------------------------------------------------
     Config Parsing Functions
@@ -166,16 +176,16 @@ def loadConfig(filename):
                 config.RadioList.append(Radio.decodeConfig(index, radioDict))
 
             # Print on success
-            logInfo("Sucessfully loaded config file {}".format(filename))
+            logger.logInfo("Sucessfully loaded config file {}".format(filename))
 
             # Return true
             return True
     except Exception as ex:
-        logError("Error loading config file: {}".format(ex.args[0]))
+        logger.logError("Error loading config file: {}".format(ex.args[0]))
         return False
 
 def printRadios():
-    logInfo("Loaded radios:")
+    logger.logInfo("Loaded radios:")
     for idx, radio in enumerate(config.RadioList):
         print("      - radio{}: {}".format(idx, radio.name))
         print("                {} control ({})".format(radio.ctrlMode, radio.ctrlPort))
@@ -192,9 +202,9 @@ def connectRadios():
     """
     for idx, radio in enumerate(config.RadioList):
         # Log
-        logInfo("Connecting to radio {}".format(radio.name))
+        logger.logInfo("Connecting to radio {}".format(radio.name))
         # Connect
-        radio.connect(radioStatusUpdate)
+        radio.connect(radioStatusUpdate, reset = not noreset)
 
 def radioStatusUpdate(index):
     """
@@ -207,7 +217,18 @@ def radioStatusUpdate(index):
 
     # Add the index to the queue
     serverLoop.call_soon_threadsafe(messageQueue.put_nowait,"status:{}".format(index))
-    
+
+
+def setTransmit(index, transmit):
+    """
+    Set transmit state of radio at index
+
+    Args:
+        index (int): index of the radio
+        transmit (bool): state of transmit
+    """
+    config.RadioList[index].transmit(transmit)
+
 
 
 def getRadioStatusJson(index):
@@ -267,13 +288,13 @@ def getSoundDevices():
     # Get WASAPI index if we're on Windows
     if osType == "Windows":
         wasapiIndex = next((i for i, api in enumerate(hostapis) if "WASAPI" in api["name"]), None)
-        logVerbose("Windows OS detected, only looking for WASAPI devices (api index {})".format(wasapiIndex))
+        logger.logVerbose("Windows OS detected, only looking for WASAPI devices (api index {})".format(wasapiIndex))
 
     # iterate through devices
     for device in devices:
         # Ignore non-WASAPI devices in windows
         if osType == "Windows" and device["hostapi"] != wasapiIndex:
-            logVerbose("Skiping non-WASAPI device {}".format(device["name"]))
+            logger.logVerbose("Skiping non-WASAPI device {}".format(device["name"]))
             continue
         # Add device to input or output (or both!) based on available channels
         if device['max_input_channels'] > 0:
@@ -287,7 +308,7 @@ def printSoundDevices():
     """
 
     # Print inputs first
-    logInfo("Available input devices:")
+    logger.logInfo("Available input devices:")
     for idx, input in enumerate(inputs):
         name = input['name']
         hostapi = hostapis[input['hostapi']]['name']
@@ -295,7 +316,7 @@ def printSoundDevices():
     # Line break
     print()
     # Print outputs
-    logInfo("Available output devices")
+    logger.logInfo("Available output devices")
     for idx, output in enumerate(outputs):
         name = output['name']
         hostapi = hostapis[output['hostapi']]['name']
@@ -364,9 +385,23 @@ async def consumer_handler(websocket, path):
         data = await websocket.recv()
 
         # Process the received command
+
         if data == "?radios":
+            # Send list of all radio statuses
             await messageQueue.put("allradios")
+
+        elif data[0:9] == "!startTx:":
+            # start transmit on specified radio
+            index = int(data[9:])
+            setTransmit(index, True)
+        
+        elif data[0:8] == "!stopTx:":
+            # stop transmit on specified radio
+            index = int(data[8:])
+            setTransmit(index, False)
+
         else:
+            # Send NACK
             await messageQueue.put("NACK")
 
 
@@ -384,15 +419,15 @@ async def producer_hander(websocket, path):
 
         # get message type
         if message == "allradios":
-            logInfo("sending radio list to {}".format(websocket.remote_address[0]))
+            logger.logInfo("sending radio list to {}".format(websocket.remote_address[0]))
             response = "radios:" + getAllRadiosStatusJson()
             await websocket.send(response)
         elif "status:" in message:
             index = int(message[7:])
-            logInfo("Sending status update for radio{}".format(index))
+            logger.logInfo("Sending status update for radio{}".format(index))
             await websocket.send("radio{}:".format(index) + getRadioStatusJson(index))
         elif "NACK" in message:
-            logWarn("invalid command received from {}".format(websocket.remote_address[0]))
+            logger.logWarn("invalid command received from {}".format(websocket.remote_address[0]))
             await websocket.send("NACK")
 
 
@@ -418,72 +453,65 @@ def startServer():
     global server
     global serverLoop
 
-    logInfo("Starting websocket server on address {}, port {}".format(address, serverport))
+    logger.logInfo("Starting websocket server on address {}, port {}".format(address, serverport))
     # create server object
     server = websockets.serve(websocketHandler, address, serverport)
     # start server async loop
     serverLoop = asyncio.get_event_loop()
     serverLoop.run_until_complete(server)
 
-    logInfo("Starting web GUI server on address {}, port {}".format(address, webguiport))
+    logger.logInfo("Starting web GUI server on address {}, port {}".format(address, webguiport))
     # bind to socket server
     httpServer = socketserver.TCPServer((address, webguiport), httpServerHandler)
     # create thread
     httpThread = threading.Thread(target=httpServer.serve_forever, daemon=True).start()
 
 """-------------------------------------------------------------------------------
-    Logging Print Functions
--------------------------------------------------------------------------------"""
-
-def logVerbose(msg):
-    if verbose:
-        timeString = time.strftime("%Y%m%d %H:%M:%S")
-        print(Fore.WHITE + Style.DIM + "[{}] VERB: {}".format(timeString, msg) + Style.RESET_ALL)
-
-def logInfo(msg):
-    timeString = time.strftime("%Y%m%d %H:%M:%S")
-    print(Fore.WHITE + "[{}] INFO: {}".format(timeString, msg) + Style.RESET_ALL)
-
-def logWarn(msg):
-    timeString = time.strftime("%Y%m%d %H:%M:%S")
-    print(Fore.YELLOW + "[{}]WARN: {}".format(timeString, msg) + Style.RESET_ALL)
-
-def logError(msg):
-    timeString = time.strftime("%Y%m%d %H:%M:%S")
-    print(Fore.RED + "[{}] ERROR: {}".format(timeString, msg) + Style.RESET_ALL)
-
-"""-------------------------------------------------------------------------------
     Main Runtime
 -------------------------------------------------------------------------------"""
 
 if __name__ == "__main__":
-    # init colorized logs
-    init()
 
-    # add cli arguments
-    addArguments()
-
-    # parse the arguments
-    parseArguments()
-
-    # print OS
-    logVerbose("Detected operating system: {}".format(osType))
-
-    # Get sound devices
-    getSoundDevices()
-
-    # print loaded radios
-    printRadios()
-
-    # Start server
-    startServer()
-
-    # Connect to radios
-    connectRadios()
-
-    # Runtime loop
     try:
+
+        # add cli arguments
+        addArguments()
+
+        # parse the arguments
+        parseArguments()
+
+        # print OS
+        logger.logVerbose("Detected operating system: {}".format(osType))
+
+        # Get sound devices
+        getSoundDevices()
+
+        # print loaded radios
+        printRadios()
+
+        # Start server
+        startServer()
+
+        # Connect to radios
+        connectRadios()
+
+        # Runtime loop
         asyncio.get_event_loop().run_forever()
+
     except KeyboardInterrupt:
-        logWarn("Caught KeyboardInterrupt, shutting down")
+        logger.logWarn("Caught KeyboardInterrupt, shutting down")
+        # Cleanly disconnect any connected radios
+        for radio in config.RadioList:
+            if radio.state != RadioState.Disconnected:
+                radio.disconnect()
+        # Exit without error
         exit(0)
+
+    except Exception as ex:
+        logger.logError("Caught exception, exiting: {}".format(ex.args[0]))
+        # Cleanly disconnect any connected radios
+        for radio in config.RadioList:
+            if radio.state != RadioState.Disconnected:
+                radio.disconnect()
+        # Exit with error code
+        exit(1)
