@@ -502,6 +502,7 @@ function connectServer() {
     serverSocket = new WebSocket("ws://" + config.serverAddress + ":" + config.serverPort);
     serverSocket.onerror = handleConnectionError;
     serverSocket.onmessage = recvServerMessage;
+    serverSocket.onclose = handleServerClose;
     // Wait for connection
     console.log("Connecting to " + config.serverAddress + ":" + config.serverPort);
     waitForConnect(serverSocket, onConnect);
@@ -602,10 +603,16 @@ function sendServerMessage(message) {
     serverSocket.send(message);
 }
 
+function handleServerClose(event) {
+    console.warn("Server closed conenction: ", event);
+    showPopup("Server closed connection!");
+}
+
 /**
  * Handle connection errors from the server
  * @param {event} event 
  */
 function handleConnectionError(event) {
     console.error("TCP connection to server error: ", event);
+    showPopup("TCP connection to server error: ", event);
 }
