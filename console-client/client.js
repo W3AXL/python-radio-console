@@ -14,7 +14,7 @@ var config = {
 // Radio List (populated from server)
 var radioList = [];
 
-// TCP Connection to server
+// Websocket connection to server
 var serverSocket = null;
 
 /*****************************************************
@@ -29,6 +29,8 @@ var selectedRadio = null;
 var pttActive = false;
 // Menu state
 var menuOpen = false;
+// server disconnect commanded
+var disconnecting = false;
 
 /*****************************************************
     Page Setup Functions
@@ -56,9 +58,9 @@ function pageLoad() {
     }
 
     // Bind body click to deselecting radios
-    $("#body").click(function () {
-        deselectRadios();
-    });
+    //$("#body").click(function () {
+    //    deselectRadios();
+    //});
 }
 
 // Keydown handler
@@ -66,6 +68,7 @@ $(document).on("keydown", function (e) {
     switch (e.which) {
         // Spacebar
         case 32:
+            e.preventDefault();
             startPtt();
             break;
     }
@@ -76,6 +79,7 @@ $(document).on("keyup", function (e) {
     switch (e.which) {
         // Spacebar
         case 32:
+            e.preventDefault();
             stopPtt();
             break;
     }
@@ -101,14 +105,27 @@ $(document).ready(pageLoad());
  * @param {string} id the id of the radio to select
  */
 function selectRadio(id) {
-    // Deselect all radio cards
-    deselectRadios();
-    // Select the new radio card
-    $(`#${id}`).addClass("selected");
-    // Update the variable
-    selectedRadio = id;
-    // Update controls
-    updateRadioControls();
+    console.log("Selecting radio " + id);
+    // If the radio was already selected, deselect it
+    if (selectedRadio == id) {
+        // Deselect all radio cards
+        deselectRadios();
+        // Remove the selected class
+        $(`#${id}`).removeClass("selected");
+        // Disable the radio controls
+        updateRadioControls();
+        // Update the variable
+        selectedRadio = null;
+    } else {
+        // Deselect all radio cards
+        deselectRadios();
+        // Select the new radio card
+        $(`#${id}`).addClass("selected");
+        // Update the variable
+        selectedRadio = id;
+        // Update controls
+        updateRadioControls();
+    }
 }
 
 /**
@@ -126,7 +143,7 @@ function deselectRadios() {
 }
 
 /**
- * Populate radio cards based on the radios in radioList[]
+ * Populate radio cards based on the radios in radioList[] and bind their buttons
  */
 function populateRadios() {
     // Add a card for each radio in the list
@@ -139,6 +156,18 @@ function populateRadios() {
     });
     // Bind the cards
     bindRadioCardButtons();
+}
+
+/**
+ * Clear radio cards and remove all radios from radioList
+ */
+function clearRadios() {
+    // deselect any selected radios
+    deselectRadios();
+    // Clear main layout
+    $("#main-layout").empty();
+    // Clear radio list
+    radioList = [];
 }
 
 /**
@@ -179,10 +208,13 @@ function addRadioCard(id, name) {
 function bindRadioCardButtons() {
     // Bind clicking of the card to selection of a radio
     $(".radio-card").on('click', function (event) {
-        var cardId = $(this).attr('id');
-        selectRadio(cardId);
-        // Prevent the #body deselect from firing
+        // Prevent continual propagation
         event.stopPropagation();
+        event.stopImmediatePropagation();
+        // Get the ID of the selecting item
+        var cardId = $(this).attr('id');
+        // Select the radio
+        selectRadio(cardId);
     })
     // Bind the minimize button
     $(".minimize-radio-card").click(function (event) {
@@ -302,6 +334,72 @@ function stopPtt() {
 }
 
 /**
+ * Change channel on selected radio
+ * @param {bool} down Whether to go down or not
+ */
+function changeChannel(down) {
+    if (!pttActive && selectedRadio && serverSocket) {
+        if (down) {
+            console.log("Changing channel down on " + selectedRadio);
+            serverSocket.send("!chanDn:" + String(getRadioIndex(selectedRadio)));
+        } else {
+            console.log("Changing channel up on " + selectedRadio);
+            serverSocket.send("!chanUp:" + String(getRadioIndex(selectedRadio)));
+        }
+    }
+}
+
+/**
+ * Toggle monitor
+ */
+function toggleMonitor() {
+    if (!pttActive && selectedRadio && serverSocket) {
+        console.log("Toggling monitor on " + selectedRadio);
+        serverSocket.send("!mon:" + String(getRadioIndex(selectedRadio)));
+    }
+}
+
+/**
+ * Hit nuisance delete button
+ */
+ function nuisanceDelete() {
+    if (!pttActive && selectedRadio && serverSocket) {
+        console.log("Nuisance delete: " + selectedRadio);
+        serverSocket.send("!nuis:" + String(getRadioIndex(selectedRadio)));
+    }
+}
+
+/**
+ * Toggle low power
+ */
+function togglePower() {
+    if (!pttActive && selectedRadio && serverSocket) {
+        console.log("Toggling power on " + selectedRadio);
+        serverSocket.send("!lpwr:" + String(getRadioIndex(selectedRadio)));
+    }
+}
+
+/**
+ * Turn scan on or off for selected radio
+ */
+function toggleScan() {
+    if (!pttActive && selectedRadio && serverSocket) {
+        console.log("Toggling scan for " + selectedRadio);
+        serverSocket.send("!scan:" + String(getRadioIndex(selectedRadio)));
+    }
+}
+
+/**
+ * Toggle talkaround (I should really standardize on Talkaround vs Direct)
+ */
+function toggleDirect() {
+    if (!pttActive && selectedRadio && serverSocket) {
+        console.log("Toggling talkaround for " + selectedRadio);
+        serverSocket.send("!dir:" + String(getRadioIndex(selectedRadio)));
+    }
+}
+
+/**
  * Toggle the status of radio mute
  * @param {string} obj element whose parent radio to toggle mute on
  */
@@ -380,6 +478,15 @@ function updateClock() {
         $("#clock").html(getTimeUTC(timestr + " UTC"));
     } else {
         console.error("Invalid time format!")
+    }
+}
+
+function connectButton() {
+    // Connect if we're not connected
+    if (!serverSocket) {
+        connectServer();
+    } else if (serverSocket && !disconnecting) {
+        disconnectServer();
     }
 }
 
@@ -498,13 +605,17 @@ function readConfig() {
  * Connect to the server's websocket
  */
 function connectServer() {
+    // Change button
+    $("#server-connect-btn").html("Connecting...");
+    $("#server-connect-btn").prop("disabled",true);
+    // Log
+    console.log("Connecting to " + config.serverAddress + ":" + config.serverPort);
     // Setup socket
     serverSocket = new WebSocket("ws://" + config.serverAddress + ":" + config.serverPort);
     serverSocket.onerror = handleConnectionError;
     serverSocket.onmessage = recvServerMessage;
     serverSocket.onclose = handleServerClose;
     // Wait for connection
-    console.log("Connecting to " + config.serverAddress + ":" + config.serverPort);
     waitForConnect(serverSocket, onConnect);
 }
 
@@ -532,6 +643,13 @@ function waitForConnect(socket, callback=null) {
  * Called once the websocket connection is active
  */
 function onConnect() {
+    // Change button
+    $("#server-connect-btn").html("Disconnect");
+    $("#server-connect-btn").prop("disabled",false);
+    // Change status
+    $("#navbar-status").html("Connected");
+    $("#navbar-status").removeClass("pending");
+    $("#navbar-status").addClass("connected");
     // Query for radios
     sendServerMessage('?radios');
 }
@@ -540,7 +658,17 @@ function onConnect() {
  * Disconnect from the websocket server
  */
 function disconnectServer() {
+    // Change button
+    $("#server-connect-btn").html("Disconnecting...");
+    $("#server-connect-btn").prop("disabled", true);
+    // Change status
+    $("#navbar-status").html("Disconnecting");
+    $("#navbar-status").removeClass("connected");
+    $("#navbar-status").addClass("pending");
+    // Disconnect if we had a connection open
     if (serverSocket.readyState == WebSocket.OPEN) {
+        console.log("Disconnecting from server");
+        disconnecting = true;
         serverSocket.close();
     }
 }
@@ -603,9 +731,28 @@ function sendServerMessage(message) {
     serverSocket.send(message);
 }
 
+/**
+ * Handle the websocket closing
+ * @param {event} event socket closed event
+ */
 function handleServerClose(event) {
-    console.warn("Server closed conenction: ", event);
-    showPopup("Server closed connection!");
+    console.warn("Server connection closed");
+    if (event.data) {console.warn(event.data);}
+    if (!disconnecting) {
+        window.alert("Lost connection to server!");
+    }
+    // Update button
+    $("#server-connect-btn").html("Connect");
+    $("#server-connect-btn").prop("disabled", false);
+    // Change status
+    $("#navbar-status").html("Disconnected");
+    $("#navbar-status").removeClass("connected");
+    $("#navbar-status").removeClass("pending");
+    // Clear radio cards
+    clearRadios();
+    // Reset variables
+    disconnecting = false;
+    serverSocket = null;
 }
 
 /**
@@ -613,6 +760,6 @@ function handleServerClose(event) {
  * @param {event} event 
  */
 function handleConnectionError(event) {
-    console.error("TCP connection to server error: ", event);
-    showPopup("TCP connection to server error: ", event);
+    console.error("Server connection error: " + event.data);
+    window.alert("Server connection errror: " + event.data);
 }

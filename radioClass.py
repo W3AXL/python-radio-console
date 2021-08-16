@@ -127,6 +127,45 @@ class Radio():
         """
         self.interface.transmit(transmit) 
 
+    def changeChannel(self, down):
+        """
+        Change channel up or down
+
+        Args:
+            down (bool, optional): Whether to go down.
+        """
+        self.interface.changeChannel(down)
+
+    def toggleMonitor(self):
+        """
+        Toggles monitor state
+        """
+        self.interface.toggleMonitor()
+
+    def nuisanceDelete(self):
+        """
+        Nuisance delete scan
+        """
+        self.interface.nuisanceDelete()
+
+    def togglePower(self):
+        """
+        Power toggle button
+        """
+        self.interface.togglePower()
+
+    def toggleScan(self):
+        """
+        Toggles state of scan
+        """
+        self.interface.toggleScan()
+
+    def toggleDirect(self):
+        """
+        Toggle state of talkaround
+        """
+        self.interface.toggleDirect()
+
     def parseState(self):
         """Return current state of radio
 

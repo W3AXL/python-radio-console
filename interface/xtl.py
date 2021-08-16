@@ -5,6 +5,10 @@ from binascii import hexlify
 
 from radioState import RadioState
 
+from logger import Logger
+
+import time
+
 class XTL:
 
     class O5Address:
@@ -49,6 +53,21 @@ class XTL:
             'text_softkeys': 0x02
         }
 
+    class W9Address:
+        """
+        SB9600/SBEP addresses for W9 control head
+        """
+
+        # Button hex codes
+        button_map = {
+            'ptt': 0x01,
+            'mode_down': 0x50,
+            'mode_up': 0x51,
+            'vol_down': 0x52,
+            'vol_up': 0x531
+        }
+
+
     def __init__(self, index, comPort, headType, statusCallback):
         """Init Function
 
@@ -78,6 +97,9 @@ class XTL:
         self.talkaround = False
         self.monitor = False
         self.lowpower = False
+
+        # Logger
+        self.logger = Logger()
 
 
     def connect(self, reset=True):
@@ -175,6 +197,53 @@ class XTL:
         else:
             self.sendButton(self.O5Address.button_map['ptt'], 0x00)
 
+    def changeChannel(self, down):
+        """
+        Change channel up or down, depending on direction
+
+        Args:
+            down (bool): Move channel down, otherwise channel moves up
+        """
+        if down:
+            self.sendButton(self.O5Address.button_map['knob_chan'], 0xFF)
+        else:
+            self.sendButton(self.O5Address.button_map['knob_chan'], 0x01)
+
+    def toggleMonitor(self):
+        """
+        Monitor button
+        """
+        # Press nuis button
+        self.pressButton(self.O5Address.button_map["btn_key_1"], 0.06) 
+
+    def nuisanceDelete(self):
+        """
+        Nuisance delete button
+        """
+        # Press nuis button
+        self.pressButton(self.O5Address.button_map["btn_key_2"], 0.06)
+
+    def togglePower(self):
+        """
+        Power button
+        """
+        # Press nuis button
+        self.pressButton(self.O5Address.button_map["btn_key_3"], 0.06)
+
+    def toggleScan(self):
+        """
+        Change state of scan by sending softkey button to toggle
+        """
+        # Press scan button
+        self.pressButton(self.O5Address.button_map['btn_key_4'],0.06)
+
+    def toggleDirect(self):
+        """
+        DIR button
+        """
+        # Press scan button
+        self.pressButton(self.O5Address.button_map['btn_key_5'],0.06)
+
     def processSBEP(self, msg):
         """
         Main SBEP message processor
@@ -197,12 +266,16 @@ class XTL:
             subdev = msg[6]
             # Handle based on display subdevice
             if subdev == self.O5Address.display_subdevs['text_zone']:
-                self.zoneText = data.rstrip().decode('ascii')
-                self.updateStatus()
+                newText = data.rstrip().decode('ascii')
+                if newText != self.zoneText:
+                    self.zoneText = newText
+                    self.updateStatus()  
                 return
             elif subdev == self.O5Address.display_subdevs['text_channel']:
-                self.chanText = data.rstrip().decode('ascii')
-                self.updateStatus()
+                newText = data.rstrip().decode('ascii')
+                if newText != self.chanText:
+                    self.chanText = newText
+                    self.updateStatus()
                 return
 
         # Display icon update 
@@ -217,23 +290,35 @@ class XTL:
                 state = False
             # Update proper state
             if iconAddr == self.O5Address.display_icons['scan']:
-                self.scanning = state
-                self.updateStatus()
+                if state != self.scanning:
+                    self.scanning = state
+                    self.updateStatus()
                 return
             elif iconAddr == self.O5Address.display_icons['low_power']:
-                self.lowpower = state
-                self.updateStatus()
+                if state != self.lowpower:
+                    self.lowpower = state
+                    self.updateStatus()
+                return
+            elif iconAddr == self.O5Address.display_icons['monitor']:
+                if state != self.monitor:
+                    self.monitor = state
+                    self.updateStatus()
+                return
+            elif iconAddr == self.O5Address.display_icons['direct']:
+                if state != self.talkaround:
+                    self.talkaround = state
+                    self.updateStatus()
                 return
 
             # print if we don't actually know what the icon is
-            #self.printMsg("SBEP Icon","{} ({}) icon {}".format(icon, hex(msg[3]), state))
+            self.printMsg("SBEP Icon","{} ({}) icon {}".format(icon, hex(msg[3]), state))
             return
 
         # Fallback to printing raw message
         else:
-            #print("RECVD<: SBEP decoded")
-            #print("        Raw Msg: {}".format(hexlify(msg, ' ')))
-            #print("        Address: {}, Subaddr: {}, Length: {}, Opcode: {}".format(hex(address), hex(subaddr), length, hex(opcode)))
+            print("RECVD<: SBEP decoded")
+            print("        Raw Msg: {}".format(hexlify(msg, ' ')))
+            print("        Address: {}, Subaddr: {}, Length: {}, Opcode: {}".format(hex(address), hex(subaddr), length, hex(opcode)))
             return
 
     def processSB9600(self, address, param1, param2, function):
@@ -271,30 +356,33 @@ class XTL:
                 # Monitor mode
                 if param1 == 0x01:
                     if param2 == 0x01:
-                        self.monitor = True
-                        self.updateStatus()
+                        if not self.monitor:
+                            self.monitor = True
+                            self.updateStatus()
                         return
                     else:
-                        self.monitor = False
-                        self.updateStatus()
+                        if self.monitor:
+                            self.monitor = False
+                            self.updateStatus()
                         return
 
                 # TX mode
                 elif param1 == 0x03:
                     if param2 == 0x01:
-                        self.state = RadioState.Transmitting
-                        self.updateStatus()
+                        if self.state != RadioState.Transmitting:
+                            self.state = RadioState.Transmitting
+                            self.updateStatus()
                         return
                     else:
                         # Change to idle as long as we're not receiving
-                        if self.state != RadioState.Receiving:
+                        if (self.state != RadioState.Receiving) and (self.state != RadioState.Idle):
                             self.state = RadioState.Idle
                             self.updateStatus()
                         return
             
             # Fallback for unknown message
             else:
-                #self.printMsg("Unknown","Unknown broadcast message function {}: params {}, {}".format(hex(function),hex(param1),hex(param2)))
+                self.printMsg("Unknown","Unknown broadcast message function {}: params {}, {}".format(hex(function),hex(param1),hex(param2)))
                 return
 
         if address == 0x05:
@@ -347,18 +435,24 @@ class XTL:
             elif function == 0x1e:
                 # Channel idle
                 if param1 == 0x00 and param2 == 0x00:
-                    # Change to idle as long as we're not transmitting
-                    if self.state != RadioState.Transmitting:
+                    # Change to idle as long as we're not transmitting and not already idle
+                    if (self.state != RadioState.Transmitting) and (self.state != RadioState.Idle):
                         self.state = RadioState.Idle
                         self.updateStatus()
                     return
                 # Channel RX
                 if param2 == 0x03:
-                    self.state = RadioState.Receiving
-                    self.updateStatus()
+                    if self.state !=RadioState.Receiving:
+                        self.state = RadioState.Receiving
+                        self.updateStatus()
                     return
+                # Not sure what this one is but it gets spammed when we've nuisance deleted a channel while scanning
+                if param1 == 0x00 and param2 == 0x01:
+                    return
+
+                # Fallback
                 else:
-                    #self.printMsg("Channel","Unknown state: {} {}".format(hex(param1),hex(param2)))
+                    self.printMsg("Channel","Unknown state: {} {}".format(hex(param1),hex(param2)))
                     return
 
             # channel change cmd device?
@@ -371,9 +465,13 @@ class XTL:
                 # Channel change ACK
                 return
 
+            elif (function == 0x1a) and (param1, param2 == 0x00):
+                # Ignore this one, it gets spammed a bunch and I don't know what it is
+                return
+
             # fallback
             else:
-                #self.printMsg("Unknown","Unknown message for radio module (0x01): func {}, params {} {}".format(hex(function),hex(param1),hex(param2)))
+                self.printMsg("Unknown","Unknown message for radio module (0x01): func {}, params {} {}".format(hex(function),hex(param1),hex(param2)))
                 return
 
     def getSbepModule(self, code):
@@ -419,7 +517,25 @@ class XTL:
             code (byte): button code
             value (byte): value to send
         """
-        self.bus.sb9600_send(self.bus.sbep_modules['PANEL'], code, value, 0x57)
+        try:
+            self.bus.sb9600_send(self.bus.sbep_modules['PANEL'], code, value, 0x57)
+        except RuntimeError as ex:
+            self.logger.logWarn("Couldn't verify button message was sent properly! Maybe other data on bus?")
+
+    def pressButton(self, code, duration):
+        """
+        Press a button for a specified duration
+
+        Args:
+            code (byte): button opcode
+            duration (float): duration to press in seconds
+        """
+        try:
+            self.bus.sb9600_send(self.bus.sbep_modules['PANEL'], code, 0x01, 0x57)
+            time.sleep(duration)
+            self.bus.sb9600_send(self.bus.sbep_modules['PANEL'], code, 0x00, 0x57)
+        except RuntimeError as ex:
+            self.logger.logWarn("Couldn't verify button message was sent properly! Maybe other data on bus?")
 
     def getDisplaySubDev(self, code):
         """Lookup display subdevice by hex code
@@ -469,4 +585,4 @@ class XTL:
             msg (string): message
         """
 
-        print("{: >10} >>: {}".format(source, msg))
+        self.logger.logInfo("{: >10} >>: {}".format(source, msg))

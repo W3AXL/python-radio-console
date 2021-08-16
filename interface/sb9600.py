@@ -132,6 +132,7 @@ class Serial:
         # Check our message got sent properly
         msgchk = self.ser.read(len(msg))
         if msgchk != msg:
+            self.busy(0)
             raise RuntimeError("Message was not sent properly!")
 
         # De-assert BUSY and wait for bus to be free

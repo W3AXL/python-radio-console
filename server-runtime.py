@@ -230,6 +230,60 @@ def setTransmit(index, transmit):
     config.RadioList[index].transmit(transmit)
 
 
+def changeChannel(index, down):
+    """
+    Changes the channel up or down on the radio
+
+    Args:
+        index (int): index of radio
+        down ([type]): whether to go down or not
+    """
+    config.RadioList[index].changeChannel(down)
+
+def toggleMonitor(index):
+    """
+    Toggles monitor on radio
+
+    Args:
+        index (int): Index of radio in RadioList
+    """
+    config.RadioList[index].toggleMonitor()
+
+def nuisanceDelete(index):
+    """
+    Nuisance deletes channel on radio
+
+    Args:
+        index (int): Index of radio in RadioList
+    """
+    config.RadioList[index].nuisanceDelete()
+
+def togglePower(index):
+    """
+    Toggle power on radio
+
+    Args:
+        index (int): Index of radio in RadioList
+    """
+    config.RadioList[index].togglePower()
+
+def toggleScan(index):
+    """
+    Enables or disabled scan on radio
+
+    Args:
+        index (int): index of radio
+    """
+    config.RadioList[index].toggleScan()
+
+def toggleDirect(index):
+    """
+    Toggles direct/talkaround
+
+    Args:
+        index (index): index of radio
+    """
+    config.RadioList[index].toggleDirect()
 
 def getRadioStatusJson(index):
     """
@@ -399,6 +453,36 @@ async def consumer_handler(websocket, path):
             # stop transmit on specified radio
             index = int(data[8:])
             setTransmit(index, False)
+
+        elif data[0:8] == "!chanUp:":
+            # change channel up on radio
+            index = int(data[8:])
+            changeChannel(index, False)
+
+        elif data[0:8] == "!chanDn:":
+            # change channel down
+            index = int(data[8:])
+            changeChannel(index, True)
+
+        elif data[0:5] == "!mon:":
+            index = int(data[5:])
+            toggleMonitor(index)
+
+        elif data[0:6] == "!nuis:":
+            index = int(data[6:])
+            nuisanceDelete(index)
+
+        elif data[0:6] == "!lpwr:":
+            index = int(data[6:])
+            togglePower(index)
+
+        elif data[0:6] == "!scan:":
+            index = int(data[6:])
+            toggleScan(index)
+
+        elif data[0:5] == "!dir:":
+            index = int(data[5:])
+            toggleDirect(index)
 
         else:
             # Send NACK
