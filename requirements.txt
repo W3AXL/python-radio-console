@@ -1,9 +1,6 @@
 cffi==1.14.6
-Jinja2==3.0.1
-MarkupSafe==2.0.1
+colorama==0.4.4
 pycparser==2.20
 pyserial==3.5
-PySide6==6.1.2
-qt-material==2.8.8
-shiboken6==6.1.2
 sounddevice==0.4.2
+websockets==9.1
