@@ -21,10 +21,14 @@ The rest of the needed libraries should be included with a base python install.
 ## Hardware
 ![Hardware Block Diagram](/media/console-hardware-diagram.png)
 
+(Note that the server & client machines can be the same - that's what I've been using for testing)
+
 You'll need at least one radio to control before you can get the server up and running.
 
 ### Control interface - SB9600
 Most modern Motorola radios should have an SB9600 bus with four signals: BUS+, BUS-, BUSY, and ground. You'll need a RIB (radio interface box) to translate these signals into standard serial. If you're having issues getting the radio to connect, try switching the BUSY signal for the /BUSY signal (active low vs active high) as the RIB output has both available.
+
+*I've been working on a small board to do USB -> Serial -> SB9600 all in one compact package. More to come on that!*
 
 ### Audio Interface
 I used a cheapo USB soundcard with mic & headphone plugs. Wire RX audio from the radio's accessory connector (for example, RX_FILT_AUD on the XTL5000) to the mic input, and wire TX audio from the soundcard headphone jack to the MIC line that will work with your radio.
