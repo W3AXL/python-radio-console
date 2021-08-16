@@ -21,6 +21,8 @@ The rest of the needed libraries should be included with a base python install.
 ## Hardware
 ![Hardware Block Diagram](/media/console-hardware-diagram.png)
 
+(Note that the server & client machines can be the same - that's what I've been using for testing)
+
 You'll need at least one radio to control before you can get the server up and running.
 
 ### Control interface - SB9600
