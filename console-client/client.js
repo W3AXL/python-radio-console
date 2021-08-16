@@ -179,6 +179,9 @@ function addRadioCard(id, name) {
     var newCardHtml = `
         <div class="radio-card" id="${id}">
             <div class="header">
+                <div class="selected-icon">
+                    <ion-icon name="caret-forward-circle-sharp"></ion-icon>
+                </div>
                 <h2>${name}</h2>
                 <div class="icon-stack">
                     <a href="#" onclick="toggleMute(event, this)" class="enabled"><ion-icon name="volume-high-sharp" id="icon-mute"></ion-icon></a>

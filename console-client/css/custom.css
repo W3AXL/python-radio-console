@@ -11,6 +11,7 @@
 
     --color-alert-mid: rgb(100, 60, 25);
     --color-alert-light: rgb(160, 100, 40);
+    --color-alert-light2: rgb(196, 119, 42);
 
     --color-alert-red-mid: rgb(133, 0, 33);
     --color-alert-red-light: rgb(200, 0, 50);
@@ -242,8 +243,8 @@ ion-icon {
     border: 2px solid transparent;
 }
 
-.radio-card:hover {
-    border: 2px solid var(--color-txt-dark);
+.radio-card.selected {
+    border: 2px solid var(--color-bg-light);
     border-radius: 8px;
 }
 
@@ -273,7 +274,7 @@ ion-icon {
     font-size: 18px;
 }
 
-.radio-card.selected .header {
+.radio-card:hover .header {
     background-color: var(--color-accent-light);
 }
 
@@ -282,8 +283,19 @@ ion-icon {
     margin: 0;
     font-weight: normal;
     display: inline;
+    margin-top: -1px;
     margin-left: 4px;
     font-size: inherit;
+}
+
+.radio-card .selected-icon {
+    color: var(--color-alert-light2);
+    display: none;
+    margin-top: 1px;
+}
+
+.radio-card.selected .selected-icon {
+    display: unset;
 }
 
 .radio-card .icon-stack {
@@ -319,7 +331,7 @@ ion-icon {
     box-sizing: border-box;
 }
 
-.radio-card.selected .content {
+.radio-card:hover .content {
     background-color: var(--color-bg-mid2);
 }
 
