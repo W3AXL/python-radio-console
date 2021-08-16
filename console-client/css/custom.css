@@ -267,7 +267,7 @@ ion-icon {
     height: 28px;
     background-color: var(--color-accent-mid);
     border-radius: 6px 6px 0 0;
-    color: var(--color-txt-light);
+    color: var(--color-txt-mid);
     padding: 4px;
     box-sizing: border-box;
     display: inline-flex;
@@ -276,6 +276,10 @@ ion-icon {
 
 .radio-card:hover .header {
     background-color: var(--color-accent-light);
+}
+
+.radio-card.selected .header h2 {
+    color: var(--color-txt-light);
 }
 
 .radio-card .header h2 {
@@ -289,13 +293,12 @@ ion-icon {
 }
 
 .radio-card .selected-icon {
-    color: var(--color-alert-light2);
-    display: none;
+    color: var(--color-accent-dark);
     margin-top: 1px;
 }
 
 .radio-card.selected .selected-icon {
-    display: unset;
+    color: var(--color-alert-light2);
 }
 
 .radio-card .icon-stack {
@@ -331,9 +334,9 @@ ion-icon {
     box-sizing: border-box;
 }
 
-.radio-card:hover .content {
+/*.radio-card:hover .content {
     background-color: var(--color-bg-mid2);
-}
+}*/
 
 .radio-card .content h3 {
     font-size: 12px !important;
