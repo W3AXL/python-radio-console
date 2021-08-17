@@ -1,6 +1,16 @@
+aioice==0.7.5
+aiortc==1.2.1
+av==8.0.3
 cffi==1.14.6
 colorama==0.4.4
+cryptography==3.4.7
+dnspython==2.1.0
+google-crc32c==1.1.2
+netifaces==0.11.0
+numpy==1.21.2
 pycparser==2.20
+pyee==8.2.2
+pylibsrtp==0.6.8
 pyserial==3.5
 sounddevice==0.4.2
 websockets==9.1

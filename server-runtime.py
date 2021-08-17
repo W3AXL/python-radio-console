@@ -15,9 +15,18 @@ import asyncio
 # HTTP server stuff
 import socketserver
 import http.server
+import ssl
+
+# WebRTC Stuff
+from aiortc import MediaStreamTrack, RTCPeerConnection, RTCSessionDescription
+from aiortc.contrib.media import MediaBlackhole, MediaPlayer, MediaRecorder
+import uuid
 
 # Sound stuff
 import sounddevice as sd
+
+# Numpy (used for sound processing)
+import numpy as np
 
 # Serial stuff
 import serial
@@ -60,6 +69,9 @@ noreset = False
 server = None
 serverLoop = None
 
+# WebRTC peer connection
+rtcConn = None
+
 # Message queue for sending to client
 messageQueue = asyncio.Queue()
 
@@ -90,6 +102,7 @@ def addArguments():
     parser.add_argument("-nr","--no-reset", help="Don't reset connected radios on start", action="store_true")
     parser.add_argument("-sp","--serverport", help="Websocket server port")
     parser.add_argument("-v","--verbose", help="Enable verbose logging", action="store_true")
+    parser.add_argument("-wc","--webguicert", help="Web GUI certificate for TLS")
     parser.add_argument("-wp","--webguiport", help="Web GUI port")
 
 def parseArguments():
@@ -404,6 +417,24 @@ def getDeviceName(type, idx):
     else:
         raise Exception("Invalid audio device type specified: {}".format(type))
 
+def setupSound():
+    """
+    Setup sound devices
+    """
+    
+
+def handleMicData(data):
+    """
+    Route mic data from the client to the correct output devices
+
+    Args:
+        data (string): string of mic data to process
+    """    
+    # Split into a list of strings
+    stringList = data.split(",")
+    # Convert to numpy float array
+    floatArray = np.array(list(map(float, stringList)))
+
 """-------------------------------------------------------------------------------
     Websocket Server Functions
 -------------------------------------------------------------------------------"""
@@ -440,9 +471,17 @@ async def consumer_handler(websocket, path):
 
         # Process the received command
 
+        #
+        #   Configuration Commands
+        #
+
         if data == "?radios":
             # Send list of all radio statuses
             await messageQueue.put("allradios")
+
+        #
+        #   Radio Control Commands
+        #
 
         elif data[0:9] == "!startTx:":
             # start transmit on specified radio
@@ -484,6 +523,18 @@ async def consumer_handler(websocket, path):
             index = int(data[5:])
             toggleDirect(index)
 
+        #
+        #   Audio data messages
+        #
+
+        elif data[0:9] == "micAudio:":
+            micData = data[9:]
+            handleMicData(micData)
+
+        #
+        #   NACK if command wasn't handled above
+        #
+
         else:
             # Send NACK
             await messageQueue.put("NACK")
@@ -517,7 +568,7 @@ async def producer_hander(websocket, path):
 
 class httpServerHandler(http.server.SimpleHTTPRequestHandler):
     """
-    Main handler for http server hosting the web gui
+    Main handler for https server hosting the web gui
     """
 
     def __init__(self, *args, **kwargs):
@@ -544,10 +595,15 @@ def startServer():
     serverLoop = asyncio.get_event_loop()
     serverLoop.run_until_complete(server)
 
+    # create TLS-secured HTTPServer
     logger.logInfo("Starting web GUI server on address {}, port {}".format(address, webguiport))
-    # bind to socket server
-    httpServer = socketserver.TCPServer((address, webguiport), httpServerHandler)
-    # create thread
+    httpServer = http.server.HTTPServer((address, webguiport), httpServerHandler)
+    httpServer.socket = ssl.wrap_socket(httpServer.socket,
+                                 server_side=True,
+                                 certfile='certs/localhost.crt',
+                                 keyfile='certs/localhost.key',
+                                 ssl_version=ssl.PROTOCOL_TLS)
+    # start thread for HTTPS server
     httpThread = threading.Thread(target=httpServer.serve_forever, daemon=True).start()
 
 """-------------------------------------------------------------------------------
@@ -576,6 +632,9 @@ if __name__ == "__main__":
         # Start server
         startServer()
 
+        # Setup sound devices
+        setupSound()
+
         # Connect to radios
         connectRadios()
 
@@ -591,11 +650,11 @@ if __name__ == "__main__":
         # Exit without error
         exit(0)
 
-    except Exception as ex:
-        logger.logError("Caught exception, exiting: {}".format(ex.args[0]))
-        # Cleanly disconnect any connected radios
-        for radio in config.RadioList:
-            if radio.state != RadioState.Disconnected:
-                radio.disconnect()
-        # Exit with error code
-        exit(1)
+    #except Exception as ex:
+    #    logger.logError("Caught exception, exiting: {}".format(ex.args[0]))
+    #    # Cleanly disconnect any connected radios
+    #    for radio in config.RadioList:
+    #        if radio.state != RadioState.Disconnected:
+    #            radio.disconnect()
+    #    # Exit with error code
+    #    exit(1)

@@ -17,6 +17,26 @@ var radioList = [];
 // Websocket connection to server
 var serverSocket = null;
 
+// Audio variables
+var audio = {
+    // Audio context
+    context: null,
+    // length of buffer in seconds
+    bufferLength: 0.1,
+    // desired mic sample rate to send to server
+    micSamplerateTarget: 16000,
+    // Input device, buffer, resampler, and processor
+    input: null,
+    inputBuffer: null,
+    inputResampler: null,
+    inputProcessor: null,
+    // Output device and processor
+    output: null,
+    outputProcessor: null
+}
+
+testInput = null,
+
 /*****************************************************
     State variables
 *****************************************************/
@@ -53,14 +73,23 @@ function pageLoad() {
 
     // Connect and load if autoconnect is true
     if (config.serverAutoConn) {
-        // Connect
-        connectServer();
+        connect()
     }
 
     // Bind body click to deselecting radios
     //$("#body").click(function () {
     //    deselectRadios();
     //});
+}
+
+/**
+ * Connect to websocket and setup WebRTC
+ */
+function connect() {
+    // Connect websocket first
+    connectWebsocket();
+    // Start the mic & speaker handlers
+    startAudioDevices();
 }
 
 // Keydown handler
@@ -487,9 +516,9 @@ function updateClock() {
 function connectButton() {
     // Connect if we're not connected
     if (!serverSocket) {
-        connectServer();
+        connectWebsocket();
     } else if (serverSocket && !disconnecting) {
-        disconnectServer();
+        disconnectWebsocket();
     }
 }
 
@@ -601,13 +630,80 @@ function readConfig() {
 }
 
 /*****************************************************
+    Audio Handling Function
+*****************************************************/
+
+/** 
+* Setup audio devices and context, etc
+* @return {bool} True on success
+*/
+function startAudioDevices() {
+    // Create audio context
+    audio.context = new AudioContext();
+    console.log("Created audio context");
+
+    // Find the right getUserMedia()
+    if (!navigator.getUserMedia) {
+        navigator.getUserMedia = navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia || navigator.msGetUserMedia;
+    }
+    // See if we got one
+    if (navigator.getUserMedia) {
+        // Get the microphone
+        navigator.getUserMedia({audio:true},
+            function(stream) {
+                startMicrophone(stream);
+                return true;
+            },
+            function(e) {
+                alert('Error capturing microphone device');
+                return false;
+            }
+        );
+    } else {
+        alert('Cannot capture microphone: getUserMedia() not supported in this browser');
+    }
+}
+
+/**
+ * Start capturing the microphone
+ * @param {MediaStream} stream the MediaStream for the microphone
+ */
+function startMicrophone(stream) {
+    // Create input stream source
+    audio.input = audio.context.createMediaStreamSource(stream);
+    
+    // Import the microphone processor (async function so we do .then())
+    audio.context.audioWorklet.addModule('microphone-processor.js').then(() => {
+        // create a new node of it
+        audio.inputProcessor = new AudioWorkletNode(audio.context, 'microphone-processor');
+        // Bind the data handler
+        audio.inputProcessor.port.onmessage = event => {
+            sendMicData(event.data);
+        }
+
+        // connect everything together
+        audio.input.connect(audio.inputProcessor);
+    });
+}
+
+/**
+ * Send the mic data string to the server
+ * @param {string} dataString string of truncated floats representing mic audio samples
+ */
+function sendMicData(dataString) {
+    if (pttActive && serverSocket && selectedRadio) {
+        serverSocket.send("micAudio:" + dataString);
+    }
+}
+
+/*****************************************************
     Websocket Client Functions
 *****************************************************/
 
 /**
  * Connect to the server's websocket
  */
-function connectServer() {
+function connectWebsocket() {
     // Change button
     $("#server-connect-btn").html("Connecting...");
     $("#server-connect-btn").prop("disabled",true);
@@ -615,11 +711,11 @@ function connectServer() {
     console.log("Connecting to " + config.serverAddress + ":" + config.serverPort);
     // Setup socket
     serverSocket = new WebSocket("ws://" + config.serverAddress + ":" + config.serverPort);
-    serverSocket.onerror = handleConnectionError;
-    serverSocket.onmessage = recvServerMessage;
-    serverSocket.onclose = handleServerClose;
+    serverSocket.onerror = handleSocketError;
+    serverSocket.onmessage = recvSocketMessage;
+    serverSocket.onclose = handleSocketClose;
     // Wait for connection
-    waitForConnect(serverSocket, onConnect);
+    waitForWebSocket(serverSocket, onConnectWebsocket);
 }
 
 /**
@@ -627,7 +723,7 @@ function connectServer() {
  * @param {WebSocket} websocket 
  * @param {function} callback callback function to execute once connected
  */
-function waitForConnect(socket, callback=null) {
+function waitForWebSocket(socket, callback=null) {
     setTimeout(
         function() {
             if (socket.readyState === 1) {
@@ -636,7 +732,7 @@ function waitForConnect(socket, callback=null) {
                     callback();
                 }
             } else {
-                waitForConnect(socket, callback);
+                waitForWebSocket(socket, callback);
             }
         },
     5); // 5 ms timeout
@@ -645,7 +741,7 @@ function waitForConnect(socket, callback=null) {
 /**
  * Called once the websocket connection is active
  */
-function onConnect() {
+function onConnectWebsocket() {
     // Change button
     $("#server-connect-btn").html("Disconnect");
     $("#server-connect-btn").prop("disabled",false);
@@ -654,13 +750,13 @@ function onConnect() {
     $("#navbar-status").removeClass("pending");
     $("#navbar-status").addClass("connected");
     // Query for radios
-    sendServerMessage('?radios');
+    sendSocketMessage('?radios');
 }
 
 /**
  * Disconnect from the websocket server
  */
-function disconnectServer() {
+function disconnectWebsocket() {
     // Change button
     $("#server-connect-btn").html("Disconnecting...");
     $("#server-connect-btn").prop("disabled", true);
@@ -680,7 +776,7 @@ function disconnectServer() {
  * Callback for a new message from the websocket server
  * @param {event} event 
  */
-function recvServerMessage(event) {
+function recvSocketMessage(event) {
 
     // Response to ?radios request
     if (event.data.startsWith("radios:")) {
@@ -730,7 +826,7 @@ function recvServerMessage(event) {
  * Send a message to the websocket server
  * @param {string} message message to send
  */
-function sendServerMessage(message) {
+function sendSocketMessage(message) {
     serverSocket.send(message);
 }
 
@@ -738,7 +834,7 @@ function sendServerMessage(message) {
  * Handle the websocket closing
  * @param {event} event socket closed event
  */
-function handleServerClose(event) {
+function handleSocketClose(event) {
     console.warn("Server connection closed");
     if (event.data) {console.warn(event.data);}
     if (!disconnecting) {
@@ -762,7 +858,7 @@ function handleServerClose(event) {
  * Handle connection errors from the server
  * @param {event} event 
  */
-function handleConnectionError(event) {
+function handleSocketError(event) {
     console.error("Server connection error: " + event.data);
     window.alert("Server connection errror: " + event.data);
 }
