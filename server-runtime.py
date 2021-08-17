@@ -24,6 +24,7 @@ import uuid
 
 # Sound stuff
 import sounddevice as sd
+import pyaudio
 
 # Numpy (used for sound processing)
 import numpy as np
@@ -81,6 +82,12 @@ messageQueue = asyncio.Queue()
 inputs = []
 outputs = []
 hostapis = []
+
+# pyAudio instantiation
+pa = pyaudio.PyAudio()
+
+# Test output audio stream
+audioStream = None
 
 # Detect operating system
 osType = platform.system()
@@ -423,32 +430,44 @@ def setupSound():
     """
     Setup test sound device for mic loopback
     """
+    global audioStream
+
     if micSampleRate:
         logger.logInfo("Creating test output stream")
-        audioStream = sd.OutputStream(samplerate=micSampleRate, channels=1, callback=outputCallback, blocksize=128*micBufferSize, dtype=np.float32)
-        audioStream.start()
+        # Create stream
+        audioStream = pa.open(
+            format=pyaudio.paFloat32,
+            channels=1,
+            rate=micSampleRate,
+            output=True,
+            stream_callback=outputCallback,
+            frames_per_buffer=128 * micBufferSize
+        )
+        # Start stream
+        audioStream.start_stream()
 
-def outputCallback(outdata, frames, time, status):
+def outputCallback(in_data, frame_count, time_info, status):
     """
-    Callback for the test sounddevice
+    Callback for pyaudio output device
 
     Args:
-        outdata ([type]): [description]
-        frames ([type]): [description]
-        time ([type]): [description]
-        status ([type]): [description]
+        in_data (array): not used for output device
+        frame_count (int): number of frames to process
+        time_info (time_info): not used
+        status (pyaudio.status): pyaudio status
+
+    Returns:
+        [type]: [description]
     """
-    # print the device status if there is one
+    # Check if we have a status
     if status:
         logger.logWarn(status)
-    # only get samples if we've got a good buffer built up
+    # Only get samples if we have a buffer
     if micSampleQueue.qsize() > 2:
-        # print queue size
-        print("outputCallback()")
-        samples = micSampleQueue.get_nowait()
-        outdata[:,0] = samples
+        data = micSampleQueue.get_nowait()
     else:
-        outdata.fill(0)
+        data = np.zeros(frame_count)
+    return (data, pyaudio.paContinue)
 
 def handleMicData(dataString):
     """
@@ -457,7 +476,6 @@ def handleMicData(dataString):
     Args:
         data (string): string of mic data to process
     """    
-    print("handleMicData()")
     # Split into a list of strings
     stringList = dataString.split(",")
     # Remove empty strings
@@ -687,6 +705,11 @@ if __name__ == "__main__":
         for radio in config.RadioList:
             if radio.state != RadioState.Disconnected:
                 radio.disconnect()
+        # Stop PyAudio
+        if audioStream:
+            audioStream.stop_stream()
+            audioStream.close()
+        pa.terminate()
         # Exit without error
         exit(0)
 
