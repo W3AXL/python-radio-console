@@ -69,8 +69,10 @@ noreset = False
 server = None
 serverLoop = None
 
-# WebRTC peer connection
-rtcConn = None
+# Mic audio globals
+micSampleRate = None
+micSampleQueue = queue.Queue()
+micBufferSize = 4   # hardcoded, needs to be the same as the buffer size in microphone-processor.js
 
 # Message queue for sending to client
 messageQueue = asyncio.Queue()
@@ -177,7 +179,7 @@ def loadConfig(filename):
     try:
         # make sure file is valid
         if not os.path.exists(filename):
-            raise Exception("Specified file does not exist")
+            raise ValueError("Specified file does not exist")
 
         # open and parse
         with open(filename, 'r') as inp:
@@ -193,7 +195,7 @@ def loadConfig(filename):
 
             # Return true
             return True
-    except Exception as ex:
+    except ValueError as ex:
         logger.logError("Error loading config file: {}".format(ex.args[0]))
         return False
 
@@ -419,21 +421,50 @@ def getDeviceName(type, idx):
 
 def setupSound():
     """
-    Setup sound devices
+    Setup test sound device for mic loopback
     """
-    
+    if micSampleRate:
+        logger.logInfo("Creating test output stream")
+        audioStream = sd.OutputStream(samplerate=micSampleRate, channels=1, callback=outputCallback, blocksize=128*micBufferSize, dtype=np.float32)
+        audioStream.start()
 
-def handleMicData(data):
+def outputCallback(outdata, frames, time, status):
+    """
+    Callback for the test sounddevice
+
+    Args:
+        outdata ([type]): [description]
+        frames ([type]): [description]
+        time ([type]): [description]
+        status ([type]): [description]
+    """
+    # print the device status if there is one
+    if status:
+        logger.logWarn(status)
+    # only get samples if we've got a good buffer built up
+    if micSampleQueue.qsize() > 2:
+        # print queue size
+        print("outputCallback()")
+        samples = micSampleQueue.get_nowait()
+        outdata[:,0] = samples
+    else:
+        outdata.fill(0)
+
+def handleMicData(dataString):
     """
     Route mic data from the client to the correct output devices
 
     Args:
         data (string): string of mic data to process
     """    
+    print("handleMicData()")
     # Split into a list of strings
-    stringList = data.split(",")
-    # Convert to numpy float array
-    floatArray = np.array(list(map(float, stringList)))
+    stringList = dataString.split(",")
+    # Remove empty strings
+    stringList[:] = [item for item in stringList if item]
+    # Convert string list to floats
+    floatArray = np.asarray(stringList, dtype=np.float32)
+    micSampleQueue.put_nowait(floatArray)
 
 """-------------------------------------------------------------------------------
     Websocket Server Functions
@@ -526,6 +557,15 @@ async def consumer_handler(websocket, path):
         #
         #   Audio data messages
         #
+
+        elif data[0:8] == "micRate:":
+            # import globals
+            global micSampleRate
+            # set globals
+            micSampleRate = int(data[8:])
+            # Setup sound
+            logger.logInfo("Got client mic samplerate: {}".format(micSampleRate))
+            setupSound()
 
         elif data[0:9] == "micAudio:":
             micData = data[9:]

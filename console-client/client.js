@@ -21,14 +21,14 @@ var serverSocket = null;
 var audio = {
     // Audio context
     context: null,
-    // length of buffer in seconds
-    bufferLength: 0.1,
+    // length of buffer in number of 128-sample blocks
+    bufferLength: 4,
     // desired mic sample rate to send to server
     micSamplerateTarget: 16000,
     // Input device, buffer, resampler, and processor
     input: null,
-    inputBuffer: null,
-    inputResampler: null,
+    inputBuffer: "",
+    inputBufferSize: 0,
     inputProcessor: null,
     // Output device and processor
     output: null,
@@ -88,8 +88,8 @@ function pageLoad() {
 function connect() {
     // Connect websocket first
     connectWebsocket();
-    // Start the mic & speaker handlers
-    startAudioDevices();
+    // Start the mic & speaker handlers after the socket is connected
+    waitForWebSocket(serverSocket, startAudioDevices);
 }
 
 // Keydown handler
@@ -642,6 +642,12 @@ function startAudioDevices() {
     audio.context = new AudioContext();
     console.log("Created audio context");
 
+    // Send samplerate info of context to server
+    serverSocket.send("micRate:" + String(audio.context.sampleRate));
+
+    // Create an empty buffer
+    audio.inputBuffer = [];
+
     // Find the right getUserMedia()
     if (!navigator.getUserMedia) {
         navigator.getUserMedia = navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia || navigator.msGetUserMedia;
@@ -680,19 +686,28 @@ function startMicrophone(stream) {
         audio.inputProcessor.port.onmessage = event => {
             sendMicData(event.data);
         }
-
         // connect everything together
         audio.input.connect(audio.inputProcessor);
     });
 }
 
 /**
- * Send the mic data string to the server
- * @param {string} dataString string of truncated floats representing mic audio samples
+ * Buffer and send the mic data string to the server
+ * @param {string} dataString data string
  */
 function sendMicData(dataString) {
     if (pttActive && serverSocket && selectedRadio) {
-        serverSocket.send("micAudio:" + dataString);
+        // Add data to buffer (concat keeps dimensions correct)
+        audio.inputBuffer += dataString;
+        audio.inputBufferSize += 1;
+        // Push data if buffer is full
+        if (audio.inputBufferSize >= audio.bufferLength) {
+            // Send string
+            serverSocket.send("micAudio:" + audio.inputBuffer);
+            // Clear buffer
+            audio.inputBuffer = "";
+            audio.inputBufferSize = 0;
+        }
     }
 }
 
@@ -727,7 +742,6 @@ function waitForWebSocket(socket, callback=null) {
     setTimeout(
         function() {
             if (socket.readyState === 1) {
-                console.log("Connected!");
                 if (callback != null) {
                     callback();
                 }
@@ -742,6 +756,7 @@ function waitForWebSocket(socket, callback=null) {
  * Called once the websocket connection is active
  */
 function onConnectWebsocket() {
+    console.log("Connected!");
     // Change button
     $("#server-connect-btn").html("Disconnect");
     $("#server-connect-btn").prop("disabled",false);

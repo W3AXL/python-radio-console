@@ -5,7 +5,7 @@
 registerProcessor('microphone-processor', class extends AudioWorkletProcessor {
 
     // constructor
-    constructor() {
+    constructor(options) {
         super();
     }
 
@@ -18,7 +18,7 @@ registerProcessor('microphone-processor', class extends AudioWorkletProcessor {
         inputData.forEach(function(element) {
             dataString += (element.toFixed(4) + ",");
         });
-        // Send this data string back to the main script via the port
+        // Send this data back to the main script via the port
         this.port.postMessage(dataString);
         return true;
     }
