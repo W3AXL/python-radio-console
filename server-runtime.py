@@ -10,6 +10,7 @@ import queue
 
 # TCP Socket Server
 import websockets
+import websockets.exceptions
 import asyncio
 
 # HTTP server stuff
@@ -23,7 +24,6 @@ from aiortc.contrib.media import MediaBlackhole, MediaPlayer, MediaRecorder
 import uuid
 
 # Sound stuff
-import sounddevice as sd
 import pyaudio
 
 # Numpy (used for sound processing)
@@ -135,12 +135,14 @@ def parseArguments():
     # List available serial devices
     if args.list_ports:
         logger.logInfo("Listing available serial ports")
+        exit(0)
 
     # List available sound devices
     if args.list_sound:
         print()
         getSoundDevices()
         printSoundDevices()
+        exit(0)
 
     # Make sure a config file was specified
     if not args.config:
@@ -211,8 +213,8 @@ def printRadios():
     for idx, radio in enumerate(config.RadioList):
         print("      - radio{}: {}".format(idx, radio.name))
         print("                {} control ({})".format(radio.ctrlMode, radio.ctrlPort))
-        print("                Tx Audio dev: {} ({})".format(radio.txDev, getDeviceName('output',radio.txDev)))
-        print("                Rx Audio dev: {} ({})".format(radio.rxDev, getDeviceName('input',radio.rxDev)))
+        print("                Tx Audio dev: {} ({})".format(radio.txDev, getDeviceName(radio.txDev)))
+        print("                Rx Audio dev: {} ({})".format(radio.rxDev, getDeviceName(radio.rxDev)))
 
 """-------------------------------------------------------------------------------
     Radio Functions
@@ -356,27 +358,21 @@ def getSoundDevices():
     global outputs
     global hostapis
 
-    # get available devices
-    devices = sd.query_devices()
-    # get available hostapis
-    hostapis = sd.query_hostapis()
+    # get portaudio info
+    info = pa.get_host_api_info_by_index(0)
+    numdevices = info.get('deviceCount')
 
-    # Get WASAPI index if we're on Windows
-    if osType == "Windows":
-        wasapiIndex = next((i for i, api in enumerate(hostapis) if "WASAPI" in api["name"]), None)
-        logger.logVerbose("Windows OS detected, only looking for WASAPI devices (api index {})".format(wasapiIndex))
-
-    # iterate through devices
-    for device in devices:
-        # Ignore non-WASAPI devices in windows
-        if osType == "Windows" and device["hostapi"] != wasapiIndex:
-            logger.logVerbose("Skiping non-WASAPI device {}".format(device["name"]))
-            continue
-        # Add device to input or output (or both!) based on available channels
-        if device['max_input_channels'] > 0:
-            inputs.append(device)
-        if device['max_output_channels'] > 0:
-            outputs.append(device)
+    for i in range(0, numdevices):
+        if (pa.get_device_info_by_host_api_device_index(0, i).get('maxInputChannels')) > 0:
+            inputs.append({
+                'index': i,
+                'name': pa.get_device_info_by_host_api_device_index(0,i).get('name')
+            })
+        elif (pa.get_device_info_by_host_api_device_index(0, i).get('maxOutputChannels')) > 0:
+            outputs.append({
+                'index': i,
+                'name': pa.get_device_info_by_host_api_device_index(0,i).get('name')
+            })
 
 def printSoundDevices():
     """
@@ -385,46 +381,28 @@ def printSoundDevices():
 
     # Print inputs first
     logger.logInfo("Available input devices:")
-    for idx, input in enumerate(inputs):
-        name = input['name']
-        hostapi = hostapis[input['hostapi']]['name']
-        print("{}: {}, api: {}".format(idx, name, hostapi))
+    for input in inputs:
+        print("{}: {}".format(input['index'],input['name']))
     # Line break
     print()
     # Print outputs
     logger.logInfo("Available output devices")
-    for idx, output in enumerate(outputs):
-        name = output['name']
-        hostapi = hostapis[output['hostapi']]['name']
-        print("{}: {}, api: {}".format(idx, name, hostapi))
+    for output in outputs:
+        print("{}: {}".format(output['index'],output['name']))
     # Line break
     print()
 
-def getDeviceName(type, idx):
+def getDeviceName(idx):
     """
-    Return name of audio device specified by type and idnex
+    Returns the name of the specified PortAudio device index
 
     Args:
-        type (string): "input" or "output"
-        idx (int): index of device
-
-    Raises:
-        Exception if wrong type specified or index out of range
+        idx (int): device index
 
     Returns:
-        string: name of device
+        string: Device name
     """
-    
-    if type == "input":
-        if idx > (len(inputs)-1):
-            raise Exception("Device index out of range")
-        return inputs[idx]["name"]
-    elif type == "output":
-        if idx > (len(inputs)-1):
-            raise Exception("Device index out of range")
-        return outputs[idx]["name"]
-    else:
-        raise Exception("Invalid audio device type specified: {}".format(type))
+    return pa.get_device_info_by_host_api_device_index(0, idx).get('name')
 
 def setupSound():
     """
@@ -432,19 +410,36 @@ def setupSound():
     """
     global audioStream
 
-    if micSampleRate:
-        logger.logInfo("Creating test output stream")
-        # Create stream
-        audioStream = pa.open(
-            format=pyaudio.paFloat32,
-            channels=1,
-            rate=micSampleRate,
-            output=True,
-            stream_callback=outputCallback,
-            frames_per_buffer=128 * micBufferSize
-        )
-        # Start stream
-        audioStream.start_stream()
+    # Clear buffer (with mutex)
+    with micSampleQueue.mutex:
+        logger.logInfo("clearing mic sample queue")
+        micSampleQueue.queue.clear()
+
+    logger.logInfo("Setting up test audio device")
+    # Create stream
+    audioStream = pa.open(
+        format=pyaudio.paFloat32,
+        channels=1,
+        rate=micSampleRate,
+        output=True,
+        stream_callback=outputCallback,
+        frames_per_buffer=128 * micBufferSize
+    )
+    # Start stream
+    audioStream.start_stream()
+
+def stopSound():
+    """
+    Cleans up audio buffer on client disconnect
+    """
+    global audioStream
+
+    logger.logInfo("Cleaning up test audio device buffer")
+
+    # Clear buffer (with mutex)
+    with micSampleQueue.mutex:
+        logger.logInfo("clearing mic sample queue")
+        micSampleQueue.queue.clear()
 
 def outputCallback(in_data, frame_count, time_info, status):
     """
@@ -464,6 +459,7 @@ def outputCallback(in_data, frame_count, time_info, status):
         logger.logWarn(status)
     # Only get samples if we have a buffer
     if micSampleQueue.qsize() > 2:
+        #logger.logInfo("outputCallback(), Q size: {}".format(micSampleQueue.qsize()))
         data = micSampleQueue.get_nowait()
     else:
         data = np.zeros(frame_count)
@@ -475,7 +471,7 @@ def handleMicData(dataString):
 
     Args:
         data (string): string of mic data to process
-    """    
+    """
     # Split into a list of strings
     stringList = dataString.split(",")
     # Remove empty strings
@@ -515,87 +511,97 @@ async def consumer_handler(websocket, path):
     """
 
     while True:
-        # Wait for data
-        data = await websocket.recv()
+        try:
+            # Wait for data
+            data = await websocket.recv()
 
-        # Process the received command
+            # Process the received command
 
-        #
-        #   Configuration Commands
-        #
+            #
+            #   Configuration Commands
+            #
 
-        if data == "?radios":
-            # Send list of all radio statuses
-            await messageQueue.put("allradios")
+            if data == "?radios":
+                # Send list of all radio statuses
+                await messageQueue.put("allradios")
 
-        #
-        #   Radio Control Commands
-        #
+            #
+            #   Radio Control Commands
+            #
 
-        elif data[0:9] == "!startTx:":
-            # start transmit on specified radio
-            index = int(data[9:])
-            setTransmit(index, True)
-        
-        elif data[0:8] == "!stopTx:":
-            # stop transmit on specified radio
-            index = int(data[8:])
-            setTransmit(index, False)
+            elif data[0:9] == "!startTx:":
+                # start transmit on specified radio
+                index = int(data[9:])
+                setTransmit(index, True)
+            
+            elif data[0:8] == "!stopTx:":
+                # stop transmit on specified radio
+                index = int(data[8:])
+                setTransmit(index, False)
 
-        elif data[0:8] == "!chanUp:":
-            # change channel up on radio
-            index = int(data[8:])
-            changeChannel(index, False)
+            elif data[0:8] == "!chanUp:":
+                # change channel up on radio
+                index = int(data[8:])
+                changeChannel(index, False)
 
-        elif data[0:8] == "!chanDn:":
-            # change channel down
-            index = int(data[8:])
-            changeChannel(index, True)
+            elif data[0:8] == "!chanDn:":
+                # change channel down
+                index = int(data[8:])
+                changeChannel(index, True)
 
-        elif data[0:5] == "!mon:":
-            index = int(data[5:])
-            toggleMonitor(index)
+            elif data[0:5] == "!mon:":
+                index = int(data[5:])
+                toggleMonitor(index)
 
-        elif data[0:6] == "!nuis:":
-            index = int(data[6:])
-            nuisanceDelete(index)
+            elif data[0:6] == "!nuis:":
+                index = int(data[6:])
+                nuisanceDelete(index)
 
-        elif data[0:6] == "!lpwr:":
-            index = int(data[6:])
-            togglePower(index)
+            elif data[0:6] == "!lpwr:":
+                index = int(data[6:])
+                togglePower(index)
 
-        elif data[0:6] == "!scan:":
-            index = int(data[6:])
-            toggleScan(index)
+            elif data[0:6] == "!scan:":
+                index = int(data[6:])
+                toggleScan(index)
 
-        elif data[0:5] == "!dir:":
-            index = int(data[5:])
-            toggleDirect(index)
+            elif data[0:5] == "!dir:":
+                index = int(data[5:])
+                toggleDirect(index)
 
-        #
-        #   Audio data messages
-        #
+            #
+            #   Audio data messages
+            #
 
-        elif data[0:8] == "micRate:":
-            # import globals
-            global micSampleRate
-            # set globals
-            micSampleRate = int(data[8:])
-            # Setup sound
-            logger.logInfo("Got client mic samplerate: {}".format(micSampleRate))
-            setupSound()
+            elif data[0:8] == "micRate:":
+                # import globals
+                global micSampleRate
+                # set globals
+                micSampleRate = int(data[8:])
+                logger.logInfo("Got client mic samplerate: {}".format(micSampleRate))
+                # Setup sound if not already configured
+                if not audioStream:
+                    logger.logInfo("Audio stream not running, setting up")
+                    setupSound()
 
-        elif data[0:9] == "micAudio:":
-            micData = data[9:]
-            handleMicData(micData)
+            elif data[0:9] == "micAudio:":
+                micData = data[9:]
+                handleMicData(micData)
 
-        #
-        #   NACK if command wasn't handled above
-        #
+            #
+            #   NACK if command wasn't handled above
+            #
 
-        else:
-            # Send NACK
-            await messageQueue.put("NACK")
+            else:
+                # Send NACK
+                await messageQueue.put("NACK")
+
+        # Handle connection closing event (stop audio devices)
+        except websockets.exceptions.ConnectionClosed:
+            logger.logWarn("Client disconnected!")
+            # stop sound devices and exit
+            stopSound()
+            break
 
 
 async def producer_hander(websocket, path):
@@ -607,21 +613,26 @@ async def producer_hander(websocket, path):
         path (path): still not sure what this does
     """
     while True:
-        # Wait for new data in queue
-        message = await messageQueue.get()
+        try:
+            # Wait for new data in queue
+            message = await messageQueue.get()
 
-        # get message type
-        if message == "allradios":
-            logger.logInfo("sending radio list to {}".format(websocket.remote_address[0]))
-            response = "radios:" + getAllRadiosStatusJson()
-            await websocket.send(response)
-        elif "status:" in message:
-            index = int(message[7:])
-            logger.logInfo("Sending status update for radio{}".format(index))
-            await websocket.send("radio{}:".format(index) + getRadioStatusJson(index))
-        elif "NACK" in message:
-            logger.logWarn("invalid command received from {}".format(websocket.remote_address[0]))
-            await websocket.send("NACK")
+            # get message type
+            if message == "allradios":
+                logger.logInfo("sending radio list to {}".format(websocket.remote_address[0]))
+                response = "radios:" + getAllRadiosStatusJson()
+                await websocket.send(response)
+            elif "status:" in message:
+                index = int(message[7:])
+                logger.logInfo("Sending status update for radio{}".format(index))
+                await websocket.send("radio{}:".format(index) + getRadioStatusJson(index))
+            elif "NACK" in message:
+                logger.logWarn("invalid command received from {}".format(websocket.remote_address[0]))
+                await websocket.send("NACK")
+        
+        except websockets.exceptions.ConnectionClosed:
+            # The consumer handler will already cover this
+            break
 
 
 class httpServerHandler(http.server.SimpleHTTPRequestHandler):
@@ -690,9 +701,6 @@ if __name__ == "__main__":
         # Start server
         startServer()
 
-        # Setup sound devices
-        setupSound()
-
         # Connect to radios
         connectRadios()
 
@@ -706,9 +714,7 @@ if __name__ == "__main__":
             if radio.state != RadioState.Disconnected:
                 radio.disconnect()
         # Stop PyAudio
-        if audioStream:
-            audioStream.stop_stream()
-            audioStream.close()
+        stopSound()
         pa.terminate()
         # Exit without error
         exit(0)

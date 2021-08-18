@@ -27,7 +27,8 @@ var audio = {
     micSamplerateTarget: 16000,
     // Input device, buffer, resampler, and processor
     input: null,
-    inputBuffer: "",
+    inputStream: null,
+    inputBuffer: null,
     inputBufferSize: 0,
     inputProcessor: null,
     // Output device and processor
@@ -83,13 +84,23 @@ function pageLoad() {
 }
 
 /**
- * Connect to websocket and setup WebRTC
+ * Connect to websocket and setup audio
  */
 function connect() {
     // Connect websocket first
     connectWebsocket();
-    // Start the mic & speaker handlers after the socket is connected
-    waitForWebSocket(serverSocket, startAudioDevices);
+    // Wait for connect to start audio devices if they haven't already started
+    if (!audio.context) {
+        waitForWebSocket(serverSocket, startAudioDevices);
+    }
+}
+
+/**
+ * Disconnect from websocket and teardown audio devices
+ */
+function disconnect() {
+    // disconnect websocket
+    disconnectWebsocket();
 }
 
 // Keydown handler
@@ -516,9 +527,9 @@ function updateClock() {
 function connectButton() {
     // Connect if we're not connected
     if (!serverSocket) {
-        connectWebsocket();
+        connect();
     } else if (serverSocket && !disconnecting) {
-        disconnectWebsocket();
+        disconnect();
     }
 }
 
@@ -642,12 +653,6 @@ function startAudioDevices() {
     audio.context = new AudioContext();
     console.log("Created audio context");
 
-    // Send samplerate info of context to server
-    serverSocket.send("micRate:" + String(audio.context.sampleRate));
-
-    // Create an empty buffer
-    audio.inputBuffer = [];
-
     // Find the right getUserMedia()
     if (!navigator.getUserMedia) {
         navigator.getUserMedia = navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia || navigator.msGetUserMedia;
@@ -675,6 +680,14 @@ function startAudioDevices() {
  * @param {MediaStream} stream the MediaStream for the microphone
  */
 function startMicrophone(stream) {
+    console.log("Starting microphone");
+
+    // Send samplerate info of context to server
+    serverSocket.send("micRate:" + String(audio.context.sampleRate));
+
+    // Create an empty buffer
+    audio.inputBuffer = "";
+
     // Create input stream source
     audio.input = audio.context.createMediaStreamSource(stream);
     

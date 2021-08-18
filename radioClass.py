@@ -242,8 +242,8 @@ class Radio():
             "desc": self.desc,
             "ctrlMode": self.ctrlMode,
             "ctrlPort": self.ctrlPort,
-            "txDevice": self.txDev,
-            "rxDevice": self.rxDev,
+            "txDeviceIdx": self.txDev,
+            "rxDeviceIdx": self.rxDev,
             "sigMode": self.sigMode,
             "sigId": self.sigId
         }
@@ -264,7 +264,7 @@ class Radio():
                      radioDict['desc'],
                      radioDict['ctrlMode'],
                      radioDict['ctrlPort'],
-                     radioDict['txDevice'],
-                     radioDict['rxDevice'],
+                     radioDict['txDeviceIdx'],
+                     radioDict['rxDeviceIdx'],
                      radioDict['sigMode'],
                      radioDict['sigId'])
