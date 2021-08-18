@@ -70,13 +70,24 @@ noreset = False
 server = None
 serverLoop = None
 
-# Mic audio globals
-micSampleRate = None
-micSampleQueue = queue.Queue()
-micBufferSize = 4   # hardcoded, needs to be the same as the buffer size in microphone-processor.js
-
 # Message queue for sending to client
 messageQueue = asyncio.Queue()
+
+# Audio globals
+audioSampleRate = None
+audioBufferSize = 4   # hardcoded, needs to be the same as the buffer sizes in the javascript(s)
+
+# Client mic input vars
+micSampleQueue = queue.Queue()
+
+# Radio spkr output vars
+spkrSampleQueue = queue.Queue()
+spkrBufferString = ""
+spkrBufferSize = 0
+
+# Test input & output audio streams
+micStream = None
+spkrStream = None
 
 # Sound device lists
 inputs = []
@@ -85,9 +96,6 @@ hostapis = []
 
 # pyAudio instantiation
 pa = pyaudio.PyAudio()
-
-# Test output audio stream
-audioStream = None
 
 # Detect operating system
 osType = platform.system()
@@ -408,31 +416,42 @@ def setupSound():
     """
     Setup test sound device for mic loopback
     """
-    global audioStream
+    global micStream
 
     # Clear buffer (with mutex)
     with micSampleQueue.mutex:
         logger.logInfo("clearing mic sample queue")
         micSampleQueue.queue.clear()
 
-    logger.logInfo("Setting up test audio device")
-    # Create stream
-    audioStream = pa.open(
+    logger.logInfo("Setting up test audio devices")
+    # Create client mic stream
+    micStream = pa.open(
         format=pyaudio.paFloat32,
         channels=1,
-        rate=micSampleRate,
+        rate=audioSampleRate,
         output=True,
-        stream_callback=outputCallback,
-        frames_per_buffer=128 * micBufferSize
+        stream_callback=micCallback,
+        frames_per_buffer=128 * audioBufferSize
     )
-    # Start stream
-    audioStream.start_stream()
+    # Create radio speaker stream
+    spkrStream = pa.open(
+        format=pyaudio.paFloat32,
+        channels=1,
+        rate=audioSampleRate,
+        input=True,
+        input_device_index=4,
+        stream_callback=spkrCallback,
+        frames_per_buffer=128 * audioBufferSize
+    )
+    # Start streams
+    logger.logInfo("Starting audio streams")
+    micStream.start_stream()
+    spkrStream.start_stream()
 
 def stopSound():
     """
     Cleans up audio buffer on client disconnect
     """
-    global audioStream
 
     logger.logInfo("Cleaning up test audio device buffer")
 
@@ -441,9 +460,9 @@ def stopSound():
         logger.logInfo("clearing mic sample queue")
         micSampleQueue.queue.clear()
 
-def outputCallback(in_data, frame_count, time_info, status):
+def micCallback(in_data, frame_count, time_info, status):
     """
-    Callback for pyaudio output device
+    Callback for client mic -> radio output device
 
     Args:
         in_data (array): not used for output device
@@ -465,6 +484,26 @@ def outputCallback(in_data, frame_count, time_info, status):
         data = np.zeros(frame_count)
     return (data, pyaudio.paContinue)
 
+def spkrCallback(in_data, frame_count, time_info, status):
+    """
+    Callback for radio spkr -> client input device
+
+    Args:
+        in_data ([type]): [description]
+        frame_count ([type]): [description]
+        time_info ([type]): [description]
+        status ([type]): [description]
+    """
+    # log status if we have one
+    if status:
+        logger.logWarn(status)
+        
+    # add audio to queue if radio is receiving
+    if config.RadioList[0].state == RadioState.Receiving:
+        handleSpkrData(in_data)
+
+    return (None, pyaudio.paContinue)
+
 def handleMicData(dataString):
     """
     Route mic data from the client to the correct output devices
@@ -479,6 +518,31 @@ def handleMicData(dataString):
     # Convert string list to floats
     floatArray = np.asarray(stringList, dtype=np.float32)
     micSampleQueue.put_nowait(floatArray)
+
+def handleSpkrData(in_data):
+    """
+    Get the speaker data from the pyaudio callback, add it to the buffer string, and send & clear the buffer if it's big enough
+    """
+    global spkrBufferString
+    global spkrBufferSize
+    
+    # convert from whatever the hell format pyaudio uses to a numpy float32 array
+    data = np.fromstring(in_data, dtype=np.float32)
+    # this is allegedly a super-fast way to turn a float array into a comma-separated string
+    # we use 4 decimals of precision, just like the mic audio in microphone-processor.js
+    dataString = ','.join(['%.4f' % num for num in data])
+    # add this dataString to the buffer
+    spkrBufferString += dataString
+    spkrBufferSize += len(data)
+
+    # Send the buffer string if it's big enough
+    if spkrBufferSize >= 128 * audioBufferSize:
+        # send this data string
+        spkrSampleQueue.put_nowait(spkrBufferString)
+        serverLoop.call_soon_threadsafe(messageQueue.put_nowait,"speaker")
+        # clear the buffer
+        spkrBufferString = ""
+        spkrBufferSize = 0
 
 """-------------------------------------------------------------------------------
     Websocket Server Functions
@@ -575,13 +639,13 @@ async def consumer_handler(websocket, path):
 
             elif data[0:8] == "micRate:":
                 # import globals
-                global micSampleRate
+                global audioSampleRate
                 # set globals
-                micSampleRate = int(data[8:])
-                logger.logInfo("Got client mic samplerate: {}".format(micSampleRate))
-                # Setup sound if not already configured
-                if not audioStream:
-                    logger.logInfo("Audio stream not running, setting up")
+                audioSampleRate = int(data[8:])
+                logger.logInfo("Got client audio samplerate: {}".format(audioSampleRate))
+                # Setup mic input stream if not already configured
+                if not micStream or not spkrStream:
+                    logger.logInfo("Stream(s) not started, setting up")
                     setupSound()
 
             elif data[0:9] == "micAudio:":
@@ -618,14 +682,21 @@ async def producer_hander(websocket, path):
             message = await messageQueue.get()
 
             # get message type
+            # send all radio parameters as a list
             if message == "allradios":
                 logger.logInfo("sending radio list to {}".format(websocket.remote_address[0]))
                 response = "radios:" + getAllRadiosStatusJson()
                 await websocket.send(response)
+            # send status update for specific radio
             elif "status:" in message:
                 index = int(message[7:])
                 logger.logInfo("Sending status update for radio{}".format(index))
                 await websocket.send("radio{}:".format(index) + getRadioStatusJson(index))
+            # send speaker data from queue
+            elif "speaker" in message:
+                speakerData = spkrSampleQueue.get_nowait()
+                await websocket.send("spkrAud:" + speakerData)
+            # send NACK to unknown command
             elif "NACK" in message:
                 logger.logWarn("invalid command received from {}".format(websocket.remote_address[0]))
                 await websocket.send("NACK")

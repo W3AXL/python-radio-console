@@ -31,8 +31,9 @@ var audio = {
     inputBuffer: null,
     inputBufferSize: 0,
     inputProcessor: null,
-    // Output device and processor
+    // Output device, buffer, and processor
     output: null,
+    outputBuffer: null,
     outputProcessor: null
 }
 
@@ -724,6 +725,18 @@ function sendMicData(dataString) {
     }
 }
 
+function getSpkrData(dataString) {
+        // Convert the comma-separated string to a float32array
+        var spkrData = Float32Array.from(dataString.split(","), parseFloat);
+        // Create a new buffer and source to play the received data
+        var buffer = audio.context.createBuffer(1, spkrData.length, audio.context.sampleRate);
+        buffer.copyToChannel(spkrData, 0);
+        var source = audio.context.createBufferSource();
+        source.buffer = buffer;
+        source.connect(audio.context.destination);
+        source.start(0);
+}
+
 /*****************************************************
     Websocket Client Functions
 *****************************************************/
@@ -837,6 +850,14 @@ function recvSocketMessage(event) {
         updateRadioCard(radioIndex);
         // Update bottom controls
         updateRadioControls();
+    }
+
+    // Speaker audio data
+    else if (event.data.startsWith("spkrAud:")) {
+        // Get string of comma-separated floats
+        var dataString = event.data.substring(8);
+        // send to speaker data function
+        getSpkrData(dataString);
     }
 
     // Message error
