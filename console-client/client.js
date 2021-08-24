@@ -1,6 +1,6 @@
-/*****************************************************
+/***********************************************************************************
     Global Variables
-*****************************************************/
+***********************************************************************************/
 
 // User Config Var
 var config = {
@@ -39,9 +39,9 @@ var audio = {
 
 testInput = null,
 
-/*****************************************************
+/***********************************************************************************
     State variables
-*****************************************************/
+***********************************************************************************/
 
 // Detected timezone
 timeZone = "";
@@ -54,9 +54,9 @@ var menuOpen = false;
 // server disconnect commanded
 var disconnecting = false;
 
-/*****************************************************
+/***********************************************************************************
     Page Setup Functions
-*****************************************************/
+***********************************************************************************/
 
 /**
  * Page load function. Starts timers, etc.
@@ -137,9 +137,9 @@ $(window).blur(function () {
 // Bind pageLoad function to document load
 $(document).ready(pageLoad());
 
-/*****************************************************
+/***********************************************************************************
     Radio UI Functions
-*****************************************************/
+***********************************************************************************/
 
 /**
  * Select a radio
@@ -343,9 +343,9 @@ function updateRadioControls() {
     }
 }
 
-/*****************************************************
+/***********************************************************************************
     Radio Backend Functions
-*****************************************************/
+***********************************************************************************/
 
 /**
  * Start radio PTT
@@ -466,9 +466,9 @@ function toggleMute(event, obj) {
     event.stopPropagation();
 }
 
-/*****************************************************
+/***********************************************************************************
     Global UI Functions
-*****************************************************/
+***********************************************************************************/
 
 /**
  * Toggles the state of the sidebar menu
@@ -534,9 +534,9 @@ function connectButton() {
     }
 }
 
-/*****************************************************
+/***********************************************************************************
     Global Backend Functions
-*****************************************************/
+***********************************************************************************/
 
 /**
  * Returns UTC time string in given format
@@ -641,9 +641,9 @@ function readConfig() {
     }
 }
 
-/*****************************************************
+/***********************************************************************************
     Audio Handling Function
-*****************************************************/
+***********************************************************************************/
 
 /** 
 * Setup audio devices and context, etc
@@ -707,9 +707,17 @@ function startMicrophone(stream) {
 
 /**
  * Buffer and send the mic data string to the server
- * @param {string} dataString data string
+ * @param {Float32Array} data Float32 intput samples
  */
-function sendMicData(dataString) {
+function sendMicData(data) {
+    // Convert the Float32Array data to a Mu-Law Uint8Array
+    var muLawData = encodeMuLaw(data);
+    // Convert this mu-law data to a comma-separated string
+    var dataString = "";
+    muLawData.forEach(function(element) {
+        dataString += (element.toString() + ",");
+    });
+    // only send stuff if we're actually PTTing into a radio
     if (pttActive && serverSocket && selectedRadio) {
         // Add data to buffer (concat keeps dimensions correct)
         audio.inputBuffer += dataString;
@@ -726,8 +734,10 @@ function sendMicData(dataString) {
 }
 
 function getSpkrData(dataString) {
-        // Convert the comma-separated string to a float32array
-        var spkrData = Float32Array.from(dataString.split(","), parseFloat);
+        // Convert the comma-separated string of mu-law samples to a Uint8Array
+        var spkrMuLawData = Uint8Array.from(dataString.split(","));
+        // Decode to Float32Array
+        var spkrData = decodeMuLaw(spkrMuLawData);
         // Create a new buffer and source to play the received data
         var buffer = audio.context.createBuffer(1, spkrData.length, audio.context.sampleRate);
         buffer.copyToChannel(spkrData, 0);
@@ -737,9 +747,123 @@ function getSpkrData(dataString) {
         source.start(0);
 }
 
-/*****************************************************
+/***********************************************************************************
+    Audio Encoding/Decoding Functions
+
+    Borrowed from many places, including:
+        - https://github.com/rochars/alawmulaw/blob/master/lib/mulaw.js
+
+***********************************************************************************/
+
+const muLawClip = 32635;
+
+const muLawBias = 0x84;
+
+const muLawEncodeTable = [
+    0,0,1,1,2,2,2,2,3,3,3,3,3,3,3,3,
+    4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,
+    5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,
+    5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,
+    6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,
+    6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,
+    6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,
+    6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,
+    7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,
+    7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,
+    7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,
+    7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,
+    7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,
+    7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,
+    7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,
+    7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7
+];
+
+const muLawDecodeTable = [0, 132, 396, 924, 1980, 4092, 8316, 16764];
+
+/**
+ * Convert a Float32 array of samples to mu-law encoded 8 bit samples
+ * @param {Float32Array} samples input Float32 samples
+ * @returns {Uint8Array} array of Mu-Law encoded samples
+ */
+function encodeMuLaw(samples) {
+    // Convert input float samples to PCM
+    var intSamples = floatToPcm(samples);
+    // Create output sample array
+    var output = new Uint8Array(samples.length);
+    // Process each sample with the discrete mu-law encoding algorithm
+    intSamples.forEach((sample, idx) => {
+        // int vars (saves memory I guess?)
+        let sign, exponent, mantissa;
+        // get sign/magnitude
+        sign = (sample >> 8) & 0x80;
+        if (sign != 0) sample = -sample;
+        // mu-law algorithm
+        sample = sample + muLawBias;
+        if (sample > muLawClip) sample = muLawClip;
+        exponent = muLawEncodeTable[(sample>>7) & 0xFF];
+        mantissa = (sample >> (exponent+3)) & 0x0F;
+        output[idx] = ~(sign | (exponent << 4) | mantissa);
+    });
+    // return
+    return output;
+}
+
+/**
+ * Convert mu-law encoded Uint8 samples to Float32 samples
+ * @param {Uint8Array} samples input Mu-law Uint8 samples
+ * @returns {Float32Array} output Float32 samples
+ */
+function decodeMuLaw(samples) {
+    // Create output array
+    var output = new Float32Array(samples.length);
+    // Iterate over input array and decode mu-law
+    samples.forEach((muLawSample, idx) => {
+        // int vars
+        let sign, exponent, mantissa;
+        // do mu-law stuff
+        muLawSample = ~muLawSample;
+        sign = (muLawSample & 0x80);
+        exponent = (muLawSample >> 4) & 0x07;
+        mantissa = muLawSample & 0x0F;
+        sample = muLawDecodeTable[exponent] + (mantissa << (exponent + 3));
+        if (sign != 0) sample = -sample;
+        output[idx] = sample;
+    });
+    // Return float samples
+    return pcmToFloat(output);
+}
+
+/**
+ * Convert float32 samples to 16-bit PCM by clamping to [-1, 1],
+ * multiplying by 32768, and taking the integer portion
+ * @param {Float32Array} samples array of input Float32 samples
+ * @returns {Int16Array} array of output signed PCM samples
+ */
+function floatToPcm(samples) {
+    var output = new Int16Array(samples.length);
+    samples.forEach((itm, idx) => {
+        output[idx] = Math.floor(Math.max(-1, Math.min(itm, 1)) * 32768);
+    });
+    return output;
+}
+
+/**
+ * Convert Int16 PCM samples to Float 32 samples by dividing
+ * 32768 and clamping to [-1, 1]
+ * @param {Int16Array} samples array of input Int16 samples
+ * @returns {Float32Array} array of output Float32 samples
+ */
+function pcmToFloat(samples) {
+    var output = new Float32Array(samples.length);
+    samples.forEach((itm, idx) => {
+        output[idx] = Math.max(-1, Math.min(itm / 32768, 1));
+    });
+    return output;
+}
+
+/***********************************************************************************
     Websocket Client Functions
-*****************************************************/
+***********************************************************************************/
 
 /**
  * Connect to the server's websocket

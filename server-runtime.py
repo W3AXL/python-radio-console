@@ -509,14 +509,16 @@ def handleMicData(dataString):
     Route mic data from the client to the correct output devices
 
     Args:
-        data (string): string of mic data to process
+        data (string): string of mu-law encoded mic data samples to process
     """
     # Split into a list of strings
     stringList = dataString.split(",")
     # Remove empty strings
     stringList[:] = [item for item in stringList if item]
     # Convert string list to floats
-    floatArray = np.asarray(stringList, dtype=np.float32)
+    uint8array = np.asarray(stringList, dtype=np.uint8)
+    # Decode mu-law to float32
+    floatArray = decodeMuLaw(uint8array)
     micSampleQueue.put_nowait(floatArray)
 
 def handleSpkrData(in_data):
@@ -527,13 +529,15 @@ def handleSpkrData(in_data):
     global spkrBufferSize
     
     # convert from whatever the hell format pyaudio uses to a numpy float32 array
-    data = np.fromstring(in_data, dtype=np.float32)
+    floatArray = np.frombuffer(in_data, dtype=np.float32)
+    # Convert to uint8 array of mu-law encoded samples
+    muLawArray = encodeMuLaw(floatArray)
     # this is allegedly a super-fast way to turn a float array into a comma-separated string
     # we use 4 decimals of precision, just like the mic audio in microphone-processor.js
-    dataString = ','.join(['%.4f' % num for num in data])
+    dataString = ','.join([str(num) for num in muLawArray])
     # add this dataString to the buffer
     spkrBufferString += dataString
-    spkrBufferSize += len(data)
+    spkrBufferSize += len(muLawArray)
 
     # Send the buffer string if it's big enough
     if spkrBufferSize >= 128 * audioBufferSize:
@@ -543,6 +547,107 @@ def handleSpkrData(in_data):
         # clear the buffer
         spkrBufferString = ""
         spkrBufferSize = 0
+
+"""-------------------------------------------------------------------------------
+    Audio Encoding/Decoding Functions (G.711/Mu-Law Implementation)
+
+    adapted from https://github.com/rochars/alawmulaw/blob/master/lib/mulaw.js
+-------------------------------------------------------------------------------"""
+
+muLawBias = 0x84
+muLawClip = 32635
+
+muLawEncodeTable = [
+    0,0,1,1,2,2,2,2,3,3,3,3,3,3,3,3,
+    4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,
+    5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,
+    5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,
+    6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,
+    6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,
+    6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,
+    6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,
+    7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,
+    7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,
+    7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,
+    7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,
+    7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,
+    7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,
+    7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,
+    7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7
+]
+
+muLawDecodeTable = [0,132,396,924,1980,4092,8316,16764]
+
+def decodeMuLaw(muLawSamples):
+    """
+    Decode 8-bit mu-law samples to 32-bit floats
+
+    Args:
+        samples (Uint8[]): array of Uint8 samples
+
+    Returns:
+        np.float32[]: array of float samples
+    """    
+
+    # create output int16 numpy array
+    output = np.zeros(len(muLawSamples), dtype=np.int16)
+
+    # iterate through each sample and decode from Uint8 to Int16
+    for idx, muLawSample in enumerate(muLawSamples):
+        # make sure we have a python uint8
+        muLawSample = muLawSample.astype(np.uint8).item()
+        # Do the decoding
+        muLawSample = ~muLawSample
+        sign = (muLawSample & 0x80)
+        exponent = (muLawSample >> 4) & 0x07
+        mantissa = muLawSample & 0x0f
+        sample = muLawDecodeTable[exponent] + (mantissa << (exponent + 3))
+        if (sign != 0): sample = -sample
+        output[idx] = sample
+
+    # convert to float32 from int16 and return
+    return output.astype(np.float32, order='C') / 32768.0
+
+def encodeMuLaw(samples):
+    """
+    Encode Float32 samples to 8-bit mu-law samples
+
+    Args:
+        samples (np.float32[]): float32 array of samples
+
+    Returns:
+        np.uint8[]: array of 8-bit mu-law samples
+    """        
+
+    # create output uint8 array
+    output = np.zeros(len(samples), dtype=np.uint8)
+
+    # convert float32 to int16
+    int16samples = np.zeros(len(samples), dtype=np.int16)
+    for idx, sample in enumerate(samples):
+        i = sample * 32768
+        if i > 32767: i = 32767
+        if i < -32767: i = -32767
+        int16samples[idx] = i
+
+    # iterate through samples and encode
+    for idx, sample in enumerate(int16samples):
+        # Convert numpy int16 to python int16 so we can do bitwise stuff
+        sample = sample.item()
+
+        # Do the encoding stuff
+        sign = (sample >> 8) & 0x80
+        if (sign != 0): sample = -sample
+        sample = sample + muLawBias
+        if (sample > muLawClip): sample = muLawClip
+        exponent = muLawEncodeTable[(sample >> 7) & 0xff]
+        mantissa = (sample >> (exponent + 3)) & 0x0f
+        muLawSample = ~(sign | (exponent << 4) | mantissa)
+
+        output[idx] = muLawSample
+
+    return output
+        
 
 """-------------------------------------------------------------------------------
     Websocket Server Functions
@@ -745,6 +850,66 @@ def startServer():
                                  ssl_version=ssl.PROTOCOL_TLS)
     # start thread for HTTPS server
     httpThread = threading.Thread(target=httpServer.serve_forever, daemon=True).start()
+
+"""-------------------------------------------------------------------------------
+    Utility Functions
+-------------------------------------------------------------------------------"""
+
+BITMASK = 1
+NIBMASK = 0xF
+BYTEMASK = 0xFF
+
+NIBSHIFT = 4
+BYTESHIFT = 8
+
+def getLsb(int_numb): ##returns position of the bit not the value of the bit
+    if int_numb == 0 : return 0
+    pos = 0
+    while 1:
+        if int_numb&(BITMASK<<pos)!=0:return pos+1
+        pos+=1
+
+def getMsb(int_numb):
+    
+    mask    = 0x8000000000000000
+    chk_msk = 0xff00000000000000
+    pos = 64
+    while 1:
+        
+        if int_numb&chk_msk==0:
+            chk_msk     >>= BYTESHIFT
+            mask        >>= BYTESHIFT
+            pos         -=  BYTESHIFT
+        else:
+            
+            if int_numb&mask==0:
+                mask >>= BITMASK
+                pos   -= BITMASK
+            else:
+                break
+        
+        if pos == 0:break
+    return pos
+
+def bytemask(int_numb,mask=None):
+    msk = 0
+    i = 0
+    while 1:
+        
+        msk += BYTEMASK<<(i*8)
+            
+        if int_numb&msk == int_numb:
+            return msk
+        i+=1
+
+def twosCompliment(int_numb):
+    if not int_numb: return ~int_numb
+    
+    lsb = getLsb(int_numb)
+    msb = getMsb(int_numb)
+    mask = ( 1<<lsb )-1
+    mask ^= ( 1<<msb )-1
+    return int_numb^mask
 
 """-------------------------------------------------------------------------------
     Main Runtime

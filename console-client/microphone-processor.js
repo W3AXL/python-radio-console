@@ -13,13 +13,8 @@ registerProcessor('microphone-processor', class extends AudioWorkletProcessor {
     process(inputs, outputs, parameters) {
         // get first channel of first input (ignore the others, if any, since we only want mono mic audio)
         const inputData = inputs[0][0];
-        // Convert the Float32Array to an array string, rounded to 4 decimal places
-        var dataString = "";
-        inputData.forEach(function(element) {
-            dataString += (element.toFixed(4) + ",");
-        });
         // Send this data back to the main script via the port
-        this.port.postMessage(dataString);
+        this.port.postMessage(inputData);
         return true;
     }
 
