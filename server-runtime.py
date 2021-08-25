@@ -7,6 +7,7 @@ import threading
 import time
 import json
 import queue
+import audioop
 
 # TCP Socket Server
 import websockets
@@ -75,7 +76,9 @@ messageQueue = asyncio.Queue()
 
 # Audio globals
 audioSampleRate = None
-audioBufferSize = 4   # hardcoded, needs to be the same as the buffer sizes in the javascript(s)
+
+spkrBufferSize = 64     # these must be the same size as the ones called out in the javascript client
+micBufferSize = 16
 
 # Client mic input vars
 micSampleQueue = queue.Queue()
@@ -83,7 +86,7 @@ micSampleQueue = queue.Queue()
 # Radio spkr output vars
 spkrSampleQueue = queue.Queue()
 spkrBufferString = ""
-spkrBufferSize = 0
+spkrBufferLength = 0
 
 # Test input & output audio streams
 micStream = None
@@ -431,7 +434,7 @@ def setupSound():
         rate=audioSampleRate,
         output=True,
         stream_callback=micCallback,
-        frames_per_buffer=128 * audioBufferSize
+        frames_per_buffer=128 * micBufferSize
     )
     # Create radio speaker stream
     spkrStream = pa.open(
@@ -441,7 +444,7 @@ def setupSound():
         input=True,
         input_device_index=4,
         stream_callback=spkrCallback,
-        frames_per_buffer=128 * audioBufferSize
+        frames_per_buffer=128 * spkrBufferSize
     )
     # Start streams
     logger.logInfo("Starting audio streams")
@@ -526,6 +529,7 @@ def handleSpkrData(in_data):
     Get the speaker data from the pyaudio callback, add it to the buffer string, and send & clear the buffer if it's big enough
     """
     global spkrBufferString
+    global spkrBufferLength
     global spkrBufferSize
     
     # convert from whatever the hell format pyaudio uses to a numpy float32 array
@@ -537,16 +541,16 @@ def handleSpkrData(in_data):
     dataString = ','.join([str(num) for num in muLawArray])
     # add this dataString to the buffer
     spkrBufferString += dataString
-    spkrBufferSize += len(muLawArray)
+    spkrBufferLength += len(muLawArray)
 
     # Send the buffer string if it's big enough
-    if spkrBufferSize >= 128 * audioBufferSize:
+    if spkrBufferLength >= 128 * spkrBufferSize:
         # send this data string
         spkrSampleQueue.put_nowait(spkrBufferString)
         serverLoop.call_soon_threadsafe(messageQueue.put_nowait,"speaker")
         # clear the buffer
         spkrBufferString = ""
-        spkrBufferSize = 0
+        spkrBufferLength = 0
 
 """-------------------------------------------------------------------------------
     Audio Encoding/Decoding Functions (G.711/Mu-Law Implementation)

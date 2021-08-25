@@ -21,8 +21,9 @@ var serverSocket = null;
 var audio = {
     // Audio context
     context: null,
-    // length of buffer in number of 128-sample blocks
-    bufferLength: 4,
+    // length of buffers in number of 128-sample blocks (these must be the same as the python)
+    spkrBufferSize: 64,
+    micBufferSize: 16,
     // desired mic sample rate to send to server
     micSamplerateTarget: 16000,
     // Input device, buffer, resampler, and processor
@@ -34,7 +35,7 @@ var audio = {
     // Output device, buffer, and processor
     output: null,
     outputBuffer: null,
-    outputProcessor: null
+    outputProcessor: null,
 }
 
 testInput = null,
@@ -723,7 +724,7 @@ function sendMicData(data) {
         audio.inputBuffer += dataString;
         audio.inputBufferSize += 1;
         // Push data if buffer is full
-        if (audio.inputBufferSize >= audio.bufferLength) {
+        if (audio.inputBufferSize >= audio.micBufferSize) {
             // Send string
             serverSocket.send("micAudio:" + audio.inputBuffer);
             // Clear buffer
@@ -735,11 +736,11 @@ function sendMicData(data) {
 
 function getSpkrData(dataString) {
         // Convert the comma-separated string of mu-law samples to a Uint8Array
-        var spkrMuLawData = Uint8Array.from(dataString.split(","));
+        const spkrMuLawData = Uint8Array.from(dataString.split(","));
         // Decode to Float32Array
-        var spkrData = decodeMuLaw(spkrMuLawData);
+        const spkrData = decodeMuLaw(spkrMuLawData);
         // Create a new buffer and source to play the received data
-        var buffer = audio.context.createBuffer(1, spkrData.length, audio.context.sampleRate);
+        const buffer = audio.context.createBuffer(1, spkrData.length, audio.context.sampleRate);
         buffer.copyToChannel(spkrData, 0);
         var source = audio.context.createBufferSource();
         source.buffer = buffer;
