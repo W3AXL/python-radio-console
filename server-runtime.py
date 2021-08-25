@@ -26,6 +26,7 @@ import uuid
 
 # Sound stuff
 import pyaudio
+from mulaw import MuLaw
 
 # Numpy (used for sound processing)
 import numpy as np
@@ -75,10 +76,13 @@ serverLoop = None
 messageQueue = asyncio.Queue()
 
 # Audio globals
-audioSampleRate = None
+audioTransferSampleRate = 16000     # this is the samplerate used for audio transfer across the websocket
 
-spkrBufferSize = 64     # these must be the same size as the ones called out in the javascript client
-micBufferSize = 16
+# Buffer durations in s (these must match the javascript variables)
+spkrBufferDur = 0.1              
+micBufferDur = 0.1
+
+spkrThread = None
 
 # Client mic input vars
 micSampleQueue = queue.Queue()
@@ -415,97 +419,26 @@ def getDeviceName(idx):
     """
     return pa.get_device_info_by_host_api_device_index(0, idx).get('name')
 
-def setupSound():
+def startSound():
     """
-    Setup test sound device for mic loopback
+    Start audio devices for each connected radio
     """
-    global micStream
+    
+    # Start audio on each radio device
+    for radio in config.RadioList:
+        radio.startAudio(pa, audioTransferSampleRate, micBufferDur * 2, spkrBufferDur* 2)
 
-    # Clear buffer (with mutex)
-    with micSampleQueue.mutex:
-        logger.logInfo("clearing mic sample queue")
-        micSampleQueue.queue.clear()
-
-    logger.logInfo("Setting up test audio devices")
-    # Create client mic stream
-    micStream = pa.open(
-        format=pyaudio.paFloat32,
-        channels=1,
-        rate=audioSampleRate,
-        output=True,
-        stream_callback=micCallback,
-        frames_per_buffer=128 * micBufferSize
-    )
-    # Create radio speaker stream
-    spkrStream = pa.open(
-        format=pyaudio.paFloat32,
-        channels=1,
-        rate=audioSampleRate,
-        input=True,
-        input_device_index=4,
-        stream_callback=spkrCallback,
-        frames_per_buffer=128 * spkrBufferSize
-    )
-    # Start streams
-    logger.logInfo("Starting audio streams")
-    micStream.start_stream()
-    spkrStream.start_stream()
+    # Start the speaker audio handler
+    spkrThread = threading.Thread(target=handleSpkrData, daemon=True)
+    spkrThread.start()
 
 def stopSound():
     """
-    Cleans up audio buffer on client disconnect
+    Stops audio on each connected radio
     """
 
-    logger.logInfo("Cleaning up test audio device buffer")
-
-    # Clear buffer (with mutex)
-    with micSampleQueue.mutex:
-        logger.logInfo("clearing mic sample queue")
-        micSampleQueue.queue.clear()
-
-def micCallback(in_data, frame_count, time_info, status):
-    """
-    Callback for client mic -> radio output device
-
-    Args:
-        in_data (array): not used for output device
-        frame_count (int): number of frames to process
-        time_info (time_info): not used
-        status (pyaudio.status): pyaudio status
-
-    Returns:
-        [type]: [description]
-    """
-    # Check if we have a status
-    if status:
-        logger.logWarn(status)
-    # Only get samples if we have a buffer
-    if micSampleQueue.qsize() > 2:
-        #logger.logInfo("outputCallback(), Q size: {}".format(micSampleQueue.qsize()))
-        data = micSampleQueue.get_nowait()
-    else:
-        data = np.zeros(frame_count)
-    return (data, pyaudio.paContinue)
-
-def spkrCallback(in_data, frame_count, time_info, status):
-    """
-    Callback for radio spkr -> client input device
-
-    Args:
-        in_data ([type]): [description]
-        frame_count ([type]): [description]
-        time_info ([type]): [description]
-        status ([type]): [description]
-    """
-    # log status if we have one
-    if status:
-        logger.logWarn(status)
-        
-    # add audio to queue if radio is receiving
-    if config.RadioList[0].state == RadioState.Receiving:
-        handleSpkrData(in_data)
-
-    return (None, pyaudio.paContinue)
+    for radio in config.RadioList:
+        radio.stopAudio()
 
 def handleMicData(dataString):
     """
@@ -521,137 +454,55 @@ def handleMicData(dataString):
     # Convert string list to floats
     uint8array = np.asarray(stringList, dtype=np.uint8)
     # Decode mu-law to float32
-    floatArray = decodeMuLaw(uint8array)
+    floatArray = MuLaw.decode(uint8array)
     micSampleQueue.put_nowait(floatArray)
 
-def handleSpkrData(in_data):
+
+def handleSpkrData():
     """
-    Get the speaker data from the pyaudio callback, add it to the buffer string, and send & clear the buffer if it's big enough
+    This is an infinite loop, to be run in a thread
+
+    Get the speaker data from each connected radio, add it to the buffer string, and send & clear the buffer if it's big enough
     """
     global spkrBufferString
     global spkrBufferLength
-    global spkrBufferSize
-    
-    # convert from whatever the hell format pyaudio uses to a numpy float32 array
-    floatArray = np.frombuffer(in_data, dtype=np.float32)
-    # Convert to uint8 array of mu-law encoded samples
-    muLawArray = encodeMuLaw(floatArray)
-    # this is allegedly a super-fast way to turn a float array into a comma-separated string
-    # we use 4 decimals of precision, just like the mic audio in microphone-processor.js
-    dataString = ','.join([str(num) for num in muLawArray])
-    # add this dataString to the buffer
-    spkrBufferString += dataString
-    spkrBufferLength += len(muLawArray)
+    global spkrBufferDur
 
-    # Send the buffer string if it's big enough
-    if spkrBufferLength >= 128 * spkrBufferSize:
-        # send this data string
-        spkrSampleQueue.put_nowait(spkrBufferString)
-        serverLoop.call_soon_threadsafe(messageQueue.put_nowait,"speaker")
-        # clear the buffer
-        spkrBufferString = ""
-        spkrBufferLength = 0
+    while True:
 
-"""-------------------------------------------------------------------------------
-    Audio Encoding/Decoding Functions (G.711/Mu-Law Implementation)
-
-    adapted from https://github.com/rochars/alawmulaw/blob/master/lib/mulaw.js
--------------------------------------------------------------------------------"""
-
-muLawBias = 0x84
-muLawClip = 32635
-
-muLawEncodeTable = [
-    0,0,1,1,2,2,2,2,3,3,3,3,3,3,3,3,
-    4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,
-    5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,
-    5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,
-    6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,
-    6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,
-    6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,
-    6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,
-    7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,
-    7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,
-    7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,
-    7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,
-    7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,
-    7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,
-    7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,
-    7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7
-]
-
-muLawDecodeTable = [0,132,396,924,1980,4092,8316,16764]
-
-def decodeMuLaw(muLawSamples):
-    """
-    Decode 8-bit mu-law samples to 32-bit floats
-
-    Args:
-        samples (Uint8[]): array of Uint8 samples
-
-    Returns:
-        np.float32[]: array of float samples
-    """    
-
-    # create output int16 numpy array
-    output = np.zeros(len(muLawSamples), dtype=np.int16)
-
-    # iterate through each sample and decode from Uint8 to Int16
-    for idx, muLawSample in enumerate(muLawSamples):
-        # make sure we have a python uint8
-        muLawSample = muLawSample.astype(np.uint8).item()
-        # Do the decoding
-        muLawSample = ~muLawSample
-        sign = (muLawSample & 0x80)
-        exponent = (muLawSample >> 4) & 0x07
-        mantissa = muLawSample & 0x0f
-        sample = muLawDecodeTable[exponent] + (mantissa << (exponent + 3))
-        if (sign != 0): sample = -sample
-        output[idx] = sample
-
-    # convert to float32 from int16 and return
-    return output.astype(np.float32, order='C') / 32768.0
-
-def encodeMuLaw(samples):
-    """
-    Encode Float32 samples to 8-bit mu-law samples
-
-    Args:
-        samples (np.float32[]): float32 array of samples
-
-    Returns:
-        np.uint8[]: array of 8-bit mu-law samples
-    """        
-
-    # create output uint8 array
-    output = np.zeros(len(samples), dtype=np.uint8)
-
-    # convert float32 to int16
-    int16samples = np.zeros(len(samples), dtype=np.int16)
-    for idx, sample in enumerate(samples):
-        i = sample * 32768
-        if i > 32767: i = 32767
-        if i < -32767: i = -32767
-        int16samples[idx] = i
-
-    # iterate through samples and encode
-    for idx, sample in enumerate(int16samples):
-        # Convert numpy int16 to python int16 so we can do bitwise stuff
-        sample = sample.item()
-
-        # Do the encoding stuff
-        sign = (sample >> 8) & 0x80
-        if (sign != 0): sample = -sample
-        sample = sample + muLawBias
-        if (sample > muLawClip): sample = muLawClip
-        exponent = muLawEncodeTable[(sample >> 7) & 0xff]
-        mantissa = (sample >> (exponent + 3)) & 0x0f
-        muLawSample = ~(sign | (exponent << 4) | mantissa)
-
-        output[idx] = muLawSample
-
-    return output
+        outputFloatArray = None
+        gotSamples = False
         
+        # Get samples from each radio and add to the output array
+        for radio in config.RadioList:
+            try:
+                if radio.spkrQueue.qsize() > 0:
+                    if not outputFloatArray:
+                        gotSamples = True
+                        outputFloatArray = radio.spkrQueue.get_nowait()
+                    else:
+                        outputFloatArray = np.add(outputFloatArray, radio.spkrQueue.get_nowait())
+            except queue.Empty:
+                logger.logWarn("Radio {} queue empty".format(radio.name))
+
+        if gotSamples:
+            # Convert to uint8 array of mu-law encoded samples
+            muLawArray = MuLaw.encode(outputFloatArray)
+            # this is allegedly a super-fast way to turn a float array into a comma-separated string
+            dataString = ','.join([str(num) for num in muLawArray])
+            # add this dataString to the buffer
+            spkrBufferString += dataString
+            spkrBufferLength += len(muLawArray)
+
+            # Send the buffer string if it's big enough
+            if spkrBufferLength >= spkrBufferDur * audioTransferSampleRate:
+                # send this data string
+                spkrSampleQueue.put_nowait(spkrBufferString)
+                serverLoop.call_soon_threadsafe(messageQueue.put_nowait,"speaker")
+                # clear the buffer
+                spkrBufferString = ""
+                spkrBufferLength = 0
+
 
 """-------------------------------------------------------------------------------
     Websocket Server Functions
@@ -746,16 +597,9 @@ async def consumer_handler(websocket, path):
             #   Audio data messages
             #
 
-            elif data[0:8] == "micRate:":
-                # import globals
-                global audioSampleRate
-                # set globals
-                audioSampleRate = int(data[8:])
-                logger.logInfo("Got client audio samplerate: {}".format(audioSampleRate))
-                # Setup mic input stream if not already configured
-                if not micStream or not spkrStream:
-                    logger.logInfo("Stream(s) not started, setting up")
-                    setupSound()
+            elif data == "!startAudio":
+                logger.logInfo("Starting radio audio devices")
+                startSound()
 
             elif data[0:9] == "micAudio:":
                 micData = data[9:]
@@ -853,7 +697,8 @@ def startServer():
                                  keyfile='certs/localhost.key',
                                  ssl_version=ssl.PROTOCOL_TLS)
     # start thread for HTTPS server
-    httpThread = threading.Thread(target=httpServer.serve_forever, daemon=True).start()
+    httpThread = threading.Thread(target=httpServer.serve_forever, daemon=True)
+    httpThread.start()
 
 """-------------------------------------------------------------------------------
     Utility Functions

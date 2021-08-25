@@ -1,9 +1,19 @@
 
 from interface.xtl import XTL
 
+import queue
+
 from radioState import RadioState
 
 from logger import Logger
+
+from mulaw import MuLaw
+
+import samplerate as sr
+
+import pyaudio
+
+import numpy as np
 
 class Radio():
     """Radio Class for generic radio control
@@ -69,6 +79,8 @@ class Radio():
         self.talkaround = False
         self.monitor = False
         self.lowpower = False
+        self.selected = False
+        self.volume = 0.5
 
         # Radio interface class
         self.interface = None
@@ -82,6 +94,10 @@ class Radio():
         # Create logger
         self.logger = Logger()
 
+        # Speaker & Mic Sample Queues
+        self.spkrQueue = queue.Queue()
+        self.micQueue = queue.Queue()
+
     def connect(self, statusCallback, reset=True):
         """Connect to radio using specified communication scheme
 
@@ -94,6 +110,7 @@ class Radio():
         if self.ctrlMode == "SB9600-XTL-O":
             self.interface = XTL(self.index, self.ctrlPort, 'O5', statusCallback)
         
+        # Connect to radio (optional reset)
         self.interface.connect(reset=reset)
 
     def disconnect(self):
@@ -101,22 +118,10 @@ class Radio():
         Disconnect the radio
         """
         self.interface.disconnect()
-        
-    def getStatus(self):
-        """
-        Get status from the radio interface object
-        """
 
-        if self.state != self.interface.state:
-            self.logger.logInfo("{} status now {} ({})".format(self.name, self.interface.state.name, self.interface.state.value))
-
-        self.state = self.interface.state
-        self.chan = self.interface.chanText
-        self.zone = self.interface.zoneText
-        self.scanning = self.interface.scanning
-        self.talkaround = self.interface.talkaround
-        self.monitor = self.interface.monitor
-        self.lowpower = self.interface.lowpower
+    """-------------------------------------------------------------------------------
+        Radio command functions (shared by all interface types)
+    -------------------------------------------------------------------------------"""
 
     def transmit(self, transmit):
         """
@@ -165,6 +170,26 @@ class Radio():
         Toggle state of talkaround
         """
         self.interface.toggleDirect()
+
+    """-------------------------------------------------------------------------------
+        Radio Status Functions
+    -------------------------------------------------------------------------------"""
+
+    def getStatus(self):
+        """
+        Get status from the radio interface object
+        """
+
+        if self.state != self.interface.state:
+            self.logger.logInfo("{} status now {} ({})".format(self.name, self.interface.state.name, self.interface.state.value))
+
+        self.state = self.interface.state
+        self.chan = self.interface.chanText
+        self.zone = self.interface.zoneText
+        self.scanning = self.interface.scanning
+        self.talkaround = self.interface.talkaround
+        self.monitor = self.interface.monitor
+        self.lowpower = self.interface.lowpower
 
     def parseState(self):
         """Return current state of radio
@@ -268,3 +293,132 @@ class Radio():
                      radioDict['rxDeviceIdx'],
                      radioDict['sigMode'],
                      radioDict['sigId'])
+
+    """-------------------------------------------------------------------------------
+        Sound Device Functions
+    -------------------------------------------------------------------------------"""
+
+    def startAudio(self, pa, transferSampleRate, micBufferDur, spkrBufferDur):
+        """
+        Start PyAudio devices for radio
+
+        Args:
+            pa (pyaudio): PyAudio instance
+            samplerate (int): desired samplerate for samples sent to queue
+            micBufferDur (float): size of mic buffer in s
+            spkrBufferDur (float): size of speaker buffer in s
+        """
+
+        # Clear buffers
+        self.clearMicQueue()
+        self.clearSpkrQueue()
+
+        # Get resampling ratios
+        self.micResamplingRatio = 48000 / transferSampleRate
+        self.spkrResamplingRatio = transferSampleRate / 48000
+
+        # Create mic stream
+        self.micStream = pa.open(
+            format = pyaudio.paFloat32,
+            channels = 1,
+            rate = 48000,
+            output = True,
+            stream_callback = self.micCallback,
+            frames_per_buffer = int(micBufferDur * 48000)
+        )
+
+        # Create speaker stream
+        self.spkrStream = pa.open(
+            format = pyaudio.paFloat32,
+            channels = 1,
+            rate = 48000,
+            input = True,
+            input_device_index = self.rxDev,
+            stream_callback = self.spkrCallback,
+            frames_per_buffer = int(spkrBufferDur * 48000)
+        )
+
+        # Start streams
+        self.logger.logInfo("Starting audio streams for {}".format(self.name))
+        self.micStream.start_stream()
+        self.spkrStream.start_stream()
+
+    def micCallback(self, in_data, frame_count, time_info, status):
+        """
+        Callback for client mic -> radio output device
+
+        Args:
+            in_data (array): not used for output device
+            frame_count (int): number of frames to process
+            time_info (time_info): not used
+            status (pyaudio.status): pyaudio status
+
+        Returns:
+            constant: paContinue
+        """
+        # Check if we have a status
+        if status:
+            self.logger.logWarn(status)
+
+        # Only get samples if we have a buffer
+        if self.micQueue.qsize() > 2:
+            #logger.logInfo("outputCallback(), Q size: {}".format(micSampleQueue.qsize()))
+            data = self.micQueue.get_nowait()
+        else:
+            data = np.zeros(frame_count)
+            
+        return (None, pyaudio.paContinue)
+
+    def spkrCallback(self, in_data, frame_count, time_info, status):
+        """
+        Callback for radio spkr -> client input device
+        fires whenever new speaker data is available (all the time)
+
+        Args:
+            in_data ([type]): [description]
+            frame_count ([type]): [description]
+            time_info ([type]): [description]
+            status ([type]): [description]
+        """
+
+        # log status if we have one
+        if status:
+            self.logger.logWarn(status)
+
+        # only send speaker data if we're receiving
+        if self.state == RadioState.Receiving: 
+            # convert pyaudio samples to numpy float32 array and apply volume
+            floatArray = np.frombuffer(in_data, dtype=np.float32) * self.volume
+            # resample to desired sample rate
+            resampled = sr.resample(floatArray, self.spkrResamplingRatio, 'sinc_fastest')
+            # add samples to queue
+            self.spkrQueue.put_nowait(resampled)
+
+        return (None, pyaudio.paContinue)
+
+    def stopAudio(self):
+        """
+        Stop audio devices for radio
+        """
+        self.micStream.stop_stream()
+        self.spkrStream.stop_stream()
+        self.clearMicQueue()
+        self.clearSpkrQueue()
+
+    def clearMicQueue(self):
+        """
+        Clear the mic queue cleanly
+        """
+        with self.micQueue.mutex:
+            self.micQueue.queue.clear()
+            self.micQueue.all_tasks_done.notify_all()
+            self.micQueue.unfinished_tasks = 0
+
+    def clearSpkrQueue(self):
+        """
+        Clear the speaker queue cleanly
+        """
+        with self.spkrQueue.mutex:
+            self.spkrQueue.queue.clear()
+            self.spkrQueue.all_tasks_done.notify_all()
+            self.spkrQueue.unfinished_tasks = 0

@@ -158,6 +158,10 @@ class XTL:
                 # Read message
                 msg = self.bus.read(self.bus.ser.in_waiting)
 
+                if len(msg) < 5:
+                    self.logger.logWarn("Skipping invalid message with length {}".format(len(msg)))
+                    continue
+
                 # Handle SBEP first
                 if self.inSBEP:
                     # reset
@@ -214,35 +218,35 @@ class XTL:
         Monitor button
         """
         # Press nuis button
-        self.pressButton(self.O5Address.button_map["btn_key_1"], 0.06) 
+        self.pressButton(self.O5Address.button_map["btn_key_1"], 0.1) 
 
     def nuisanceDelete(self):
         """
         Nuisance delete button
         """
         # Press nuis button
-        self.pressButton(self.O5Address.button_map["btn_key_2"], 0.06)
+        self.pressButton(self.O5Address.button_map["btn_key_2"], 0.1)
 
     def togglePower(self):
         """
         Power button
         """
         # Press nuis button
-        self.pressButton(self.O5Address.button_map["btn_key_3"], 0.06)
+        self.pressButton(self.O5Address.button_map["btn_key_3"], 0.1)
 
     def toggleScan(self):
         """
         Change state of scan by sending softkey button to toggle
         """
         # Press scan button
-        self.pressButton(self.O5Address.button_map['btn_key_4'],0.06)
+        self.pressButton(self.O5Address.button_map['btn_key_4'],0.1)
 
     def toggleDirect(self):
         """
         DIR button
         """
         # Press scan button
-        self.pressButton(self.O5Address.button_map['btn_key_5'],0.06)
+        self.pressButton(self.O5Address.button_map['btn_key_5'],0.1)
 
     def processSBEP(self, msg):
         """

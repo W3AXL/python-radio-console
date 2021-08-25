@@ -21,11 +21,11 @@ var serverSocket = null;
 var audio = {
     // Audio context
     context: null,
-    // length of buffers in number of 128-sample blocks (these must be the same as the python)
-    spkrBufferSize: 64,
-    micBufferSize: 16,
-    // desired mic sample rate to send to server
-    micSamplerateTarget: 16000,
+    // length of buffers in s (these must match the python script)
+    spkrBufferDur: 0.1,
+    micBufferDur: 0.1,
+    // audio transfer sample rate
+    transferSamplerate: 16000,
     // Input device, buffer, resampler, and processor
     input: null,
     inputStream: null,
@@ -684,9 +684,6 @@ function startAudioDevices() {
 function startMicrophone(stream) {
     console.log("Starting microphone");
 
-    // Send samplerate info of context to server
-    serverSocket.send("micRate:" + String(audio.context.sampleRate));
-
     // Create an empty buffer
     audio.inputBuffer = "";
 
@@ -704,6 +701,9 @@ function startMicrophone(stream) {
         // connect everything together
         audio.input.connect(audio.inputProcessor);
     });
+
+    // Tell the server we're ready to do audio things
+    serverSocket.send("!startAudio");
 }
 
 /**
@@ -724,7 +724,7 @@ function sendMicData(data) {
         audio.inputBuffer += dataString;
         audio.inputBufferSize += 1;
         // Push data if buffer is full
-        if (audio.inputBufferSize >= audio.micBufferSize) {
+        if (audio.inputBufferSize >= audio.micBufferDur * audio.transferSamplerate) {
             // Send string
             serverSocket.send("micAudio:" + audio.inputBuffer);
             // Clear buffer
@@ -736,12 +736,15 @@ function sendMicData(data) {
 
 function getSpkrData(dataString) {
         // Convert the comma-separated string of mu-law samples to a Uint8Array
-        const spkrMuLawData = Uint8Array.from(dataString.split(","));
+        const spkrMuLawData = Uint8Array.from(dataString.split(','));
         // Decode to Float32Array
         const spkrData = decodeMuLaw(spkrMuLawData);
+        // Resample to client samplerate
+        const resampled = waveResampler.resample(spkrData, audio.transferSamplerate, audio.context.sampleRate, {method: "point"});
+        const resampledFloat32 = Float32Array.from(resampled);
         // Create a new buffer and source to play the received data
-        const buffer = audio.context.createBuffer(1, spkrData.length, audio.context.sampleRate);
-        buffer.copyToChannel(spkrData, 0);
+        const buffer = audio.context.createBuffer(1, resampledFloat32.length, audio.context.sampleRate);
+        buffer.copyToChannel(resampledFloat32, 0);
         var source = audio.context.createBufferSource();
         source.buffer = buffer;
         source.connect(audio.context.destination);
