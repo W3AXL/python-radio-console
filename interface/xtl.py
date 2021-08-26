@@ -55,6 +55,18 @@ class XTL:
             'text_softkeys': 0x02
         }
 
+        # Strings to ignore when parsing channel text
+        ignored_strings = [
+            "SCAN ON",
+            "SCAN OFF",
+            "HIGH POWER",
+            "LOW POWER",
+            "MONITOR ON",
+            "MONITOR OFF",
+            "DIRECT MODE",
+            "REPEATER MODE"
+        ]
+
     class W9Address:
         """
         SB9600/SBEP addresses for W9 control head
@@ -330,13 +342,13 @@ class XTL:
             # Handle based on display subdevice
             if subdev == self.O5Address.display_subdevs['text_zone']:
                 newText = data.rstrip().decode('ascii')
-                if newText != self.zoneText:
+                if newText != self.zoneText and not any(s in newText for s in self.O5Address.ignored_strings):
                     self.zoneText = newText
                     self.newStatus = True
                 return
             elif subdev == self.O5Address.display_subdevs['text_channel']:
                 newText = data.rstrip().decode('ascii')
-                if newText != self.chanText:
+                if newText != self.chanText and not any(s in newText for s in self.O5Address.ignored_strings):
                     self.chanText = newText
                     self.newStatus = True
                 return

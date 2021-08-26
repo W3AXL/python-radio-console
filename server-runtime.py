@@ -458,8 +458,8 @@ def handleMicData(dataString):
     # Put to queue
     micSampleQueue.put_nowait(floatArray)
     # Print
-    logger.logInfo("Got {} mic samples from client".format(len(floatArray)))
-    logger.logInfo("Put mic samples in queue, new size {}".format(micSampleQueue.qsize()))
+    #logger.logInfo("Got {} mic samples from client".format(len(floatArray)))
+    #logger.logInfo("Put mic samples in queue, new size {}".format(micSampleQueue.qsize()))
 
 
 def handleSpkrData():

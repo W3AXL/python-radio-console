@@ -372,7 +372,7 @@ class Radio():
         """
         # Check if we have a status
         if status:
-            self.logger.logWarn(status)
+            self.logger.logWarn("Got PyAudio status: {}".format(status))
 
         # Start with empty data
         data = np.zeros(frame_count).astype(np.float32)
@@ -381,7 +381,7 @@ class Radio():
         if self.micQueue.qsize() > 0:
             # Start TX if we were delayed
             if self.delayedTxStart:
-                self.logger.logInfo("Delayed TX start")
+                #self.logger.logInfo("Delayed TX start")
                 self.delayedTxStart = False
                 self.interface.transmit(True)
             # Get the data (at transfer sample rate, as float32)
@@ -391,7 +391,7 @@ class Radio():
         else:
             # Stop TX if we were delayed
             if self.delayedTxStop:
-                self.logger.logInfo("Delayed TX stop")
+                #self.logger.logInfo("Delayed TX stop")
                 self.delayedTxStop = False
                 self.interface.transmit(False)
             
@@ -411,7 +411,7 @@ class Radio():
 
         # log status if we have one
         if status:
-            self.logger.logWarn(status)
+            self.logger.logWarn("Got PyAudio status: {}".format(status))
 
         # only send speaker data if we're receiving
         if self.state == RadioState.Receiving:
