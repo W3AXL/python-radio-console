@@ -387,7 +387,7 @@ class XTL:
 
 
             # print if we don't actually know what the icon is
-            #self.printMsg("SBEP Icon","{} ({}) icon {}".format(icon, hex(msg[3]), state))
+            self.printMsg("SBEP Icon","{} ({}) icon {}".format(icon, hex(msg[3]), state))
             return
 
         # Fallback to printing raw message
