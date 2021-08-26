@@ -73,14 +73,12 @@ class Radio():
         self.zone = ""
         self.chan = ""
         self.lastid = ""
-        self.muted = False
         self.error = False
         self.scanning = False
         self.talkaround = False
         self.monitor = False
         self.lowpower = False
         self.selected = False
-        self.volume = 0.5
 
         # Radio interface class
         self.interface = None
@@ -97,6 +95,10 @@ class Radio():
         # Speaker & Mic Sample Queues
         self.spkrQueue = queue.Queue()
         self.micQueue = queue.Queue()
+
+        # Volume set from client
+        self.volume = 1.0
+        
 
     def connect(self, statusCallback, reset=True):
         """Connect to radio using specified communication scheme
@@ -243,7 +245,7 @@ class Radio():
             "chan": self.chan,
             "lastid": self.lastid,
             "state": stateText,
-            "muted": self.muted,
+            "muted": self.interface.muted,
             "error": self.error,
             "errorText": errorText,
             "scanning": self.scanning,
@@ -360,14 +362,19 @@ class Radio():
         if status:
             self.logger.logWarn(status)
 
-        # Only get samples if we have a buffer
-        if self.micQueue.qsize() > 2:
-            #logger.logInfo("outputCallback(), Q size: {}".format(micSampleQueue.qsize()))
-            data = self.micQueue.get_nowait()
-        else:
-            data = np.zeros(frame_count)
+        # Start with empty data
+        data = np.zeros(frame_count)
+
+        # Only get samples if we're transmitting
+        if self.state == RadioState.Transmitting:
+            # Only get samples if we have them
+            if self.micQueue.qsize() > 1:
+                # Get the data (at transfer sample rate)
+                floatArray = self.micQueue.get_nowait()
+                # Resample and set data
+                data = sr.resample(floatArray, self.micResamplingRatio, 'sinc_fastest')
             
-        return (None, pyaudio.paContinue)
+        return (data, pyaudio.paContinue)
 
     def spkrCallback(self, in_data, frame_count, time_info, status):
         """
@@ -386,7 +393,7 @@ class Radio():
             self.logger.logWarn(status)
 
         # only send speaker data if we're receiving
-        if self.state == RadioState.Receiving: 
+        if self.state == RadioState.Receiving:
             # convert pyaudio samples to numpy float32 array and apply volume
             floatArray = np.frombuffer(in_data, dtype=np.float32) * self.volume
             # resample to desired sample rate

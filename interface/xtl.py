@@ -9,6 +9,8 @@ from logger import Logger
 
 import time
 
+import queue
+
 class XTL:
 
     class O5Address:
@@ -97,6 +99,7 @@ class XTL:
         self.talkaround = False
         self.monitor = False
         self.lowpower = False
+        self.muted = True
 
         # Logger
         self.logger = Logger()
@@ -114,6 +117,9 @@ class XTL:
         self.bus = sb9600.Serial(self.comPort)
         self.bus.ser.flush()
 
+        # Create queue for serial messages
+        self.msgQueue = queue.Queue()
+
         # SBEP mode switch var
         self.inSBEP = False
         self.sbepSpeed = 0
@@ -122,6 +128,13 @@ class XTL:
         self.listenerThread = threading.Thread(target=self.listen, daemon=True)
         self.doListen = True
         self.listenerThread.start()
+
+        # Create processor thread and start it
+        self.processorThread = threading.Thread(target=self.process, daemon=True)
+        self.doProcess = True
+        self.statusTimer = time.time()
+        self.newStatus = False
+        self.processorThread.start()
 
         # Reset the radio to init all the statuses
         if reset:
@@ -139,6 +152,8 @@ class XTL:
         self.transmit(False)
         # Stop listener thread
         self.doListen = False
+        # Stop processor thread
+        self.doProcess = False
         # Set status to disconnected
         self.state = RadioState.Disconnected
         self.updateStatus()
@@ -147,9 +162,6 @@ class XTL:
     def listen(self):
         """
         Main listener for SB9600 and SBEP messages
-
-        Args:
-            callback (function): [description]
         """
 
         while self.doListen:
@@ -157,31 +169,76 @@ class XTL:
             if self.bus.ser.in_waiting > 0:
                 # Read message
                 msg = self.bus.read(self.bus.ser.in_waiting)
+                # Put into queue
+                self.msgQueue.put_nowait(msg)
+                #self.logger.logInfo("Got msg {}".format(hexlify(msg," ")))
 
-                if len(msg) < 5:
-                    self.logger.logWarn("Skipping invalid message with length {}".format(len(msg)))
-                    continue
+    def process(self):
+        """
+        Main processor for SB9600 and SBEP messages
+        """
 
-                # Handle SBEP first
-                if self.inSBEP:
-                    # reset
-                    self.inSBEP = False
-                    # Process
-                    self.processSBEP(msg)
+        while self.doProcess:
 
-                # Handle SB9600
-                data = self.bus.sb9600_decode(msg)
-                if data:
-                    # Get message content
-                    addr = data["address"]
-                    param1 = data["param1"]
-                    param2 = data["param2"]
-                    func = data["function"]
-                    # Process
-                    self.processSB9600(addr, param1, param2, func)
+            # block until we have a message (this runs in a thread so that's okay)
+            msg = self.msgQueue.get()
 
-                else:
-                    print("SB9600 CRC failure")
+            # throw away invalid messages
+            if len(msg) < 5:
+                self.logger.logWarn("Skipping invalid message with length {}".format(len(msg)))
+                continue
+
+            # Handle SBEP first
+            if self.inSBEP:
+                # reset
+                self.inSBEP = False
+                # Process
+                self.processSBEP(msg)
+
+            # Handle SB9600
+            else:
+
+                # See if there are multiple messages combined and get them first
+                if len(msg) > 5 and len(msg) % 5 == 0:
+                    while len(msg) > 5:
+                        # Get the next message
+                        curMsg = msg[0:5]
+                        # Process it
+                        data = self.bus.sb9600_decode(curMsg)
+                        if data:
+                            # Get message content
+                            addr = data["address"]
+                            param1 = data["param1"]
+                            param2 = data["param2"]
+                            func = data["function"]
+                            # Process
+                            self.processSB9600(addr, param1, param2, func)
+                        else:
+                            print("SB9600 CRC failure")
+                        # Trim that message from the array and repeat
+                        msg = msg[5:]
+
+                # If we only had one message, or we have one left, process it
+                if len(msg) == 5:
+                    # Decode and process the message
+                    data = self.bus.sb9600_decode(msg)
+                    if data:
+                        # Get message content
+                        addr = data["address"]
+                        param1 = data["param1"]
+                        param2 = data["param2"]
+                        func = data["function"]
+                        # Process
+                        self.processSB9600(addr, param1, param2, func)
+                    else:
+                        print("SB9600 CRC failure")
+
+            # Update status if we're past the timer
+            if time.time() > self.statusTimer + 0.1:
+                if self.newStatus:
+                    self.newStatus = False
+                    self.updateStatus()
+        
 
     def updateStatus(self):
         """
@@ -256,6 +313,8 @@ class XTL:
             msg (byte[]): message array of bytes
         """
 
+        #self.logger.logInfo("SBEP msg {}".format(hexlify(msg)))
+
         # get important bits
         address = msg[0]
         subaddr = msg[1]
@@ -273,13 +332,13 @@ class XTL:
                 newText = data.rstrip().decode('ascii')
                 if newText != self.zoneText:
                     self.zoneText = newText
-                    self.updateStatus()  
+                    self.newStatus = True
                 return
             elif subdev == self.O5Address.display_subdevs['text_channel']:
                 newText = data.rstrip().decode('ascii')
                 if newText != self.chanText:
                     self.chanText = newText
-                    self.updateStatus()
+                    self.newStatus = True
                 return
 
         # Display icon update 
@@ -288,41 +347,42 @@ class XTL:
             # get icon
             icon = self.getDisplayIcon(msg[3])
             # get state
-            if opcode == 0x01:
-                state = True
-            else:
+            if opcode == 0x00:
                 state = False
+            else:
+                state = opcode
             # Update proper state
             if iconAddr == self.O5Address.display_icons['scan']:
                 if state != self.scanning:
                     self.scanning = state
-                    self.updateStatus()
+                    self.newStatus = True
                 return
             elif iconAddr == self.O5Address.display_icons['low_power']:
                 if state != self.lowpower:
                     self.lowpower = state
-                    self.updateStatus()
+                    self.newStatus = True
                 return
             elif iconAddr == self.O5Address.display_icons['monitor']:
                 if state != self.monitor:
                     self.monitor = state
-                    self.updateStatus()
+                    self.newStatus = True
                 return
             elif iconAddr == self.O5Address.display_icons['direct']:
                 if state != self.talkaround:
                     self.talkaround = state
-                    self.updateStatus()
+                    self.newStatus = True
                 return
 
+
             # print if we don't actually know what the icon is
-            self.printMsg("SBEP Icon","{} ({}) icon {}".format(icon, hex(msg[3]), state))
+            #self.printMsg("SBEP Icon","{} ({}) icon {}".format(icon, hex(msg[3]), state))
             return
 
         # Fallback to printing raw message
         else:
-            print("RECVD<: SBEP decoded")
-            print("        Raw Msg: {}".format(hexlify(msg, ' ')))
-            print("        Address: {}, Subaddr: {}, Length: {}, Opcode: {}".format(hex(address), hex(subaddr), length, hex(opcode)))
+            #print("RECVD<: SBEP decoded")
+            #print("        Raw Msg: {}".format(hexlify(msg, ' ')))
+            #print("        Address: {}, Subaddr: {}, Length: {}, Opcode: {}".format(hex(address), hex(subaddr), length, hex(opcode)))
             return
 
     def processSB9600(self, address, param1, param2, function):
@@ -335,6 +395,8 @@ class XTL:
             param2 (byte): Parameter 2 byte
             function (byte): Function byte
         """
+
+        #self.logger.logInfo("SB9600 msg {} {} {} {}".format(hex(address),hex(param1),hex(param2),hex(function)))
 
         if address == 0x00:
             """
@@ -362,12 +424,12 @@ class XTL:
                     if param2 == 0x01:
                         if not self.monitor:
                             self.monitor = True
-                            self.updateStatus()
+                            self.newStatus = True
                         return
                     else:
                         if self.monitor:
                             self.monitor = False
-                            self.updateStatus()
+                            self.newStatus = True
                         return
 
                 # TX mode
@@ -375,13 +437,13 @@ class XTL:
                     if param2 == 0x01:
                         if self.state != RadioState.Transmitting:
                             self.state = RadioState.Transmitting
-                            self.updateStatus()
+                            self.newStatus = True
                         return
                     else:
                         # Change to idle as long as we're not receiving
                         if (self.state != RadioState.Receiving) and (self.state != RadioState.Idle):
                             self.state = RadioState.Idle
-                            self.updateStatus()
+                            self.newStatus = True
                         return
             
             # Fallback for unknown message
@@ -440,17 +502,18 @@ class XTL:
                 # Channel idle
                 if param1 == 0x00 and param2 == 0x00:
                     # Change to idle as long as we're not transmitting and not already idle
-                    if (self.state != RadioState.Transmitting) and (self.state != RadioState.Idle):
+                    if (self.state != RadioState.Idle) and (self.state != RadioState.Transmitting):
                         self.state = RadioState.Idle
-                        self.updateStatus()
+                        self.newStatus = True
                     return
                 # Channel RX
-                if param2 == 0x03:
+                if param1 == 0x00 and param2 == 0x03:
                     if self.state !=RadioState.Receiving:
                         self.state = RadioState.Receiving
-                        self.updateStatus()
+                        self.newStatus = True
                     return
-                # Not sure what this one is but it gets spammed when we've nuisance deleted a channel while scanning
+                # This one can pop up when we're scanning and there's a nuisance deleted channel with activity
+                # we ignore it for now
                 if param1 == 0x00 and param2 == 0x01:
                     return
 
@@ -462,6 +525,10 @@ class XTL:
             # channel change cmd device?
             elif function == 0x1f:
                 # Channel change command
+                return
+
+            # this one seems to follow the channel RX state, but doesn't always fire
+            elif function == 0x23:
                 return
 
             # channel change ack device?

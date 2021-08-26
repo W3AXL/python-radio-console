@@ -711,8 +711,10 @@ function startMicrophone(stream) {
  * @param {Float32Array} data Float32 intput samples
  */
 function sendMicData(data) {
+    // Resample to transfer sample rate and re-convert to float32
+    const resampled = Float32Array.from(waveResampler.resample(data, audio.context.sampleRate, audio.transferSamplerate, {method: "point"}));
     // Convert the Float32Array data to a Mu-Law Uint8Array
-    var muLawData = encodeMuLaw(data);
+    const muLawData = encodeMuLaw(resampled);
     // Convert this mu-law data to a comma-separated string
     var dataString = "";
     muLawData.forEach(function(element) {
@@ -735,20 +737,19 @@ function sendMicData(data) {
 }
 
 function getSpkrData(dataString) {
-        // Convert the comma-separated string of mu-law samples to a Uint8Array
-        const spkrMuLawData = Uint8Array.from(dataString.split(','));
-        // Decode to Float32Array
-        const spkrData = decodeMuLaw(spkrMuLawData);
-        // Resample to client samplerate
-        const resampled = waveResampler.resample(spkrData, audio.transferSamplerate, audio.context.sampleRate, {method: "point"});
-        const resampledFloat32 = Float32Array.from(resampled);
-        // Create a new buffer and source to play the received data
-        const buffer = audio.context.createBuffer(1, resampledFloat32.length, audio.context.sampleRate);
-        buffer.copyToChannel(resampledFloat32, 0);
-        var source = audio.context.createBufferSource();
-        source.buffer = buffer;
-        source.connect(audio.context.destination);
-        source.start(0);
+    // Convert the comma-separated string of mu-law samples to a Uint8Array
+    const spkrMuLawData = Uint8Array.from(dataString.split(','));
+    // Decode to Float32Array
+    const spkrData = decodeMuLaw(spkrMuLawData);
+    // Resample to client samplerate
+    const resampled = Float32Array.from(waveResampler.resample(spkrData, audio.transferSamplerate, audio.context.sampleRate, {method: "point"}));
+    // Create a new buffer and source to play the received data
+    const buffer = audio.context.createBuffer(1, resampled.length, audio.context.sampleRate);
+    buffer.copyToChannel(resampled, 0);
+    var source = audio.context.createBufferSource();
+    source.buffer = buffer;
+    source.connect(audio.context.destination);
+    source.start(0);
 }
 
 /***********************************************************************************

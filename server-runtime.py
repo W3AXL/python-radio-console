@@ -455,6 +455,7 @@ def handleMicData(dataString):
     uint8array = np.asarray(stringList, dtype=np.uint8)
     # Decode mu-law to float32
     floatArray = MuLaw.decode(uint8array)
+    # Put to queue
     micSampleQueue.put_nowait(floatArray)
 
 
@@ -643,7 +644,7 @@ async def producer_hander(websocket, path):
             # send status update for specific radio
             elif "status:" in message:
                 index = int(message[7:])
-                logger.logInfo("Sending status update for radio{}".format(index))
+                #logger.logInfo("Sending status update for radio{}".format(index))
                 await websocket.send("radio{}:".format(index) + getRadioStatusJson(index))
             # send speaker data from queue
             elif "speaker" in message:
