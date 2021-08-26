@@ -373,7 +373,10 @@ function stopPtt() {
         console.log("PTT released");
         pttActive = false;
         if (serverSocket && selectedRadio) {
-            serverSocket.send("!stopTx:" + String(getRadioIndex(selectedRadio)));
+            // Wait 250ms and then stop TX (handles mic latency)
+            setTimeout( function() {
+                serverSocket.send("!stopTx:" + String(getRadioIndex(selectedRadio)));
+            }, 250);
         }
     }
 }

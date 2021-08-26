@@ -385,6 +385,12 @@ class XTL:
                     self.newStatus = True
                 return
 
+            # Use amber LED as a redundant RX state indicator
+            elif iconAddr == self.O5Address.display_icons['led_amber']:
+                if state and self.state != RadioState.Receiving:
+                    self.state = RadioState.Receiving
+                    self.newStatus = True
+
 
             # print if we don't actually know what the icon is
             self.printMsg("SBEP Icon","{} ({}) icon {}".format(icon, hex(msg[3]), state))
