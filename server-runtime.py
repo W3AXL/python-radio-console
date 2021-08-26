@@ -79,8 +79,8 @@ messageQueue = asyncio.Queue()
 audioTransferSampleRate = 16000     # this is the samplerate used for audio transfer across the websocket
 
 # Buffer durations in s (these must match the javascript variables)
-spkrBufferDur = 0.1              
-micBufferDur = 0.1
+spkrBufferDur = 0.2
+micBufferDur = 0.2
 
 spkrThread = None
 
@@ -426,7 +426,7 @@ def startSound():
     
     # Start audio on each radio device
     for radio in config.RadioList:
-        radio.startAudio(pa, audioTransferSampleRate, micBufferDur * 2, spkrBufferDur* 2)
+        radio.startAudio(pa, micSampleQueue, audioTransferSampleRate, micBufferDur, spkrBufferDur)
 
     # Start the speaker audio handler
     spkrThread = threading.Thread(target=handleSpkrData, daemon=True)
@@ -457,6 +457,9 @@ def handleMicData(dataString):
     floatArray = MuLaw.decode(uint8array)
     # Put to queue
     micSampleQueue.put_nowait(floatArray)
+    # Print
+    logger.logInfo("Got {} mic samples from client".format(len(floatArray)))
+    logger.logInfo("Put mic samples in queue, new size {}".format(micSampleQueue.qsize()))
 
 
 def handleSpkrData():

@@ -22,15 +22,14 @@ var audio = {
     // Audio context
     context: null,
     // length of buffers in s (these must match the python script)
-    spkrBufferDur: 0.1,
-    micBufferDur: 0.1,
+    spkrBufferDur: 0.2,
+    micBufferDur: 0.2,
     // audio transfer sample rate
     transferSamplerate: 16000,
     // Input device, buffer, resampler, and processor
     input: null,
     inputStream: null,
     inputBuffer: null,
-    inputBufferSize: 0,
     inputProcessor: null,
     // Output device, buffer, and processor
     output: null,
@@ -355,6 +354,7 @@ function startPtt() {
     if (!pttActive && selectedRadio) {
         console.log("Starting PTT on " + selectedRadio);
         pttActive = true;
+        playSound("sound-tx-granted");
         // Only send the TX command if we have a valid socket
         if (serverSocket) {
             serverSocket.send("!startTx:" + String(getRadioIndex(selectedRadio)));
@@ -685,7 +685,7 @@ function startMicrophone(stream) {
     console.log("Starting microphone");
 
     // Create an empty buffer
-    audio.inputBuffer = "";
+    audio.inputBuffer = [];
 
     // Create input stream source
     audio.input = audio.context.createMediaStreamSource(stream);
@@ -711,27 +711,29 @@ function startMicrophone(stream) {
  * @param {Float32Array} data Float32 intput samples
  */
 function sendMicData(data) {
-    // Resample to transfer sample rate and re-convert to float32
-    const resampled = Float32Array.from(waveResampler.resample(data, audio.context.sampleRate, audio.transferSamplerate, {method: "point"}));
-    // Convert the Float32Array data to a Mu-Law Uint8Array
-    const muLawData = encodeMuLaw(resampled);
-    // Convert this mu-law data to a comma-separated string
-    var dataString = "";
-    muLawData.forEach(function(element) {
-        dataString += (element.toString() + ",");
-    });
     // only send stuff if we're actually PTTing into a radio
     if (pttActive && serverSocket && selectedRadio) {
-        // Add data to buffer (concat keeps dimensions correct)
-        audio.inputBuffer += dataString;
-        audio.inputBufferSize += 1;
+        // Convert the Float32Array data to a Mu-Law Uint8Array
+        const muLawData = encodeMuLaw(data);
+        // add new data to buffer
+        // this is the only good way to concat typed arrays in JS
+        var newBuffer = new Uint8Array(audio.inputBuffer.length + muLawData.length);
+        newBuffer.set(audio.inputBuffer);
+        newBuffer.set(muLawData, audio.inputBuffer.length);
+        audio.inputBuffer = newBuffer;
         // Push data if buffer is full
-        if (audio.inputBufferSize >= audio.micBufferDur * audio.transferSamplerate) {
+        if (audio.inputBuffer.length >= audio.micBufferDur * audio.context.sampleRate) {
+            // Resample
+            const resampled = Float32Array.from(waveResampler.resample(audio.inputBuffer, audio.context.sampleRate, audio.transferSamplerate, {method: "point"}));
+            // Convert to string
+            var dataString = "";
+            resampled.forEach((element) => {
+                dataString += (element.toString() + ",");
+            })
             // Send string
-            serverSocket.send("micAudio:" + audio.inputBuffer);
+            serverSocket.send("micAudio:" + dataString);
             // Clear buffer
-            audio.inputBuffer = "";
-            audio.inputBufferSize = 0;
+            audio.inputBuffer = [];
         }
     }
 }
@@ -864,6 +866,14 @@ function pcmToFloat(samples) {
         output[idx] = Math.max(-1, Math.min(itm / 32768, 1));
     });
     return output;
+}
+
+/**
+ * Play an HTML-embedded sound object
+ * @param {string} soundId id of the HTML embed object
+ */
+function playSound(soundId) {
+    document.getElementById(soundId).play();
 }
 
 /***********************************************************************************

@@ -15,6 +15,8 @@ import pyaudio
 
 import numpy as np
 
+import threading
+
 class Radio():
     """Radio Class for generic radio control
     """
@@ -94,10 +96,13 @@ class Radio():
 
         # Speaker & Mic Sample Queues
         self.spkrQueue = queue.Queue()
-        self.micQueue = queue.Queue()
 
         # Volume set from client
         self.volume = 1.0
+
+        # flag to keep transmitting until the mic queue is empty
+        self.delayedTxStart = False
+        self.delayedTxStop = False
         
 
     def connect(self, statusCallback, reset=True):
@@ -127,12 +132,15 @@ class Radio():
 
     def transmit(self, transmit):
         """
-        Start or stop transmit
+        Start or stop transmit, with a delay waiting for mic data
 
         Args:
             transmit (bool): transmit state
         """
-        self.interface.transmit(transmit) 
+        if transmit:
+            self.delayedTxStart = True
+        else:
+            self.delayedTxStop = True
 
     def changeChannel(self, down):
         """
@@ -300,20 +308,23 @@ class Radio():
         Sound Device Functions
     -------------------------------------------------------------------------------"""
 
-    def startAudio(self, pa, transferSampleRate, micBufferDur, spkrBufferDur):
+    def startAudio(self, pa, micQueue, transferSampleRate, micBufferDur, spkrBufferDur):
         """
         Start PyAudio devices for radio
 
         Args:
             pa (pyaudio): PyAudio instance
-            samplerate (int): desired samplerate for samples sent to queue
+            micQueue (Queue): queue of float32 mic samples at transfer sample rate
+            transferSamplerate (int): desired samplerate for samples sent to queue
             micBufferDur (float): size of mic buffer in s
             spkrBufferDur (float): size of speaker buffer in s
         """
 
-        # Clear buffers
-        self.clearMicQueue()
+        # Clear buffer
         self.clearSpkrQueue()
+
+        # Set mic queue
+        self.micQueue = micQueue
 
         # Get resampling ratios
         self.micResamplingRatio = 48000 / transferSampleRate
@@ -325,6 +336,7 @@ class Radio():
             channels = 1,
             rate = 48000,
             output = True,
+            output_device_index = self.txDev,
             stream_callback = self.micCallback,
             frames_per_buffer = int(micBufferDur * 48000)
         )
@@ -363,16 +375,25 @@ class Radio():
             self.logger.logWarn(status)
 
         # Start with empty data
-        data = np.zeros(frame_count)
+        data = np.zeros(frame_count).astype(np.float32)
 
-        # Only get samples if we're transmitting
-        if self.state == RadioState.Transmitting:
-            # Only get samples if we have them
-            if self.micQueue.qsize() > 1:
-                # Get the data (at transfer sample rate)
-                floatArray = self.micQueue.get_nowait()
-                # Resample and set data
-                data = sr.resample(floatArray, self.micResamplingRatio, 'sinc_fastest')
+        # Only do something if there's mic data in the queue
+        if self.micQueue.qsize() > 0:
+            # Start TX if we were delayed
+            if self.delayedTxStart:
+                self.logger.logInfo("Delayed TX start")
+                self.delayedTxStart = False
+                self.interface.transmit(True)
+            # Get the data (at transfer sample rate, as float32)
+            floatArray = self.micQueue.get_nowait()
+            # Resample and set data
+            data = sr.resample(floatArray, self.micResamplingRatio, 'sinc_fastest').astype(np.float32)
+        else:
+            # Stop TX if we were delayed
+            if self.delayedTxStop:
+                self.logger.logInfo("Delayed TX stop")
+                self.delayedTxStop = False
+                self.interface.transmit(False)
             
         return (data, pyaudio.paContinue)
 

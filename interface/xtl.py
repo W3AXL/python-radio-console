@@ -488,6 +488,10 @@ class XTL:
                 handles audio and channel states
             """
 
+            # not sure, happens during TX
+            if function == 0x19:
+                return
+
             # audio device
             if function == 0x1D:
                 if param2 == 0x01:
@@ -529,6 +533,10 @@ class XTL:
 
             # this one seems to follow the channel RX state, but doesn't always fire
             elif function == 0x23:
+                return
+
+            # not sure, happens during TX
+            elif function == 0x3c:
                 return
 
             # channel change ack device?
