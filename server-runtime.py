@@ -518,6 +518,9 @@ def handleSpkrData():
                 # clear the buffer
                 spkrBufferString = ""
                 spkrBufferLength = 0
+        else:
+            # give the CPU a break
+            time.sleep(0.01)
 
 
 """-------------------------------------------------------------------------------
@@ -785,9 +788,8 @@ if __name__ == "__main__":
     try:
 
         # Start profiling
-        if profiling:
-            yappi.set_clock_type('cpu')
-            yappi.start(builtins=True)
+        yappi.set_clock_type('cpu')
+        yappi.start(builtins=True)
 
         # add cli arguments
         addArguments()
@@ -824,9 +826,8 @@ if __name__ == "__main__":
         pa.terminate()
 
         # Stop profiling
-        if profiling:
-            stats = yappi.get_func_stats()
-            stats.save('callgrind.out', type='callgrind')
+        stats = yappi.get_func_stats()
+        stats.save('callgrind.out', type='callgrind')
 
         # Exit without error
         exit(0)

@@ -200,7 +200,7 @@ class XTL:
                 pass
 
             # give the CPU a break
-            #time.sleep(0.01)
+            time.sleep(0.01)
 
     def process(self):
         """
