@@ -26,6 +26,27 @@ class MuLaw:
 
     decodeTable = [0,132,396,924,1980,4092,8316,16764]
 
+    def __decodeSample(muLawSample):
+        """
+        Decode a mu-law encoded uint8 to an int16 audio sample
+
+        Args:
+            muLawSample (uint8): input mu-law encoded uint8 sample
+
+        Returns:
+            int16: output audio sample
+        """
+        # make sure we have a python uint8
+        muLawSample = muLawSample.astype(np.uint8).item()
+        # Do the decoding
+        muLawSample = ~muLawSample
+        sign = (muLawSample & 0x80)
+        exponent = (muLawSample >> 4) & 0x07
+        mantissa = muLawSample & 0x0f
+        sample = MuLaw.decodeTable[exponent] + (mantissa << (exponent + 3))
+        if (sign != 0): sample = -sample
+        return sample
+
     def decode(muLawSamples):
         """
         Decode 8-bit mu-law samples to 32-bit floats
@@ -37,24 +58,32 @@ class MuLaw:
             np.float32[]: array of float samples
         """    
 
-        # create output int16 numpy array
-        output = np.zeros(len(muLawSamples), dtype=np.int16)
-
-        # iterate through each sample and decode from Uint8 to Int16
-        for idx, muLawSample in enumerate(muLawSamples):
-            # make sure we have a python uint8
-            muLawSample = muLawSample.astype(np.uint8).item()
-            # Do the decoding
-            muLawSample = ~muLawSample
-            sign = (muLawSample & 0x80)
-            exponent = (muLawSample >> 4) & 0x07
-            mantissa = muLawSample & 0x0f
-            sample = MuLaw.decodeTable[exponent] + (mantissa << (exponent + 3))
-            if (sign != 0): sample = -sample
-            output[idx] = sample
+        # Decode the samples
+        output = np.array(list(map(MuLaw.__decodeSample, muLawSamples)), dtype=np.int16)
 
         # convert to float32 from int16 and return
         return output.astype(np.float32, order='C') / 32768.0
+
+    def __encodeSample(sample):
+        """
+        Convert an int16 sample to a mu-law encoded uint8 sample
+
+        Args:
+            sample (np.int16): input audio sample
+
+        Returns:
+            uint8: output mu-law encoded sample
+        """
+
+        # Convert numpy int16 to python int16
+        sample = sample.item()
+        sign = (sample >> 8) & 0x80
+        if (sign != 0): sample = -sample
+        sample = sample + MuLaw.bias
+        if (sample > MuLaw.clip): sample = MuLaw.clip
+        exponent = MuLaw.encodeTable[(sample >> 7) & 0xff]
+        mantissa = (sample >> (exponent + 3)) & 0x0f
+        return ~(sign | (exponent << 4) | mantissa)
 
     def encode(samples):
         """
@@ -67,32 +96,11 @@ class MuLaw:
             np.uint8[]: array of 8-bit mu-law samples
         """        
 
-        # create output uint8 array
-        output = np.zeros(len(samples), dtype=np.uint8)
+        # convert float32 to int16 (list comprehension should be faster than a for loop)
+        int16samples = np.clip([n * 32768 for n in samples], -32768, 32768).astype(np.int16)
 
-        # convert float32 to int16
-        int16samples = np.zeros(len(samples), dtype=np.int16)
-        for idx, sample in enumerate(samples):
-            i = sample * 32768
-            if i > 32767: i = 32767
-            if i < -32767: i = -32767
-            int16samples[idx] = i
-
-        # iterate through samples and encode
-        for idx, sample in enumerate(int16samples):
-            # Convert numpy int16 to python int16 so we can do bitwise stuff
-            sample = sample.item()
-
-            # Do the encoding stuff
-            sign = (sample >> 8) & 0x80
-            if (sign != 0): sample = -sample
-            sample = sample + MuLaw.bias
-            if (sample > MuLaw.clip): sample = MuLaw.clip
-            exponent = MuLaw.encodeTable[(sample >> 7) & 0xff]
-            mantissa = (sample >> (exponent + 3)) & 0x0f
-            muLawSample = ~(sign | (exponent << 4) | mantissa)
-
-            output[idx] = muLawSample
+        # Encode samples to mu-law
+        output = np.array(list(map(MuLaw.__encodeSample, int16samples)), dtype=np.uint8)
 
         return output
             
