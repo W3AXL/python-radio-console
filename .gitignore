@@ -140,3 +140,5 @@ dmypy.json
 
 # Cython debug symbols
 cython_debug/
+callgrind.out
+start_profiler.bat

@@ -47,6 +47,9 @@ from logger import Logger
 # Used for loading config
 import json
 
+# CPU profiling
+import yappi
+
 # Config class (loaded from JSON)
 class Config():
     # Init
@@ -67,6 +70,7 @@ address = None
 serverport = None
 webguiport = None
 noreset = False
+profiling = False
 
 # Websocket server and event loop
 server = None
@@ -111,6 +115,7 @@ osType = platform.system()
 logger = Logger()
 logger.initLogs()
 
+
 """-------------------------------------------------------------------------------
     Command Line Argument Functions
 -------------------------------------------------------------------------------"""
@@ -128,6 +133,7 @@ def addArguments():
     parser.add_argument("-v","--verbose", help="Enable verbose logging", action="store_true")
     parser.add_argument("-wc","--webguicert", help="Web GUI certificate for TLS")
     parser.add_argument("-wp","--webguiport", help="Web GUI port")
+    parser.add_argument("-cp", "--cpu-profiling", help="Enable yappi CPU profiling", action="store_true")
 
 def parseArguments():
     
@@ -136,6 +142,7 @@ def parseArguments():
     global serverport
     global webguiport
     global noreset
+    global profiling
 
     # Parse the args
     args = parser.parse_args()
@@ -185,6 +192,9 @@ def parseArguments():
 
     if args.no_reset:
         noreset = True
+
+    if args.cpu_profiling:
+        profiling = True
 
 """-------------------------------------------------------------------------------
     Config Parsing Functions
@@ -479,15 +489,17 @@ def handleSpkrData():
         
         # Get samples from each radio and add to the output array
         for radio in config.RadioList:
-            try:
-                if radio.spkrQueue.qsize() > 0:
+            if radio.state == RadioState.Receiving:
+                try:
+                    samples = radio.spkrQueue.get_nowait()
                     if not outputFloatArray:
                         gotSamples = True
-                        outputFloatArray = radio.spkrQueue.get_nowait()
+                        outputFloatArray = samples
                     else:
-                        outputFloatArray = np.add(outputFloatArray, radio.spkrQueue.get_nowait())
-            except queue.Empty:
-                logger.logWarn("Radio {} queue empty".format(radio.name))
+                        outputFloatArray = np.add(outputFloatArray, samples)
+                except queue.Empty:
+                    #logger.logWarn("Radio {} queue empty".format(radio.name))
+                    pass
 
         if gotSamples:
             # Convert to uint8 array of mu-law encoded samples
@@ -772,6 +784,11 @@ if __name__ == "__main__":
 
     try:
 
+        # Start profiling
+        if profiling:
+            yappi.set_clock_type('cpu')
+            yappi.start(builtins=True)
+
         # add cli arguments
         addArguments()
 
@@ -805,6 +822,12 @@ if __name__ == "__main__":
         # Stop PyAudio
         stopSound()
         pa.terminate()
+
+        # Stop profiling
+        if profiling:
+            stats = yappi.get_func_stats()
+            stats.save('callgrind.out', type='callgrind')
+
         # Exit without error
         exit(0)
 

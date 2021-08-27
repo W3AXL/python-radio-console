@@ -81,7 +81,6 @@ class XTL:
             'vol_up': 0x531
         }
 
-
     def __init__(self, index, comPort, headType, statusCallback):
         """Init Function
 
@@ -130,7 +129,8 @@ class XTL:
         self.bus.ser.flush()
 
         # Create queue for serial messages
-        self.msgQueue = queue.Queue()
+        self.rxMsgQueue = queue.Queue()
+        self.txMsgQueue = queue.Queue()
 
         # SBEP mode switch var
         self.inSBEP = False
@@ -177,13 +177,30 @@ class XTL:
         """
 
         while self.doListen:
-            # Read message if there's one waiting
-            if self.bus.ser.in_waiting > 0:
-                # Read message
-                msg = self.bus.read(self.bus.ser.in_waiting)
+            # get a message if there is one
+            if self.bus.ser.in_waiting:
+                # Read rest of message
+                rxMsg = self.bus.read(self.bus.ser.in_waiting)
                 # Put into queue
-                self.msgQueue.put_nowait(msg)
+                self.rxMsgQueue.put_nowait(rxMsg)
                 #self.logger.logInfo("Got msg {}".format(hexlify(msg," ")))
+
+            # check for outgoing messages
+            try:
+                # get the message
+                txMsg = self.txMsgQueue.get_nowait()
+                # figure out what to do with it
+                if txMsg['type'] == 'SB9600':
+                    try:
+                        self.bus.sb9600_send(txMsg['addr'], txMsg['prm1'], txMsg['prm2'], txMsg['func'])
+                    except RuntimeError as ex:
+                        self.logger.logWarn("Couldn't verify button message was sent properly! Maybe other data on bus?")
+            # Do nothing if queue empty
+            except queue.Empty:
+                pass
+
+            # give the CPU a break
+            #time.sleep(0.01)
 
     def process(self):
         """
@@ -193,7 +210,7 @@ class XTL:
         while self.doProcess:
 
             # block until we have a message (this runs in a thread so that's okay)
-            msg = self.msgQueue.get()
+            msg = self.rxMsgQueue.get()
 
             # throw away invalid messages
             if len(msg) < 5:
@@ -287,35 +304,35 @@ class XTL:
         Monitor button
         """
         # Press nuis button
-        self.pressButton(self.O5Address.button_map["btn_key_1"], 0.1) 
+        self.pressButton(self.O5Address.button_map["btn_key_1"], 0.05) 
 
     def nuisanceDelete(self):
         """
         Nuisance delete button
         """
         # Press nuis button
-        self.pressButton(self.O5Address.button_map["btn_key_2"], 0.1)
+        self.pressButton(self.O5Address.button_map["btn_key_2"], 0.05)
 
     def togglePower(self):
         """
         Power button
         """
         # Press nuis button
-        self.pressButton(self.O5Address.button_map["btn_key_3"], 0.1)
+        self.pressButton(self.O5Address.button_map["btn_key_3"], 0.05)
 
     def toggleScan(self):
         """
         Change state of scan by sending softkey button to toggle
         """
         # Press scan button
-        self.pressButton(self.O5Address.button_map['btn_key_4'],0.1)
+        self.pressButton(self.O5Address.button_map['btn_key_4'], 0.05)
 
     def toggleDirect(self):
         """
         DIR button
         """
         # Press scan button
-        self.pressButton(self.O5Address.button_map['btn_key_5'],0.1)
+        self.pressButton(self.O5Address.button_map['btn_key_5'], 0.05)
 
     def processSBEP(self, msg):
         """
@@ -393,7 +410,7 @@ class XTL:
 
 
             # print if we don't actually know what the icon is
-            self.printMsg("SBEP Icon","{} ({}) icon {}".format(icon, hex(msg[3]), state))
+            #self.printMsg("SBEP Icon","{} ({}) icon {}".format(icon, hex(msg[3]), state))
             return
 
         # Fallback to printing raw message
@@ -419,7 +436,7 @@ class XTL:
         if address == 0x00:
             """
             Broadcast Module Address
-                handles transition to SB9600 and overall channel states
+                handles transition to SBEP and overall channel states
             """
 
             # SBEP command
@@ -463,6 +480,10 @@ class XTL:
                             self.state = RadioState.Idle
                             self.newStatus = True
                         return
+
+            # Not sure what this is, happens on startup
+            elif function == 0x3b:
+                return
             
             # Fallback for unknown message
             else:
@@ -506,8 +527,12 @@ class XTL:
                 handles audio and channel states
             """
 
+            # not sure, happens on startup
+            if function == 0x15:
+                return
+
             # not sure, happens during TX
-            if function == 0x19:
+            elif function == 0x19:
                 return
 
             # audio device
@@ -608,31 +633,33 @@ class XTL:
 
     def sendButton(self, code, value):
         """
-        Send a button command to the radio
+        Add a button command to the tx message queue
 
         Args:
             code (byte): button code
             value (byte): value to send
         """
-        try:
-            self.bus.sb9600_send(self.bus.sbep_modules['PANEL'], code, value, 0x57)
-        except RuntimeError as ex:
-            self.logger.logWarn("Couldn't verify button message was sent properly! Maybe other data on bus?")
+        msg = {
+            "type": "SB9600",
+            "addr": self.bus.sbep_modules['PANEL'],
+            "prm1": code,
+            "prm2": value,
+            "func": 0x57
+        }
+
+        self.txMsgQueue.put_nowait(msg)
 
     def pressButton(self, code, duration):
         """
-        Press a button for a specified duration
+        Press a button for a specified duration, holding down BUSY so we don't get any weirdness
 
         Args:
             code (byte): button opcode
             duration (float): duration to press in seconds
         """
-        try:
-            self.bus.sb9600_send(self.bus.sbep_modules['PANEL'], code, 0x01, 0x57)
-            time.sleep(duration)
-            self.bus.sb9600_send(self.bus.sbep_modules['PANEL'], code, 0x00, 0x57)
-        except RuntimeError as ex:
-            self.logger.logWarn("Couldn't verify button message was sent properly! Maybe other data on bus?")
+        self.sendButton(code, 0x01)
+        time.sleep(duration)
+        self.sendButton(code, 0x00)
 
     def getDisplaySubDev(self, code):
         """Lookup display subdevice by hex code

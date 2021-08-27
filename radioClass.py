@@ -377,18 +377,18 @@ class Radio():
         # Start with empty data
         data = np.zeros(frame_count).astype(np.float32)
 
-        # Only do something if there's mic data in the queue
-        if self.micQueue.qsize() > 0:
+        # Try to read from the queue, and ignore things if it's empty
+        try:
+            # Get the data (at transfer sample rate, as float32)
+            floatArray = self.micQueue.get_nowait()
             # Start TX if we were delayed
             if self.delayedTxStart:
                 #self.logger.logInfo("Delayed TX start")
                 self.delayedTxStart = False
                 self.interface.transmit(True)
-            # Get the data (at transfer sample rate, as float32)
-            floatArray = self.micQueue.get_nowait()
             # Resample and set data
             data = sr.resample(floatArray, self.micResamplingRatio, 'sinc_fastest').astype(np.float32)
-        else:
+        except queue.Empty:
             # Stop TX if we were delayed
             if self.delayedTxStop:
                 #self.logger.logInfo("Delayed TX stop")
