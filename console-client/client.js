@@ -298,8 +298,10 @@ function updateRadioCard(idx) {
     // Update mute icon
     if (radio.muted) {
         radioCard.find("#icon-mute").attr('name', 'volume-mute-sharp');
+        radioCard.find("#icon-mute").addClass("muted");
     } else {
         radioCard.find("#icon-mute").attr('name', 'volume-high-sharp');
+        radioCard.find("#icon-mute").removeClass("muted");
     }
 
     // Update alert icon
@@ -452,22 +454,25 @@ function toggleDirect() {
  * @param {string} obj element whose parent radio to toggle mute on
  */
 function toggleMute(event, obj) {
-    // Get ID of radio to mute
-    var radioId = $(obj).closest(".radio-card").attr('id');
-    // Get index of radio in list
-    var idx = getRadioIndex(radioId);
-    // Change mute status
-    if (radioList[idx].muted) {
-        console.log("Unmuting " + radioId);
-        radioList[idx].muted = false;
-    } else {
-        console.log("Muting " + radioId);
-        radioList[idx].muted = true;
+    // Only do stuff if we have a socket connection
+    if (serverSocket != null) {
+        // Get ID of radio to mute
+        var radioId = $(obj).closest(".radio-card").attr('id');
+        // Get index of radio in list
+        var idx = getRadioIndex(radioId);
+        // Change mute status
+        if (radioList[idx].muted) {
+            console.log("Unmuting " + radioId);
+            serverSocket.send("unmute:" + String(idx));
+        } else {
+            console.log("Muting " + radioId);
+            serverSocket.send("mute:" + String(idx));
+        }
+        // Update card
+        //updateRadioCard(idx);
+        // Stop propagation so we don't also select the muted radio
+        event.stopPropagation();
     }
-    // Update card
-    updateRadioCard(idx);
-    // Stop propagation so we don't also select the muted radio
-    event.stopPropagation();
 }
 
 /***********************************************************************************

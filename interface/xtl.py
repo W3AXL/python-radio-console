@@ -110,7 +110,6 @@ class XTL:
         self.talkaround = False
         self.monitor = False
         self.lowpower = False
-        self.muted = True
 
         # Logger
         self.logger = Logger()

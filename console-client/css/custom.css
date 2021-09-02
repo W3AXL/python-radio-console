@@ -316,6 +316,10 @@ ion-icon {
     color: var(--color-accent-dark);
 }
 
+.icon-stack #icon-mute.muted {
+    color: var(--color-alert-red-light);
+}
+
 .icon-stack ion-icon.alerting {
     -webkit-animation: iconAlertRed 0.7s ease infinite;
     animation: iconAlertRed 0.7s ease infinite;

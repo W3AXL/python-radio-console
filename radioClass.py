@@ -81,6 +81,7 @@ class Radio():
         self.monitor = False
         self.lowpower = False
         self.selected = False
+        self.muted = False
 
         # Radio interface class
         self.interface = None
@@ -113,9 +114,12 @@ class Radio():
             reset (bool, optional): whether to reset the radio on connect or not. Defaults to True.
         """
 
+        # Store callback
+        self.statusCallback = statusCallback
+
         # XTL5000 O-head
         if self.ctrlMode == "SB9600-XTL-O":
-            self.interface = XTL(self.index, self.ctrlPort, 'O5', statusCallback)
+            self.interface = XTL(self.index, self.ctrlPort, 'O5', self.statusCallback)
         
         # Connect to radio (optional reset)
         self.interface.connect(reset=reset)
@@ -180,6 +184,13 @@ class Radio():
         Toggle state of talkaround
         """
         self.interface.toggleDirect()
+
+    def setMute(self, state):
+        """
+        Set status of radio mute and update
+        """
+        self.muted = state
+        self.statusCallback(self.index)
 
     """-------------------------------------------------------------------------------
         Radio Status Functions
@@ -253,7 +264,7 @@ class Radio():
             "chan": self.chan,
             "lastid": self.lastid,
             "state": stateText,
-            "muted": self.interface.muted,
+            "muted": self.muted,
             "error": self.error,
             "errorText": errorText,
             "scanning": self.scanning,
@@ -413,8 +424,8 @@ class Radio():
         if status:
             self.logger.logWarn("Got PyAudio status: {}".format(status))
 
-        # only send speaker data if we're receiving
-        if self.state == RadioState.Receiving:
+        # only send speaker data if we're receiving and not muted
+        if self.state == RadioState.Receiving and not self.muted:
             # convert pyaudio samples to numpy float32 array and apply volume
             floatArray = np.frombuffer(in_data, dtype=np.float32) * self.volume
             # resample to desired sample rate

@@ -334,6 +334,16 @@ def toggleDirect(index):
     """
     config.RadioList[index].toggleDirect()
 
+def toggleMute(index, state):
+    """
+    Set state of mute for radio at index
+
+    Args:
+        index (int): Radio index
+        state (bool): state of mute
+    """
+    config.RadioList[index].setMute(state)
+
 def getRadioStatusJson(index):
     """
     Gets status of specified radio index in the RadioList and returns a json string
@@ -489,7 +499,7 @@ def handleSpkrData():
         
         # Get samples from each radio and add to the output array
         for radio in config.RadioList:
-            if radio.state == RadioState.Receiving:
+            if radio.state == RadioState.Receiving and not radio.muted:
                 try:
                     samples = radio.spkrQueue.get_nowait()
                     if not outputFloatArray:
@@ -623,6 +633,14 @@ async def consumer_handler(websocket, path):
             elif data[0:9] == "micAudio:":
                 micData = data[9:]
                 handleMicData(micData)
+
+            elif data[0:5] == "mute:":
+                index = int(data[5:])
+                toggleMute(index, True)
+
+            elif data[0:7] == "unmute:":
+                index = int(data[7:])
+                toggleMute(index, False)
 
             #
             #   NACK if command wasn't handled above
@@ -788,8 +806,8 @@ if __name__ == "__main__":
     try:
 
         # Start profiling
-        yappi.set_clock_type('cpu')
-        yappi.start(builtins=True)
+        #yappi.set_clock_type('cpu')
+        #yappi.start(builtins=True)
 
         # add cli arguments
         addArguments()
@@ -826,8 +844,8 @@ if __name__ == "__main__":
         pa.terminate()
 
         # Stop profiling
-        stats = yappi.get_func_stats()
-        stats.save('callgrind.out', type='callgrind')
+        #stats = yappi.get_func_stats()
+        #stats.save('callgrind.out', type='callgrind')
 
         # Exit without error
         exit(0)
