@@ -114,6 +114,30 @@ ion-icon {
     color: var(--color-alert-mid);
 }
 
+#navbar-volume {
+    float: right;
+    width: 192px;
+    display: flex;
+    align-content: center;
+    justify-content: center;
+}
+
+#navbar-volume ion-icon {
+    height: 100%;
+    font-size: 24px;
+    margin-right: 8px;
+}
+
+#navbar-volume .topcoat-range {
+    height: 8px;
+    margin-top: 20px;
+}
+
+#navbar-volume .topcoat-range::-webkit-slider-thumb {
+    height: 28px;
+    width: 16px;
+}
+
 #navbar-clock {
     margin-right: 8px;
     margin-top: 8px;

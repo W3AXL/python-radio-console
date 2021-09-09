@@ -31,10 +31,11 @@ var audio = {
     inputStream: null,
     inputBuffer: null,
     inputProcessor: null,
-    // Output device, buffer, and processor
+    // Output device, buffer, processor, and gain (for volume)
     output: null,
     outputBuffer: null,
     outputProcessor: null,
+    outputGain: null,
 }
 
 testInput = null,
@@ -683,6 +684,14 @@ function startAudioDevices() {
     } else {
         alert('Cannot capture microphone: getUserMedia() not supported in this browser');
     }
+
+    // Create gain node for output volume and connect it to the default output device
+    audio.outputGain = audio.context.createGain();
+    audio.outputGain.gain.value = 0.75;
+    audio.outputGain.connect(audio.context.destination);
+
+    // Enable volume slider
+    $("#console-volume").prop('disabled', false);
 }
 
 /**
@@ -746,6 +755,10 @@ function sendMicData(data) {
     }
 }
 
+/**
+ * Handle new radio speaker data from the server
+ * @param {string} dataString string of comma-separated mu-law encoded speaker audio data from server
+ */
 function getSpkrData(dataString) {
     // Convert the comma-separated string of mu-law samples to a Uint8Array
     const spkrMuLawData = Uint8Array.from(dataString.split(','));
@@ -758,8 +771,19 @@ function getSpkrData(dataString) {
     buffer.copyToChannel(resampled, 0);
     var source = audio.context.createBufferSource();
     source.buffer = buffer;
-    source.connect(audio.context.destination);
+    // Connect to the gain node and play
+    source.connect(audio.outputGain);
     source.start(0);
+}
+
+/**
+ *  Change volume of console based on slider
+ */
+function changeVolume() {
+    // Convert 0-100 to 0-1 for multiplication with audio 
+    const newVol = $("#console-volume").val() / 100;
+    // Set gain node to new value
+    audio.outputGain.gain.value = newVol;
 }
 
 /***********************************************************************************
@@ -1045,6 +1069,8 @@ function handleSocketClose(event) {
     $("#navbar-status").removeClass("pending");
     // Clear radio cards
     clearRadios();
+    // Disable volume slider
+    $("#console-volume").prop('disabled', true);
     // Reset variables
     disconnecting = false;
     serverSocket = null;
