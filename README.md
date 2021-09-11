@@ -12,6 +12,7 @@ Python 3.x installation with the following libraries:
 * [`sounddevice`](https://python-sounddevice.readthedocs.io)
 * [`websockets`](https://websockets.readthedocs.io)
 * [`colorama`](https://pypi.org/project/colorama)
+* A bunch of support libraries for the above ones. Just install them all using the steps below.
 
 The rest of the needed libraries should be included with a base python install.
 
