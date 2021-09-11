@@ -1,7 +1,7 @@
 ### Making the HTTPS connection work
 
 The certificates included here were generated using the guide from:
-https://stackoverflow.com/questions/7580508/getting-chrome-to-accept-self-signed-localhost-certificate
+https://stackoverflow.com/a/60516812/1842613
 
 An SSL connection is required to use some of the javascript web audio APIs
 

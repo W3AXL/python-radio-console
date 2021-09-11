@@ -23,10 +23,10 @@ class Radio():
     
     # Valid control modes for the radio
     controlModes = ["None",             # No PTT control
-                    "SB9600-XTL-O",     # XTL O-head
-                    "SB9600-XTL-W",     # XTL W-head
-                    "SB9600-SPECTRA",   # Astro Spectra W-head
-                    "SB9600-MCS",       # MCS2000
+                    "SB9600-XTL-O",     # XTL O5
+                    "SB9600-XTL-W",     # XTL W9
+                    "SB9600-AS-W",      # Astro Spectra W9
+                    "SB9600-MCS-3",     # MCS2000 model 3
                     "Soundcard-CM108",  # CM108 GPIO PTT
                     "Soundcard-VOX"]    # Radio-controlled VOX PTT
 
