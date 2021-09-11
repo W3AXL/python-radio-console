@@ -1,1 +1,1 @@
-.\Scripts\python.exe server-runtime.py -c .\testCfg.json -sp 9995 -wp 4443
+.\Scripts\python.exe server-runtime.py -c .\config.json -sp 9995 -wp 4443
