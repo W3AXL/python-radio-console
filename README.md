@@ -3,6 +3,8 @@ Control Motorola radios with your computer and some basic hardware!
 
 ![Console Screenshot](/media/window-screenshot.png)
 
+**Important note: this system is in super-duper early alpha stage. Don't expect anything to work perfectly. Please for the love of god don't use this in any type of mission-critical application.** Submit new issues via Github for anything you manage to break, and I'll do my best to try and fix it. Help would be greatly appreciated, and anyone who's a better programmer than I am please feel free to submit pull requests.
+
 ## Requirements
 ### Python
 Python 3.x installation with the following libraries:
@@ -93,13 +95,19 @@ Okay, you've got your hardware set up, a configuration file made, and the certs 
 1. Activate the virtual environment you made above from a terminal prompt:  
 `.\Scripts\activate` (Windows) or `source ./bin/activate` (Linux)
 2. Start the console with your config file and specify ports for the webserver and client-to-server messaging service:  
-`python server-runtime.py -c config.json -sp 9995 -wp 4443`
-3. Navigate to `server.address:webport` (example: `localhost:4443`) and an empty console should load. If you've gotten this far, you're in the home stretch now.  
-
-4. 
+`python server-runtime.py -c config.json -sp 9995 -wp 4443`  
+The connected radios will be reset. You can follow the server launch in the console. It will also print out any errors or warnings. Very handy.
+3. Navigate to `server.address:webport` (example: `localhost:4443`) and an empty console should load.  
+![Console server menu](https://github.com/W3AXL/python-radio-console/blob/master/media/guide/console-menu-server.png)  
+If you've gotten this far, you're in the home stretch now.
+4. Set up your connection to the server. Enter the address and port of the server you started earlier. Press connect and you should see the status change from Disconnected to Connected. The auto-connect parameter will automatically connect to the server when the page loads. Click save to store these settings as a local cookie.  
+![Server setup](https://github.com/W3AXL/python-radio-console/blob/master/media/guide/console-server-config.png)
+5. You should see your radios in the main console window. You can select one by clicking anywhere on it. PTT is done using the spacebar when a radio is selected. The radio card border should go red to inidicate transmit. The web client will use whatever is specified as the default microphone. **Todo: allow microphone device selection.**  Receive is indicated by a green border.  
+![Main server window](https://github.com/W3AXL/python-radio-console/blob/master/media/guide/console-radio-ptt.png)
 
 ## Known Issues
 
-* Connecting a second console webpage to the server will cause lots of issues. This will be fixed eventually to kick off the old session when the new one connects.
+* Connecting a second instance of the console web GUI to the server will cause lots of issues. This will be fixed eventually to kick off the old session when the new one connects.
 * RX audio occasionally pops & clicks. I think this is an issue with the mu-law encoding and not a buffer underrun issue. As far as I can tell at least.
 * You can only PTT with spacebar when you have the console window in focus. This is a limitation of web browsers (you can't capture keypresses that aren't for that window). Future plans include joystick/controller support to interface with a footswitch or something which *should* be possible even when the window isn't in focus.
+* The very end of outgoing transmissions can get cut off. This is due to latency between the client and the server, as well as audio device latency. Just make sure you give a pause before releasing PTT after finishing your transmission.
