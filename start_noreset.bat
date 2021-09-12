@@ -1,1 +1,0 @@
-.\Scripts\python.exe server-runtime.py -c .\testCfg.json -sp 9995 -wp 4443 -nr
