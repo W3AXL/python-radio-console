@@ -21,6 +21,30 @@ The rest of the needed libraries should be included with a base python install.
 2. Open a terminal window in this directory and create a new python virtualenv using `python -m venv .`
 3. Install the required libraries using pip and the requirements.txt file using `python -m pip install -r requirements.txt`
 
+### Potential Netiface Installation Errors
+
+If you encounter errors during the installation of the `netifaces` package, you may need to install the `Microsoft Visual C++ Build Tools` as outlined [on this page](https://allones.de/2018/11/05/python-netifaces-installation-microsoft-visual-c-14-0-is-required/).
+
+*Thanks to Bill, WA8WG, for running into this error and emailing me the solution!*
+
+### Installing PyAudio
+
+PyAudio is not included in `requirements.txt` because the installation process differs depending on your operating system.
+
+#### On Linux
+
+Installing pyaudio on a linux system should be as easy as running `pip install pyaudio` with the virtual environment activated.
+
+#### On Windows
+
+Pip is not able to install pyaudio properly on windows, at least for me. I had to follow the steps in [this StackOverflow answer](https://stackoverflow.com/a/55630212/1842613) to get it to work:
+
+1. Find your python version with `python --version`
+2. Identify if you're running 32 bit or 64 bit python. The easiest way to find out is to run `python` and view the build information:  
+```Python 3.9.4 (tags/v3.9.4:1f2e308, Apr  6 2021, 13:40:21) [MSC v.1928 64 bit (AMD64)] on win32```
+3. Download the correct pyaudio .whl file for your python installation from [this website](https://www.lfd.uci.edu/~gohlke/pythonlibs/#pyaudio).
+4. Move the whl file to the console directory, and install using `pip install <pyaudio whl file>`
+
 ## Hardware
 ![Hardware Block Diagram](/media/console-hardware-diagram.png)
 
