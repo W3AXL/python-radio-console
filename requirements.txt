@@ -18,7 +18,6 @@ numpy==1.21.2
 packaging==21.0
 parso==0.8.2
 pipwin==0.5.1
-PyAudio @ file:///C:/Users/papke/pipwin/PyAudio-0.2.11-cp39-cp39-win_amd64.whl
 pycparser==2.20
 pyee==8.2.2
 Pygments==2.10.0
