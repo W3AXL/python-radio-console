@@ -656,7 +656,7 @@ function readConfig() {
 ***********************************************************************************/
 
 /** 
-* Setup audio devices and context, etc
+* Checks for browser compatibility and sets up audio devices
 * @return {bool} True on success
 */
 function startAudioDevices() {
@@ -668,7 +668,8 @@ function startAudioDevices() {
     if (!navigator.getUserMedia) {
         navigator.getUserMedia = navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia || navigator.msGetUserMedia;
     }
-    // See if we got one
+
+    // Try to get a user audio input
     if (navigator.getUserMedia) {
         // Get the microphone
         navigator.getUserMedia({audio:true},
@@ -683,6 +684,7 @@ function startAudioDevices() {
         );
     } else {
         alert('Cannot capture microphone: getUserMedia() not supported in this browser');
+        return false;
     }
 
     // Create gain node for output volume and connect it to the default output device
