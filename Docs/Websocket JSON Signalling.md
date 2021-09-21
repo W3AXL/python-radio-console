@@ -38,18 +38,21 @@ Used to inform the client on the status of a specific radio. **(server-to-client
 ```json
 {
     "radio": {
-        "name": "",
-        "zone": "",
-        "chan": "",
-        "lastid": "",
-        "state": 2,
-        "muted": false,
-        "error": false,
-        "errorText": "",
-        "scanning": true,
-        "talkaround": false,
-        "monitor": true,
-        "lowpower": true
+        "index": 1,
+        "status": {
+            "name": "",
+            "zone": "",
+            "chan": "",
+            "lastid": "",
+            "state": 2,
+            "muted": false,
+            "error": false,
+            "errorText": "",
+            "scanning": true,
+            "talkaround": false,
+            "monitor": true,
+            "lowpower": true
+        }
     }
 }
 ```
@@ -78,7 +81,7 @@ These are sent from the client to the server
 - `chanGoto` is used to goto a specific channel index **(not yet implemented)**
    - requires a number in the `options` field
 - `button` indicates a button press. `options` specifies the button, valid options are:
-   - `mon` monitor
+   - `monitor` monitor
    - `nuisance` nuisance delete
    - `power` low/high power
    - `scan` scan
@@ -110,7 +113,7 @@ This is used for sending audio data arrays between the client and server
 {
     "audioData": {
         "source": "mic",
-        "data": [ " array of mic samples " ]
+        "data": "csv mic samples"
     }
 }
 ```

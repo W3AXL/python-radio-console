@@ -48,6 +48,7 @@ testInput = null,
 timeZone = "";
 // Selected radio
 var selectedRadio = null;
+var selectedRadioIdx = null;
 // PTT state
 var pttActive = false;
 // Menu state
@@ -156,8 +157,9 @@ function selectRadio(id) {
         $(`#${id}`).removeClass("selected");
         // Disable the radio controls
         updateRadioControls();
-        // Update the variable
+        // Update the variables
         selectedRadio = null;
+        selectedRadioIdx = null;
     } else {
         // Deselect all radio cards
         deselectRadios();
@@ -165,6 +167,7 @@ function selectRadio(id) {
         $(`#${id}`).addClass("selected");
         // Update the variable
         selectedRadio = id;
+        selectedRadioIdx = getRadioIndex(id);
         // Update controls
         updateRadioControls();
     }
@@ -180,6 +183,7 @@ function deselectRadios() {
     $(".radio-card").removeClass("selected");
     // Set selected radio to null
     selectedRadio = null;
+    selectedRadioIdx = null;
     // Update controls
     updateRadioControls();
 }
@@ -319,10 +323,8 @@ function updateRadioCard(idx) {
 function updateRadioControls() {
     // Update if we have a selected radio
     if (selectedRadio) {
-        // Get the radio index
-        var idx = getRadioIndex(selectedRadio);
         // Get the radio from the list
-        var radio = radioList[idx];
+        var radio = radioList[selectedRadioIdx];
         // If the radio is disconnected, don't enable the controls
         if (radio.state == "Disconnected") { return }
         // Populate text
@@ -360,7 +362,15 @@ function startPtt() {
         playSound("sound-tx-granted");
         // Only send the TX command if we have a valid socket
         if (serverSocket) {
-            serverSocket.send("!startTx:" + String(getRadioIndex(selectedRadio)));
+            serverSocket.send(
+                `{
+                    "control": {
+                        "index": ${selectedRadioIdx},
+                        "command": "startTx",
+                        "options": null
+                    }
+                }`
+            );
         }
     } else if (!pttActive && !selectedRadio) {
         pttActive = true;
@@ -376,26 +386,50 @@ function stopPtt() {
         console.log("PTT released");
         pttActive = false;
         if (serverSocket && selectedRadio) {
-            // Wait 400ms and then stop TX (handles mic latency)
+            // Wait 250ms and then stop TX (handles mic latency)
             setTimeout( function() {
-                serverSocket.send("!stopTx:" + String(getRadioIndex(selectedRadio)));
-            }, 400);
+                serverSocket.send(
+                    `{
+                        "control": {
+                            "index": ${selectedRadioIdx},
+                            "command": "stopTx",
+                            "options": null
+                        }
+                    }`
+                )
+            }, 250);
         }
     }
 }
 
 /**
  * Change channel on selected radio
- * @param {bool} down Whether to go down or not
+ * @param {bool} down Whether to go down or not (heh)
  */
 function changeChannel(down) {
     if (!pttActive && selectedRadio && serverSocket) {
         if (down) {
             console.log("Changing channel down on " + selectedRadio);
-            serverSocket.send("!chanDn:" + String(getRadioIndex(selectedRadio)));
+            serverSocket.send(
+                `{
+                    "control": {
+                        "index": ${selectedRadioIdx},
+                        "command": "chanUp",
+                        "options": null
+                    }
+                }`
+            );
         } else {
             console.log("Changing channel up on " + selectedRadio);
-            serverSocket.send("!chanUp:" + String(getRadioIndex(selectedRadio)));
+            serverSocket.send(
+                `{
+                    "control": {
+                        "index": ${selectedRadioIdx},
+                        "command": "chanDn",
+                        "options": null
+                    }
+                }`
+            );
         }
     }
 }
@@ -406,7 +440,15 @@ function changeChannel(down) {
 function toggleMonitor() {
     if (!pttActive && selectedRadio && serverSocket) {
         console.log("Toggling monitor on " + selectedRadio);
-        serverSocket.send("!mon:" + String(getRadioIndex(selectedRadio)));
+        serverSocket.send(
+            `{
+                "control": {
+                    "index": ${selectedRadioIdx},
+                    "command": "button",
+                    "options": "monitor"
+                }
+            }`
+        )
     }
 }
 
@@ -416,7 +458,15 @@ function toggleMonitor() {
  function nuisanceDelete() {
     if (!pttActive && selectedRadio && serverSocket) {
         console.log("Nuisance delete: " + selectedRadio);
-        serverSocket.send("!nuis:" + String(getRadioIndex(selectedRadio)));
+        serverSocket.send(
+            `{
+                "control": {
+                    "index": ${selectedRadioIdx},
+                    "command": "button",
+                    "options": "nuisance"
+                }
+            }`
+        )
     }
 }
 
@@ -426,7 +476,15 @@ function toggleMonitor() {
 function togglePower() {
     if (!pttActive && selectedRadio && serverSocket) {
         console.log("Toggling power on " + selectedRadio);
-        serverSocket.send("!lpwr:" + String(getRadioIndex(selectedRadio)));
+        serverSocket.send(
+            `{
+                "control": {
+                    "index": ${selectedRadioIdx},
+                    "command": "button",
+                    "options": "power"
+                }
+            }`
+        )
     }
 }
 
@@ -436,7 +494,15 @@ function togglePower() {
 function toggleScan() {
     if (!pttActive && selectedRadio && serverSocket) {
         console.log("Toggling scan for " + selectedRadio);
-        serverSocket.send("!scan:" + String(getRadioIndex(selectedRadio)));
+        serverSocket.send(
+            `{
+                "control": {
+                    "index": ${selectedRadioIdx},
+                    "command": "button",
+                    "options": "scan"
+                }
+            }`
+        )
     }
 }
 
@@ -446,7 +512,15 @@ function toggleScan() {
 function toggleDirect() {
     if (!pttActive && selectedRadio && serverSocket) {
         console.log("Toggling talkaround for " + selectedRadio);
-        serverSocket.send("!dir:" + String(getRadioIndex(selectedRadio)));
+        serverSocket.send(
+            `{
+                "control": {
+                    "index": ${selectedRadioIdx},
+                    "command": "button",
+                    "options": "direct"
+                }
+            }`
+        )
     }
 }
 
@@ -458,16 +532,30 @@ function toggleMute(event, obj) {
     // Only do stuff if we have a socket connection
     if (serverSocket != null) {
         // Get ID of radio to mute
-        var radioId = $(obj).closest(".radio-card").attr('id');
+        const radioId = $(obj).closest(".radio-card").attr('id');
         // Get index of radio in list
-        var idx = getRadioIndex(radioId);
+        const idx = getRadioIndex(radioId);
         // Change mute status
         if (radioList[idx].muted) {
             console.log("Unmuting " + radioId);
-            serverSocket.send("unmute:" + String(idx));
+            serverSocket.send(
+                `{
+                    "audioCtrl": {
+                        "command": "unmute",
+                        "index": ${idx}
+                    }
+                }`
+            )
         } else {
             console.log("Muting " + radioId);
-            serverSocket.send("mute:" + String(idx));
+            serverSocket.send(
+                `{
+                    "audioCtrl": {
+                        "command": "mute",
+                        "index": ${idx}
+                    }
+                }`
+            )
         }
         // Update card
         //updateRadioCard(idx);
@@ -964,7 +1052,7 @@ function onConnectWebsocket() {
     $("#navbar-status").removeClass("pending");
     $("#navbar-status").addClass("connected");
     // Query for radios
-    sendSocketMessage('?radios');
+    serverSocket.send('{"radios":{"command":"query"}}');
 }
 
 /**
@@ -987,69 +1075,72 @@ function disconnectWebsocket() {
 }
 
 /**
- * Callback for a new message from the websocket server
+ * Callback for a new message from the websocket server and
+ * parses the JSON command object. 
+ * 
+ * This command protocol is specified in `Docs/Websocket JSON Signalling.md`
  * @param {event} event 
  */
 function recvSocketMessage(event) {
 
-    // Response to ?radios request
-    if (event.data.startsWith("radios:")) {
-        console.log("Got master radio list update");
-        // get the JSON of the current radios
-        var radioListJson = event.data.substring(7);
-        // set our radio list to the new status
-        radioList = JSON.parse(radioListJson);
-        // Populate radio cards
-        populateRadios();
-        // Bind buttons
-        bindRadioCardButtons();
+    // Convert to JSON
+    var msgObj;
+    try {
+        msgObj = JSON.parse(event.data);
+    } catch (e) {
+        console.warn("Got invalid data from websocket: " + event.data);
+        return;
     }
 
-    // single adio status update
-    else if (event.data.startsWith("radio")) {
-        // Get radio ID from status message
-        var radioIndex = event.data.substring(5, event.data.lastIndexOf(':{'));
-        console.log("Got status update for radio" + radioIndex);
-        // Slice JSON from message and parse
-        var radioStatusJson = event.data.substring(6 + radioIndex.length);
-        var radioStatus = JSON.parse(radioStatusJson);
-        // Strip out \u0000's from strings (TODO: figure out why python's decode method adds these and how to get rid of them)
-        radioStatus['zone'] = radioStatus['zone'].replace(/\0/g, '');
-        radioStatus['chan'] = radioStatus['chan'].replace(/\0/g, '');
-        //console.log(radioStatus);
-        // Update radio entry
-        radioList[radioIndex] = radioStatus;
-        // Update radio card
-        updateRadioCard(radioIndex);
-        // Update bottom controls
-        updateRadioControls();
-    }
+    // Iterate through each message and its data (normally we'd only get one at a time, but I suppose you could get more than one)
+    for (const [key, value] in Object.entries(msgObj)) {
+        // Handle message data based on key type
+        switch (key) {
 
-    // Speaker audio data
-    else if (event.data.startsWith("spkrAud:")) {
-        // Get string of comma-separated floats
-        var dataString = event.data.substring(8);
-        // send to speaker data function
-        getSpkrData(dataString);
-    }
+            // List of configured radios
+            case "radios":
+                // Set our radioList object to the attached radioList object (which was parsed from JSON)
+                console.log("Got master radio list update");
+                radioList = value['radioList'];
+                // Update the UI
+                populateRadios();
+                bindRadioCardButtons();
+                break;
 
-    // Message error
-    else if (event.data == "NACK") {
-        console.error("Got NACK from server");
-    }
+            // Single radio status update
+            case "radio":
+                // get index of radio
+                const idx = value['index'];
+                console.log("Got status update for radio " + idx.toString());
+                // get status data
+                var radioStatus = value['status'];
+                // Strip out \u0000's from strings (TODO: figure out why python's decode method adds these and how to get rid of them)
+                radioStatus['zone'] = radioStatus['zone'].replace(/\0/g, '');
+                radioStatus['chan'] = radioStatus['chan'].replace(/\0/g, '');
+                // Update radio entry
+                radioList[radioIndex] = radioStatus;
+                // Update radio card
+                updateRadioCard(radioIndex);
+                // Update bottom controls
+                updateRadioControls();
+                break;
 
-    // Unknown message handler
-    else {
-        console.warn("Got unknown message from server: " + event.data);
-    }
-}
+            // Speaker audio data
+            case "audioData":
+                // make sure it's actually speaker data
+                if (value['source'] != "speaker") {
+                    break;
+                }
+                // Process it
+                getSpkrData(value['data']);
+                break;
 
-/**
- * Send a message to the websocket server
- * @param {string} message message to send
- */
-function sendSocketMessage(message) {
-    serverSocket.send(message);
+            // NACK handler
+            case "nack":
+                console.error("Got NACK from server");
+                break;
+        }
+    }
 }
 
 /**
