@@ -43,6 +43,7 @@ Pip is not able to install pyaudio properly on windows, at least for me. I had t
 2. Identify if you're running 32 bit or 64 bit python. The easiest way to find out is to run `python` and view the build information:  
 ```Python 3.9.4 (tags/v3.9.4:1f2e308, Apr  6 2021, 13:40:21) [MSC v.1928 64 bit (AMD64)] on win32```
 3. Download the correct pyaudio .whl file for your python installation from [this website](https://www.lfd.uci.edu/~gohlke/pythonlibs/#pyaudio).
+  * For Python 3.9, download the cp39 package, python3.8 cp38, etc. If you mix up the version number the install will fail.
 4. Move the whl file to the console directory, and install using `pip install <pyaudio whl file>`
 
 ## Hardware
@@ -56,6 +57,19 @@ You'll need at least one radio to control before you can get the server up and r
 Most modern Motorola radios should have an SB9600 bus with four signals: BUS+, BUS-, BUSY, and ground. You'll need a RIB (radio interface box) to translate these signals into standard serial. If you're having issues getting the radio to connect, try switching the BUSY signal for the /BUSY signal (active low vs active high) as the RIB output has both available.
 
 *I've been working on a small board to do USB -> Serial -> SB9600 all in one compact package. More to come on that!*
+
+### Control interface - XCMP for XPR series
+All Motorola XPR radios support the XCMP protocol for radio-to-prehipheral communication. It is basically supercharged SB9600 over TCP/IP.
+
+When you plug a radio into your computer, it shows up as a network interface. The radio creates its own local network with your computer, much like a scaled down version of your wifi router at home. Most likely, your PC will be address 192.168.10.2 and your radio will be 192.168.10.1 (unless you changed it in CPS). If you want to find the address, you can either use CPS and read the codeplug or go into your computer's network settings and find the IP address of the router for the MotoTRBO network interface.
+
+Linux users, you will probably need to set a static IP on the interface even though DHCP is supposed to be enabled.
+
+For mobiles/base stations, you'll want to make/get a cable that has USB (pins 1, 2, 3, and 4), Tx audio (11), Rx audio (14) and Audio Ground (12). Ground is shared between both Tx and Rx. No other connections are necessary unless you want to add telemetry or ignition sense or whatever else.
+
+For portables, you'll want to do the same thing, but I have no clue what pins go where. Sorry. You can use a standard USB programming cable for basic data without audio though.
+
+In order to connect using XCMP you will need a set of keys. These will not be included with this project as they are the intellectual property of Motorola Solutions. You can sometimes find them on the internet, but you can definitely find them in your copy of CPS. There are different access levels as well which means different keys (and why the key ID parameter is there). One of the keys will not work. That is about all I can say. Have fun :)
 
 ### Audio Interface
 I used a cheapo USB soundcard with mic & headphone plugs. Wire RX audio from the radio's accessory connector (for example, RX_FILT_AUD on the XTL5000) to the mic input, and wire TX audio from the soundcard headphone jack to the MIC line that will work with your radio.
@@ -89,13 +103,16 @@ Radio connections are defined in a JSON config file.
 * `ctrlMode`: Radio control mode. Options are
   * **Implemented**:
     * `SB9600-XTL-O`: XTL5000 with O5 control head
+    * `XCMP-XPR`: Any XPR series radio (will probably work with XiR, DP/DM, etc).
   * **Planned**:
     * `SB9600-XTL-W`: XTL5000 with W9 control head
     * `SB9600-MCS-3`: MCS2000 with model 3 control head
     * `SB9600-AS-W`: Astro spectra with W9 control head (will probably just work with the XTL W profile)
     * `Soundcard-CM108`: CM108B/CM119 soundcard PTT control (for a generic radio. No control besides PTT will be available)
     * `Soundcard-VOX`: VOX-based PTT control. Same as above except relying on radio VOX circuit for PTT. Don't ever use this and I probably won't actually do it.
-* `ctrlPort`: Serial port the above interface is connected to. `COMx` for Windows, `/dev/ttySx` for linux.
+* `ctrlPort`: Communications port the above interface is connected to.
+  * For `SB9600` based interfaces: `COMx` for Windows, `/dev/ttySx` for linux.
+  * For `XCMP` based interfaces: IP addres such as `192.168.10.1` or a hostname such as `radio.local`
 * `txDeviceIdx`: Index of the transmit audio device. Device indecies can be queried using `python server-runtime.py -ls`
 * `rxDeviceIdx`: Index of the receive audio device. Indecies can be queried using the above command.
 * `sigMode`: **To be implemented.** Planned encode/decode of MDC, QCII, DTMF, etc, without needing a radio to do it natively.

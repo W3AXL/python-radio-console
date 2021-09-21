@@ -7,8 +7,9 @@ __pycache__/
 *.so
 
 # VENV stuff
-Scripts/
-scripts/
+[Ss]cripts/
+Include/
+pyvenv.cfg
 
 # Distribution / packaging
 .Python
@@ -142,3 +143,7 @@ dmypy.json
 cython_debug/
 callgrind.out
 start_profiler.bat
+
+# Project specific configs
+config.json
+interface/xcmp_keys.py

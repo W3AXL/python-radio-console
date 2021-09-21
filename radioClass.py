@@ -1,5 +1,6 @@
 
 from interface.xtl import XTL
+from interface.xcmp_xpr import XPR
 
 import queue
 
@@ -23,6 +24,8 @@ class Radio():
     
     # Valid control modes for the radio
     controlModes = ["None",             # No PTT control
+                    "XCMP-XPR",         # eXtended Control and Management Protocol for the XPR series radios
+                    "XCMP-APX",         #TODO: XCMP for APX 
                     "SB9600-XTL-O",     # XTL O5
                     "SB9600-XTL-W",     # XTL W9
                     "SB9600-AS-W",      # Astro Spectra W9
@@ -120,6 +123,8 @@ class Radio():
         # XTL5000 O-head
         if self.ctrlMode == "SB9600-XTL-O":
             self.interface = XTL(self.index, self.ctrlPort, 'O5', self.statusCallback)
+        elif self.ctrlMode == "XCMP-XPR":
+            self.interface = XPR(self.index, self.ctrlPort, self.statusCallback)
         
         # Connect to radio (optional reset)
         self.interface.connect(reset=reset)

@@ -1,12 +1,12 @@
 {
     "RadioList": [
         {
-            "name": "Desk VHF XTL",
-            "desc": "VHF XTL5000",
-            "ctrlMode": "SB9600-XTL-O",
-            "ctrlPort": "COM2",
-            "txDeviceIdx": 17,
-            "rxDeviceIdx": 4,
+            "name": "Desk UHF XPR",
+            "desc": "UHF1 XPR5550e",
+            "ctrlMode": "XCMP-XPR",
+            "ctrlPort": "192.168.10.1",
+            "txDeviceIdx": 3,
+            "rxDeviceIdx": 1,
             "sigMode": "MDC",
             "sigId": "4597"
         }
