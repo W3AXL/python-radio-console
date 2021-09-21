@@ -414,7 +414,7 @@ function changeChannel(down) {
                 `{
                     "radioControl": {
                         "index": ${selectedRadioIdx},
-                        "command": "chanUp",
+                        "command": "chanDn",
                         "options": null
                     }
                 }`
@@ -425,7 +425,7 @@ function changeChannel(down) {
                 `{
                     "radioControl": {
                         "index": ${selectedRadioIdx},
-                        "command": "chanDn",
+                        "command": "chanUp",
                         "options": null
                     }
                 }`
@@ -1109,11 +1109,12 @@ function recvSocketMessage(event) {
         msgObj = JSON.parse(event.data);
     } catch (e) {
         console.warn("Got invalid data from websocket: " + event.data);
+        console.warn(e);
         return;
     }
 
     // Iterate through each message and its data (normally we'd only get one at a time, but I suppose you could get more than one)
-    for (const [key, value] in Object.entries(msgObj)) {
+    for (const [key, value] of Object.entries(msgObj)) {
         // Handle message data based on key type
         switch (key) {
 
@@ -1138,9 +1139,9 @@ function recvSocketMessage(event) {
                 radioStatus['zone'] = radioStatus['zone'].replace(/\0/g, '');
                 radioStatus['chan'] = radioStatus['chan'].replace(/\0/g, '');
                 // Update radio entry
-                radioList[radioIndex] = radioStatus;
+                radioList[idx] = radioStatus;
                 // Update radio card
-                updateRadioCard(radioIndex);
+                updateRadioCard(idx);
                 // Update bottom controls
                 updateRadioControls();
                 break;

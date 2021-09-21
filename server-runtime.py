@@ -575,85 +575,106 @@ async def consumer_handler(websocket, path):
                 logger.logWarn("Invalid data recieved from client: {}".format(e.args[0]))
                 continue
 
-            #
-            #   Configuration Commands
-            #
+            # Iterate through the received command keys (there should only ever be one, but it's possible to recieve multiple)
 
-            if data == "?radios":
-                # Send list of all radio statuses
-                await messageQueue.put("allradios")
+            for key in cmdObject.keys():
 
-            #
-            #   Radio Control Commands
-            #
+                #
+                # Radio Query Command
+                #
 
-            elif data[0:9] == "!startTx:":
-                # start transmit on specified radio
-                index = int(data[9:])
-                setTransmit(index, True)
-            
-            elif data[0:8] == "!stopTx:":
-                # stop transmit on specified radio
-                index = int(data[8:])
-                setTransmit(index, False)
+                if key == "radios" and cmdObject[key]["command"] == "query":
+                    await messageQueue.put("allradios")
 
-            elif data[0:8] == "!chanUp:":
-                # change channel up on radio
-                index = int(data[8:])
-                changeChannel(index, False)
+                #
+                # Radio Control Commands
+                #
 
-            elif data[0:8] == "!chanDn:":
-                # change channel down
-                index = int(data[8:])
-                changeChannel(index, True)
+                elif key == "radioControl":
+                    # Get object inside
+                    params = cmdObject[key]
+                    command = params["command"]
+                    index = params["index"]
+                    options = params["options"]
 
-            elif data[0:5] == "!mon:":
-                index = int(data[5:])
-                toggleMonitor(index)
+                    # Start PTT
+                    if command == "startTx":
+                        setTransmit(index, True)
 
-            elif data[0:6] == "!nuis:":
-                index = int(data[6:])
-                nuisanceDelete(index)
+                    # Stop PTT
+                    elif command == "stopTx":
+                        setTransmit(index, False)
 
-            elif data[0:6] == "!lpwr:":
-                index = int(data[6:])
-                togglePower(index)
+                    # Channel Up
+                    elif command == "chanUp":
+                        changeChannel(index, False)
 
-            elif data[0:6] == "!scan:":
-                index = int(data[6:])
-                toggleScan(index)
+                    # Channel Down
+                    elif command == "chanDn":
+                        changeChannel(index, True)
 
-            elif data[0:5] == "!dir:":
-                index = int(data[5:])
-                toggleDirect(index)
+                    # Buttons
+                    elif command == "button":
+                        # Get button
+                        button = options
 
-            #
-            #   Audio data messages
-            #
+                        if button == "monitor":
+                            toggleMonitor(index)
 
-            elif data == "!startAudio":
-                logger.logInfo("Starting radio audio devices")
-                startSound()
+                        elif button == "nuisance":
+                            nuisanceDelete(index)
 
-            elif data[0:9] == "micAudio:":
-                micData = data[9:]
-                handleMicData(micData)
+                        elif button == "power":
+                            togglePower(index)
 
-            elif data[0:5] == "mute:":
-                index = int(data[5:])
-                toggleMute(index, True)
+                        elif button == "scan":
+                            toggleScan(index)
 
-            elif data[0:7] == "unmute:":
-                index = int(data[7:])
-                toggleMute(index, False)
+                        elif button == "direct":
+                            toggleDirect(index)
 
-            #
-            #   NACK if command wasn't handled above
-            #
+                #
+                #   Audio Control Messages
+                #
 
-            else:
-                # Send NACK
-                await messageQueue.put("NACK")
+                elif key == "audioControl":
+                    # Get params
+                    params = cmdObject[key]
+                    command = params["command"]
+                    index = params["index"]
+
+                    # Start audio command
+                    if command == "startAudio":
+                        logger.logInfo("Starting radio audio devices")
+                        startSound()
+
+                    # Mute commands
+                    elif command == "mute":
+                        toggleMute(index, True)
+
+                    elif command == "unmute":
+                        toggleMonitor(index, False)
+
+                #
+                #   Audio Data Messages
+                #
+
+                elif key == "audioData":
+                    # Get params
+                    params = cmdObject[key]
+                    source = params["source"]
+                    data = params["data"]
+                    
+                    if source == "mic":
+                        handleMicData(data)
+
+                #
+                #   NACK if command wasn't handled above
+                #
+
+                else:
+                    # Send NACK
+                    await messageQueue.put('NACK')
 
         # Handle connection closing event (stop audio devices)
         except websockets.exceptions.ConnectionClosed:
@@ -676,25 +697,36 @@ async def producer_hander(websocket, path):
             # Wait for new data in queue
             message = await messageQueue.get()
 
-            # get message type
-            # send all radio parameters as a list
+            # send all radios
             if message == "allradios":
                 logger.logInfo("sending radio list to {}".format(websocket.remote_address[0]))
-                response = "radios:" + getAllRadiosStatusJson()
+                # Generate response JSON
+                response = '{{ "radios": {{ "command": "list", "radioList": {} }} }}'.format(getAllRadiosStatusJson())
+                # Send
                 await websocket.send(response)
+            
             # send status update for specific radio
             elif "status:" in message:
+                # Get index
                 index = int(message[7:])
-                #logger.logInfo("Sending status update for radio{}".format(index))
-                await websocket.send("radio{}:".format(index) + getRadioStatusJson(index))
+                # Format JSON response
+                response = '{{ "radio": {{ "index": {}, "status": {} }} }}'.format(index,getRadioStatusJson(index))
+                # Send
+                await websocket.send(response)
+            
             # send speaker data from queue
             elif "speaker" in message:
+                # Get samples
                 speakerData = spkrSampleQueue.get_nowait()
-                await websocket.send("spkrAud:" + speakerData)
+                # Format response JSON
+                response = '{{ "audioData": {{ "source": "speaker", "data": "{}" }} }}'.format(speakerData)
+                # Send
+                await websocket.send(response)
+            
             # send NACK to unknown command
             elif "NACK" in message:
                 logger.logWarn("invalid command received from {}".format(websocket.remote_address[0]))
-                await websocket.send("NACK")
+                await websocket.send('{{"nack": {{ }} }}')
         
         except websockets.exceptions.ConnectionClosed:
             # The consumer handler will already cover this
