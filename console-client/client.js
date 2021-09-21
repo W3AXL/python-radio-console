@@ -364,7 +364,7 @@ function startPtt() {
         if (serverSocket) {
             serverSocket.send(
                 `{
-                    "control": {
+                    "radioControl": {
                         "index": ${selectedRadioIdx},
                         "command": "startTx",
                         "options": null
@@ -390,7 +390,7 @@ function stopPtt() {
             setTimeout( function() {
                 serverSocket.send(
                     `{
-                        "control": {
+                        "radioControl": {
                             "index": ${selectedRadioIdx},
                             "command": "stopTx",
                             "options": null
@@ -412,7 +412,7 @@ function changeChannel(down) {
             console.log("Changing channel down on " + selectedRadio);
             serverSocket.send(
                 `{
-                    "control": {
+                    "radioControl": {
                         "index": ${selectedRadioIdx},
                         "command": "chanUp",
                         "options": null
@@ -423,7 +423,7 @@ function changeChannel(down) {
             console.log("Changing channel up on " + selectedRadio);
             serverSocket.send(
                 `{
-                    "control": {
+                    "radioControl": {
                         "index": ${selectedRadioIdx},
                         "command": "chanDn",
                         "options": null
@@ -442,7 +442,7 @@ function toggleMonitor() {
         console.log("Toggling monitor on " + selectedRadio);
         serverSocket.send(
             `{
-                "control": {
+                "radioControl": {
                     "index": ${selectedRadioIdx},
                     "command": "button",
                     "options": "monitor"
@@ -460,7 +460,7 @@ function toggleMonitor() {
         console.log("Nuisance delete: " + selectedRadio);
         serverSocket.send(
             `{
-                "control": {
+                "radioControl": {
                     "index": ${selectedRadioIdx},
                     "command": "button",
                     "options": "nuisance"
@@ -478,7 +478,7 @@ function togglePower() {
         console.log("Toggling power on " + selectedRadio);
         serverSocket.send(
             `{
-                "control": {
+                "radioControl": {
                     "index": ${selectedRadioIdx},
                     "command": "button",
                     "options": "power"
@@ -496,7 +496,7 @@ function toggleScan() {
         console.log("Toggling scan for " + selectedRadio);
         serverSocket.send(
             `{
-                "control": {
+                "radioControl": {
                     "index": ${selectedRadioIdx},
                     "command": "button",
                     "options": "scan"
@@ -514,7 +514,7 @@ function toggleDirect() {
         console.log("Toggling talkaround for " + selectedRadio);
         serverSocket.send(
             `{
-                "control": {
+                "radioControl": {
                     "index": ${selectedRadioIdx},
                     "command": "button",
                     "options": "direct"
@@ -540,7 +540,7 @@ function toggleMute(event, obj) {
             console.log("Unmuting " + radioId);
             serverSocket.send(
                 `{
-                    "audioCtrl": {
+                    "audioControl": {
                         "command": "unmute",
                         "index": ${idx}
                     }
@@ -550,7 +550,7 @@ function toggleMute(event, obj) {
             console.log("Muting " + radioId);
             serverSocket.send(
                 `{
-                    "audioCtrl": {
+                    "audioControl": {
                         "command": "mute",
                         "index": ${idx}
                     }
@@ -810,7 +810,14 @@ function startMicrophone(stream) {
     });
 
     // Tell the server we're ready to do audio things
-    serverSocket.send("!startAudio");
+    serverSocket.send(
+        `{
+            "audioControl": {
+                "command": "startAudio",
+                "index": null
+            }
+        }`
+    )
 }
 
 /**
@@ -838,7 +845,14 @@ function sendMicData(data) {
                 dataString += (element.toString() + ",");
             })
             // Send string
-            serverSocket.send("micAudio:" + dataString);
+            serverSocket.send(
+                `{
+                    "audioData": {
+                        "source": "mic",
+                        "data": "${dataString}"
+                    }
+                }`
+            )
             // Clear buffer
             audio.inputBuffer = [];
         }
@@ -1052,7 +1066,13 @@ function onConnectWebsocket() {
     $("#navbar-status").removeClass("pending");
     $("#navbar-status").addClass("connected");
     // Query for radios
-    serverSocket.send('{"radios":{"command":"query"}}');
+    serverSocket.send(
+        `{
+            "radios": {
+                "command": "query"
+            }
+        }`
+    )
 }
 
 /**

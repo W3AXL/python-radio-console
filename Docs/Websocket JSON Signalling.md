@@ -65,7 +65,7 @@ These are sent from the client to the server
 
 ```json
 {
-    "control": {
+    "radioControl": {
         "index": 1,
         "command": "startTx",
         "options": null
@@ -93,7 +93,7 @@ These are used to control various audio functions
 
 ```json
 {
-    "audioCtrl": {
+    "audioControl": {
         "command": "mute",
         "index": 1
     }
