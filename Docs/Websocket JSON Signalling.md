@@ -19,7 +19,7 @@ Used to inform the client on the server's configured radios
     "radios": {
         "command": "list",
         "radioList": {
-            ...
+            " radioList JSON goes here "
         }
     }
 }
@@ -110,7 +110,7 @@ This is used for sending audio data arrays between the client and server
 {
     "audioData": {
         "source": "mic",
-        "data": [ (array of mic samples )]
+        "data": [ " array of mic samples " ]
     }
 }
 ```
