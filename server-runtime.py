@@ -653,7 +653,7 @@ async def consumer_handler(websocket, path):
                         toggleMute(index, True)
 
                     elif command == "unmute":
-                        toggleMonitor(index, False)
+                        toggleMute(index, False)
 
                 #
                 #   Audio Data Messages
