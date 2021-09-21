@@ -6,7 +6,7 @@ Used in websocket communication between client & server. Most command exchanges 
 
 Used to inform the client on the server's configured radios
 
-```
+```json
 {
     "radios": {
         "command": "query"
@@ -14,7 +14,7 @@ Used to inform the client on the server's configured radios
 }
 ```
 
-```
+```json
 {
     "radios": {
         "command": "list",
@@ -35,7 +35,7 @@ The `radioList` object is the standard JSON-encoded list of radios and their cur
 
 Used to inform the client on the status of a specific radio. **(server-to-client only)**
 
-```
+```json
 {
     "radio": {
         "name": "",
@@ -44,8 +44,8 @@ Used to inform the client on the status of a specific radio. **(server-to-client
         "lastid": "",
         "state": 2,
         "muted": false,
-        "error": false
-        "errorText": ""
+        "error": false,
+        "errorText": "",
         "scanning": true,
         "talkaround": false,
         "monitor": true,
@@ -60,7 +60,7 @@ This status JSON is created in the `radioClass.py` `encodeClientStatus()` functi
 
 These are sent from the client to the server
 
-```
+```json
 {
     "control": {
         "index": 1,
@@ -88,7 +88,7 @@ These are sent from the client to the server
 
 These are used to control various audio functions
 
-```
+```json
 {
     "audioCtrl": {
         "command": "mute",
@@ -106,7 +106,7 @@ These are used to control various audio functions
 
 This is used for sending audio data arrays between the client and server
 
-```
+```json
 {
     "audioData": {
         "source": "mic",
@@ -127,7 +127,7 @@ These are sent both ways, and contain signalling messages for WebRTC configurati
 
 ### NACK Message
 
-```
+```json
 {
     "nack": {}
 }
