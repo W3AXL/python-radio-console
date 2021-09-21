@@ -134,8 +134,8 @@ ion-icon {
 }
 
 #navbar-volume .topcoat-range::-webkit-slider-thumb {
-    height: 28px;
-    width: 16px;
+    height: 24px;
+    width: 12px;
 }
 
 #navbar-clock {

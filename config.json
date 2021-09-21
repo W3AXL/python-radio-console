@@ -5,7 +5,7 @@
             "desc": "VHF XTL5000",
             "ctrlMode": "SB9600-XTL-O",
             "ctrlPort": "COM2",
-            "txDeviceIdx": 17,
+            "txDeviceIdx": 19,
             "rxDeviceIdx": 4,
             "sigMode": "MDC",
             "sigId": "4597"
