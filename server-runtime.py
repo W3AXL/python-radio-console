@@ -44,7 +44,7 @@ from radioState import RadioState
 # Logger
 from logger import Logger
 
-# Used for loading config
+# Used for loading config and sending messages
 import json
 
 # CPU profiling
@@ -568,7 +568,12 @@ async def consumer_handler(websocket, path):
             # Wait for data
             data = await websocket.recv()
 
-            # Process the received command
+            # Try and convert the recieved data to JSON and warn on fail
+            try:
+                cmdObject = json.loads(data)
+            except ValueError as e:
+                logger.logWarn("Invalid data recieved from client: {}".format(e.args[0]))
+                continue
 
             #
             #   Configuration Commands
