@@ -76,6 +76,9 @@ profiling = False
 server = None
 serverLoop = None
 
+# WebRTC variables
+rtcPeer = None
+
 # Message queue for sending to client
 messageQueue = asyncio.Queue()
 
@@ -379,6 +382,59 @@ def getAllRadiosStatusJson():
     # Convert into a json string
     return json.dumps(statusList)
     
+"""-------------------------------------------------------------------------------
+    WebRTC Functions
+-------------------------------------------------------------------------------"""
+
+async def gotRtcOffer(offerType, offerSdp):
+
+    global rtcPeer
+
+    logger.logInfo("Got WebRTC offer")
+    
+    # Create SDP offer and peer connection objects
+    offer = RTCSessionDescription(offerSdp, offerType)
+    rtcPeer = RTCPeerConnection()
+
+    # Create UUID for peer
+    pcUuid = "PeerConnection({})".format(uuid.uuid4)
+    logger.logVerbose("Creating peer connection {}".format(pcUuid))
+
+    # ICE connection state callback
+    @rtcPeer.on("iceconnectionstatechange")
+    async def onIceConnectionStateChange():
+        logger.logVerbose("Ice connection state is now {}".format(rtcPeer.iceConnectionState))
+        if rtcPeer.iceConnectionState == "failed":
+            await rtcPeer.close()
+            logger.logError("WebRTC peer connection {} failed".format(pcUuid))
+    
+    # Audio track callback
+    @rtcPeer.on("track")
+    def onTrack(track):
+        logger.logVerbose("Got track from peer {}".format(track.kind, pcUuid))
+
+        # make sure it's audio
+        if track.kind != "audio":
+            logger.logError("Got non-audio track from peer {}".format(pcUuid))
+            return
+        
+        # TODO: handle the audio here
+
+        # Track ended handler
+        @track.on("ended")
+        async def onEnded():
+            logger.logVerbose("Audio track from {} ended".format(pcUuid))
+
+    # Handle the received offer
+    await rtcPeer.setRemoteDescription(offer)
+
+    # Create answer
+    answer = await rtcPeer.createAnswer()
+    await rtcPeer.setLocalDescription(answer)
+
+    # Send answer
+    message = '{{ "webRtcAnswer": {{ "type": {}, "sdp": {} }} }}'.format(rtcPeer.localDescription.type, rtcPeer.localDescription.sdp)
+    messageQueue.put_nowait(message)
 
 """-------------------------------------------------------------------------------
     Sound Device Functions
@@ -572,7 +628,7 @@ async def consumer_handler(websocket, path):
             try:
                 cmdObject = json.loads(data)
             except ValueError as e:
-                logger.logWarn("Invalid data recieved from client: {}".format(e.args[0]))
+                logger.logWarn("Invalid data recieved from client, {}\nData: {}".format(e.args[0], data))
                 continue
 
             # Iterate through the received command keys (there should only ever be one, but it's possible to recieve multiple)
@@ -656,6 +712,19 @@ async def consumer_handler(websocket, path):
                         toggleMute(index, False)
 
                 #
+                #   WebRTC Messages
+                #
+
+                elif key == "webRtcOffer":
+                    # Get params
+                    params = cmdObject[key]
+                    offerType = params["type"]
+                    offerSdp = params["sdp"]
+
+                    # Create peer connection
+                    await gotRtcOffer(offerType, offerSdp)
+
+                #
                 #   Audio Data Messages
                 #
 
@@ -704,6 +773,11 @@ async def producer_hander(websocket, path):
                 response = '{{ "radios": {{ "command": "list", "radioList": {} }} }}'.format(getAllRadiosStatusJson())
                 # Send
                 await websocket.send(response)
+
+            # Send WebRTC SDP answer
+            elif "webRtcAnswer" in message:
+                logger.logInfo("sending WebRTC answer to {}".format(websocket.remote_address[0]))
+                await websocket.send(message)
             
             # send status update for specific radio
             elif "status:" in message:

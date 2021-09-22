@@ -142,3 +142,4 @@ dmypy.json
 cython_debug/
 callgrind.out
 start_profiler.bat
+start_noreset.bat
