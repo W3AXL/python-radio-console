@@ -28,6 +28,7 @@ import uuid
 # Sound stuff
 import pyaudio
 from mulaw import MuLaw
+from av.audio.frame import AudioFrame
 
 # Numpy (used for sound processing)
 import numpy as np
@@ -398,6 +399,7 @@ class MicStreamTrack(MediaStreamTrack):
         self.track = track
 
     async def recv(self):
+        logger.logVerbose("mic recv()")
 
         # Get a new PyAV frame
         frame = await self.track.recv()
@@ -416,9 +418,22 @@ class SpkrStreamTrack(MediaStreamTrack):
     """
     kind = "audio"
 
-    def __init__(self, track):
+    def __init__(self):
         super().__init__()
-        self.track = track
+
+    async def recv():
+        logger.logVerbose("spkr recv()")
+
+        # Get samples from speaker queue if available
+        floatArray = await spkrSampleQueue.get()
+
+        # Convert to audio 
+        frame = AudioFrame.from_ndarray(floatArray, format='float', layout='mono')
+
+        logger.logVerbose("Got {} speaker samples".format(frame.samples))
+
+        # Return
+        return frame
 
 async def gotRtcOffer(offerObj):
     """
@@ -451,9 +466,11 @@ async def gotRtcOffer(offerObj):
     # Audio track callback
     @rtcPeer.on("track")
     def onTrack(track):
-        global micStream
 
-        logger.logVerbose("Got track from peer {}".format(track.kind, pcUuid))
+        global micStream
+        global rtcPeer
+
+        logger.logVerbose("Got {} track from peer {}".format(track.kind, pcUuid))
 
         # make sure it's audio
         if track.kind != "audio":
@@ -462,6 +479,12 @@ async def gotRtcOffer(offerObj):
         
         # Create the mic stream for this track
         micStream = MicStreamTrack(track)
+        logger.logVerbose("Added mic track")
+
+        # Send the speaker stream back
+        spkrTrack = SpkrStreamTrack()
+        rtcPeer.addTrack(spkrTrack)
+        logger.logVerbose("Added speaker track")
 
         # Track ended handler
         @track.on("ended")
@@ -486,6 +509,13 @@ async def gotRtcOffer(offerObj):
     messageQueue.put_nowait(message)
 
     logger.logVerbose("done")
+
+async def stopRtc():
+
+    # Stop the peer if it's open
+    logger.logVerbose("Stopping RTC connection")
+    if rtcPeer:
+        await rtcPeer.close()
 
 """-------------------------------------------------------------------------------
     Sound Device Functions
@@ -942,9 +972,7 @@ def twosCompliment(int_numb):
 -------------------------------------------------------------------------------"""
 
 if __name__ == "__main__":
-
-    runtimeLoop = None
-
+    
     try:
 
         # Start profiling
@@ -972,12 +1000,13 @@ if __name__ == "__main__":
         # Connect to radios
         connectRadios()
 
-        # Runtime loop
-        runtimeLoop = asyncio.get_event_loop()
-        runtimeLoop.run_forever()
+        serverLoop.run_forever()
 
     except KeyboardInterrupt:
         logger.logWarn("Caught KeyboardInterrupt, shutting down")
+
+        # Stop RTC
+        serverLoop.run_until_complete(stopRtc())
 
         # Cleanly disconnect any connected radios
         for radio in config.RadioList:
@@ -993,8 +1022,6 @@ if __name__ == "__main__":
         # Stop Loops
         serverLoop.stop()
         logger.logVerbose("Server loop stopped")
-        runtimeLoop.stop()
-        logger.logVerbose("Runtime loop stopped")
 
         # Stop profiling
         #stats = yappi.get_func_stats()

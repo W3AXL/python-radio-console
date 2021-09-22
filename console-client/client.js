@@ -855,7 +855,8 @@ function createPeerConnection() {
     // Connect audio stream from peer to the web audio objects
     peer.addEventListener('track', function(event) {
         if (event.track.kind == 'audio') {
-            var source = audio.context.createMediaStreamSource(event.streams[0])
+            console.log("Got new audio track from server");
+            var source = audio.context.createMediaStreamSource(event.streams[0]);
             source.connect(audio.outputGain);
         }
     })
