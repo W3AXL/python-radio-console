@@ -42,8 +42,8 @@ var audio = {
 var rtc = {
     // Peer connection object
     peer: null,
-    // Audio codec (Opus 16khz single channel)
-    codec: "opus/16000/1"
+    // Audio codec (Opus 48khz)
+    codec: "opus/48000/2"
 }
 
 testInput = null,

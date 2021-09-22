@@ -8,6 +8,7 @@ import time
 import json
 import queue
 import audioop
+from typing_extensions import runtime
 
 # TCP Socket Server
 import websockets
@@ -386,18 +387,57 @@ def getAllRadiosStatusJson():
     WebRTC Functions
 -------------------------------------------------------------------------------"""
 
-async def gotRtcOffer(offerType, offerSdp):
+class MicStreamTrack(MediaStreamTrack):
+    """
+    An audio stream object for the mic audio from the client
+    """
+    kind = "audio"
+
+    def __init__(self, track):
+        super().__init__()
+        self.track = track
+
+    async def recv(self):
+
+        # Get a new PyAV frame
+        frame = await self.track.recv()
+
+        # Convert to float32 numpy array
+        floatArray = frame.to_ndarray(format="float32")
+
+        # Put these samples into the mic queue
+        micSampleQueue.put_nowait(floatArray)
+
+        logger.logVerbose("Put {} samples to mic queue".format(len(floatArray)))
+
+class SpkrStreamTrack(MediaStreamTrack):
+    """
+    An audio stream object for the speaker data from the server
+    """
+    kind = "audio"
+
+    def __init__(self, track):
+        super().__init__()
+        self.track = track
+
+async def gotRtcOffer(offerObj):
+    """
+    Called when we receive a WebRTC offer from the client
+
+    Args:
+        offerObj (dict): WebRTC SDP offer object
+    """
 
     global rtcPeer
 
     logger.logInfo("Got WebRTC offer")
     
     # Create SDP offer and peer connection objects
-    offer = RTCSessionDescription(offerSdp, offerType)
+    offer = RTCSessionDescription(sdp=offerObj["sdp"], type=offerObj["type"])
     rtcPeer = RTCPeerConnection()
 
     # Create UUID for peer
-    pcUuid = "PeerConnection({})".format(uuid.uuid4)
+    pcUuid = "PeerConnection({})".format(uuid.uuid4())
     logger.logVerbose("Creating peer connection {}".format(pcUuid))
 
     # ICE connection state callback
@@ -411,6 +451,8 @@ async def gotRtcOffer(offerType, offerSdp):
     # Audio track callback
     @rtcPeer.on("track")
     def onTrack(track):
+        global micStream
+
         logger.logVerbose("Got track from peer {}".format(track.kind, pcUuid))
 
         # make sure it's audio
@@ -418,7 +460,8 @@ async def gotRtcOffer(offerType, offerSdp):
             logger.logError("Got non-audio track from peer {}".format(pcUuid))
             return
         
-        # TODO: handle the audio here
+        # Create the mic stream for this track
+        micStream = MicStreamTrack(track)
 
         # Track ended handler
         @track.on("ended")
@@ -426,15 +469,23 @@ async def gotRtcOffer(offerType, offerSdp):
             logger.logVerbose("Audio track from {} ended".format(pcUuid))
 
     # Handle the received offer
+    logger.logVerbose("Creating remote description from offer")
     await rtcPeer.setRemoteDescription(offer)
 
     # Create answer
+    logger.logVerbose("Creating WebRTC answer")
     answer = await rtcPeer.createAnswer()
+
+    # Set local description
+    logger.logVerbose("setting local SDP")
     await rtcPeer.setLocalDescription(answer)
 
     # Send answer
-    message = '{{ "webRtcAnswer": {{ "type": {}, "sdp": {} }} }}'.format(rtcPeer.localDescription.type, rtcPeer.localDescription.sdp)
+    logger.logVerbose("sending SDP answer")
+    message = '{{ "webRtcAnswer": {{ "type": "{}", "sdp": {} }} }}'.format(rtcPeer.localDescription.type, json.dumps(rtcPeer.localDescription.sdp))
     messageQueue.put_nowait(message)
+
+    logger.logVerbose("done")
 
 """-------------------------------------------------------------------------------
     Sound Device Functions
@@ -515,28 +566,6 @@ def stopSound():
 
     for radio in config.RadioList:
         radio.stopAudio()
-
-def handleMicData(dataString):
-    """
-    Route mic data from the client to the correct output devices
-
-    Args:
-        data (string): string of mu-law encoded mic data samples to process
-    """
-    # Split into a list of strings
-    stringList = dataString.split(",")
-    # Remove empty strings
-    stringList[:] = [item for item in stringList if item]
-    # Convert string list to floats
-    uint8array = np.asarray(stringList, dtype=np.uint8)
-    # Decode mu-law to float32
-    floatArray = MuLaw.decode(uint8array)
-    # Put to queue
-    micSampleQueue.put_nowait(floatArray)
-    # Print
-    #logger.logInfo("Got {} mic samples from client".format(len(floatArray)))
-    #logger.logInfo("Put mic samples in queue, new size {}".format(micSampleQueue.qsize()))
-
 
 def handleSpkrData():
     """
@@ -655,10 +684,12 @@ async def consumer_handler(websocket, path):
 
                     # Start PTT
                     if command == "startTx":
+                        logger.logVerbose("Starting TX on radio index {}".format(index))
                         setTransmit(index, True)
 
                     # Stop PTT
                     elif command == "stopTx":
+                        logger.logVerbose("Stopping TX on radio index {}".format(index))
                         setTransmit(index, False)
 
                     # Channel Up
@@ -717,12 +748,10 @@ async def consumer_handler(websocket, path):
 
                 elif key == "webRtcOffer":
                     # Get params
-                    params = cmdObject[key]
-                    offerType = params["type"]
-                    offerSdp = params["sdp"]
+                    offerObj = cmdObject[key]
 
                     # Create peer connection
-                    await gotRtcOffer(offerType, offerSdp)
+                    await gotRtcOffer(offerObj)
 
                 #
                 #   Audio Data Messages
@@ -914,6 +943,8 @@ def twosCompliment(int_numb):
 
 if __name__ == "__main__":
 
+    runtimeLoop = None
+
     try:
 
         # Start profiling
@@ -927,7 +958,7 @@ if __name__ == "__main__":
         parseArguments()
 
         # print OS
-        logger.logVerbose("Detected operating system: {}".format(osType))
+        #logger.logVerbose("Detected operating system: {}".format(osType))
 
         # Get sound devices
         getSoundDevices()
@@ -942,17 +973,28 @@ if __name__ == "__main__":
         connectRadios()
 
         # Runtime loop
-        asyncio.get_event_loop().run_forever()
+        runtimeLoop = asyncio.get_event_loop()
+        runtimeLoop.run_forever()
 
     except KeyboardInterrupt:
         logger.logWarn("Caught KeyboardInterrupt, shutting down")
+
         # Cleanly disconnect any connected radios
         for radio in config.RadioList:
             if radio.state != RadioState.Disconnected:
                 radio.disconnect()
+        logger.logVerbose("Disconnected from radios")
+
         # Stop PyAudio
         stopSound()
         pa.terminate()
+        logger.logVerbose("Audio devices stopped")
+
+        # Stop Loops
+        serverLoop.stop()
+        logger.logVerbose("Server loop stopped")
+        runtimeLoop.stop()
+        logger.logVerbose("Runtime loop stopped")
 
         # Stop profiling
         #stats = yappi.get_func_stats()

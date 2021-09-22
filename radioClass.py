@@ -96,7 +96,12 @@ class Radio():
         self.logger = Logger()
 
         # Speaker & Mic Sample Queues
+        self.micQueue = None
         self.spkrQueue = queue.Queue()
+
+        # Speaker & Mic Streams
+        self.micStream = None
+        self.spkrStream = None
 
         # Volume set from client
         self.volume = 1.0
@@ -439,10 +444,14 @@ class Radio():
         """
         Stop audio devices for radio
         """
-        self.micStream.stop_stream()
-        self.spkrStream.stop_stream()
-        self.clearMicQueue()
-        self.clearSpkrQueue()
+        if self.micStream:
+            self.micStream.stop_stream()
+        if self.spkrStream:
+            self.spkrStream.stop_stream()
+        if self.micQueue:
+            self.clearMicQueue()
+        if self.spkrQueue:
+            self.clearSpkrQueue()
 
     def clearMicQueue(self):
         """
