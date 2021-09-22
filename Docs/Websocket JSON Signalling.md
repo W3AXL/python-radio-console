@@ -122,12 +122,6 @@ This is used for sending audio data arrays between the client and server
 
 `data` contains the array of mu-law encoded audio samples (as a comma-separated string)
 
-### WebRTC Signalling Commands
-
-These are sent both ways, and contain signalling messages for WebRTC configuration
-
-**To be Implemented**
-
 ### NACK Message
 
 ```json
