@@ -25,7 +25,6 @@ class Radio():
     # Valid control modes for the radio
     controlModes = ["None",             # No PTT control
                     "XCMP-XPR",         # eXtended Control and Management Protocol for the XPR series radios
-                    "XCMP-APX",         #TODO: XCMP for APX 
                     "SB9600-XTL-O",     # XTL O5
                     "SB9600-XTL-W",     # XTL W9
                     "SB9600-AS-W",      # Astro Spectra W9
