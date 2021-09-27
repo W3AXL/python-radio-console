@@ -15,8 +15,9 @@ The console uses dead-simple interfaces for audio & communication - USB audio do
 * Python 3.9 Installation
 * Modern Web Browser (Chrome, Firefox, Edge)
 * USB Audio Interface (cheap CM108-based adapters will work fine) or something fancy like a Focusrite or Behringer audio interface
-* Motorola RIB (Radio Interface Box) for SB9600 to Serial communications and a working serial port (USB or hardware)
-* Motorola XTL-series radio (future work will include more radios)
+* Motorola XTL or XPR series radio (future work will include more radios)
+   * **For XTL series radios:** Motorola RIB (Radio Interface Box) for SB9600 to Serial communications and a working serial port (USB or hardware)
+   * **For XPR series radios:** Rear accessory connector for USB and audio communication.
 
 ## Setup
 
