@@ -26,7 +26,7 @@ class Logger:
         if self.verbose:
             callingFunction = inspect.currentframe().f_back.f_code.co_name
             timeString = time.strftime("%m/%d %H:%M:%S")
-            print(Fore.WHITE + Style.DIM + "[{}] ({:^16}) VERB: {}".format(timeString, msg) + Style.RESET_ALL)
+            print(Fore.WHITE + Style.DIM + "[{}] ({:^16}) VERB: {}".format(timeString, callingFunction, str(msg)) + Style.RESET_ALL)
 
     def logInfo(self, msg):
         callingFunction = inspect.currentframe().f_back.f_code.co_name
