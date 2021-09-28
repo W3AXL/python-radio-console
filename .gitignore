@@ -144,3 +144,4 @@ callgrind.out
 start_profiler.bat
 start_noreset.bat
 start_debug_noreset.bat
+interface/xcmp_keys.py
