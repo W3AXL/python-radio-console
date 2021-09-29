@@ -148,3 +148,4 @@ start_profiler.bat
 config.json
 interface/xcmp_keys.py
 start_debug_noreset.bat
+start_debug.bat
