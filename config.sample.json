@@ -18,7 +18,8 @@
             "ctrlPort": "192.168.10.1",
             "txDeviceIdx": 18,
             "rxDeviceIdx": 5,
-            "sigMode": "DMR"
+            "sigMode": "MDC",
+            "sigId": "1234"
         }
     ]
 }

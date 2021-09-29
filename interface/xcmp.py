@@ -5,8 +5,14 @@ from logger import Logger
 import time
 import queue
 from trboxcmp.xcmp import Xcmp
-from interface import xcmp_keys
 import logging
+
+#see if the user defined a keys file, else go to sample file
+try:
+    from interface import xcmp_keys
+except ImportError:
+    logging.warning("No XCMP key file found; defaulting to zero keys")
+    from interface import xcmp_keys_sample as xcmp_keys
 
 class XPR:
 
