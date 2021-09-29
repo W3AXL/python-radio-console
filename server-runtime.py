@@ -105,6 +105,11 @@ spkrBufferLength = 0
 micStream = None
 spkrStream = None
 
+# WebRTC Tracks
+micTrack = None
+spkrTrack = None
+blackHole = None
+
 # Sound device lists
 inputs = []
 outputs = []
@@ -418,8 +423,9 @@ class SpkrStreamTrack(MediaStreamTrack):
     """
     kind = "audio"
 
-    def __init__(self):
+    def __init__(self, track):
         super().__init__()
+        self.track = track
 
     async def recv():
         logger.logVerbose("spkr recv()")
@@ -463,11 +469,13 @@ async def gotRtcOffer(offerObj):
             await rtcPeer.close()
             logger.logError("WebRTC peer connection {} failed".format(pcUuid))
     
-    # Audio track callback
+    # Audio track callback when we get the mic track from the client
     @rtcPeer.on("track")
     def onTrack(track):
 
-        global micStream
+        global micTrack
+        global spkrTrack
+        global blackHole
         global rtcPeer
 
         logger.logVerbose("Got {} track from peer {}".format(track.kind, pcUuid))
@@ -477,12 +485,14 @@ async def gotRtcOffer(offerObj):
             logger.logError("Got non-audio track from peer {}".format(pcUuid))
             return
         
-        # Create the mic stream for this track
-        micStream = MicStreamTrack(track)
+        # Create the mic stream for this track, and add its output to a media blackhole so it starts
+        micTrack = MicStreamTrack(track)
+        blackHole = MediaBlackhole()
+        blackHole.addTrack(micTrack)
         logger.logVerbose("Added mic track")
 
-        # Send the speaker stream back
-        spkrTrack = SpkrStreamTrack()
+        # Create the speaker track and add the mic track as its input track (so it starts properly)
+        spkrTrack = SpkrStreamTrack(micTrack)
         rtcPeer.addTrack(spkrTrack)
         logger.logVerbose("Added speaker track")
 
