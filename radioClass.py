@@ -1,6 +1,6 @@
 
 from interface.xtl import XTL
-from interface.xcmp_xpr import XPR
+from interface.xcmp import XPR
 
 import queue
 
