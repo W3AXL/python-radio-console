@@ -147,3 +147,4 @@ start_debug_noreset.bat
 interface/xcmp_keys.py
 config.json
 start_debug.bat
+micAudio.csv

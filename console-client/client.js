@@ -42,7 +42,7 @@ var audio = {
 var rtc = {
     // Peer connection object
     peer: null,
-    // Audio codec (Opus 48khz)
+    // Audio codec (Opus 48khz stereo)
     codec: "opus/48000/2"
 }
 

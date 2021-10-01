@@ -22,7 +22,7 @@ import ssl
 
 # WebRTC Stuff
 from aiortc import MediaStreamTrack, RTCPeerConnection, RTCSessionDescription
-from aiortc.contrib.media import MediaBlackhole, MediaPlayer, MediaRecorder
+from aiortc.contrib.media import MediaBlackhole, MediaPlayer, MediaRecorder, AudioFrame
 import uuid
 
 # Sound stuff
@@ -85,11 +85,11 @@ rtcPeer = None
 messageQueue = asyncio.Queue()
 
 # Audio globals
-audioTransferSampleRate = 16000     # this is the samplerate used for audio transfer across the websocket
+audioSampleRate = 48000    # this must match the WebRTC settings on the client (48000hz OPUS)
 
-# Buffer durations in s (these must match the javascript variables)
-spkrBufferDur = 0.2
-micBufferDur = 0.2
+# frame sizes for pyaudio buffers (these were set by observing what size the aiortc frames were)
+spkrBufferSize =960
+micBufferSize = 960
 
 spkrThread = None
 
@@ -98,8 +98,6 @@ micSampleQueue = queue.Queue()
 
 # Radio spkr output vars
 spkrSampleQueue = queue.Queue()
-spkrBufferString = ""
-spkrBufferLength = 0
 
 # Test input & output audio streams
 micStream = None
@@ -404,18 +402,18 @@ class MicStreamTrack(MediaStreamTrack):
         self.track = track
 
     async def recv(self):
-        logger.logVerbose("mic recv()")
 
         # Get a new PyAV frame
         frame = await self.track.recv()
 
-        # Convert to float32 numpy array
-        floatArray = frame.to_ndarray(format="float32")
+        # Convert to int16 numpy array and get first set of data only (the array is inside another array)
+        intArray = frame.to_ndarray(dtype=np.int16)[0]
+
+        # This array is interleaved L/R samples, so pick out only one
+        monoArray = intArray[0::2].copy()
 
         # Put these samples into the mic queue
-        micSampleQueue.put_nowait(floatArray)
-
-        logger.logVerbose("Put {} samples to mic queue".format(len(floatArray)))
+        micSampleQueue.put_nowait(monoArray)
 
 class SpkrStreamTrack(MediaStreamTrack):
     """
@@ -427,16 +425,22 @@ class SpkrStreamTrack(MediaStreamTrack):
         super().__init__()
         self.track = track
 
-    async def recv():
+    async def recv(self):
         logger.logVerbose("spkr recv()")
 
-        # Get samples from speaker queue if available
-        floatArray = await spkrSampleQueue.get()
+        # create empty data by default
+        data = np.zeros(spkrBufferSize).astype(np.int16)
+
+        # Only get speaker data if we have some in the buffer
+        if spkrSampleQueue.qsize() > 1:
+            try:
+                data = spkrSampleQueue.get_nowait()
+
+            except queue.Empty:
+                pass
 
         # Convert to audio 
-        frame = AudioFrame.from_ndarray(floatArray, format='float', layout='mono')
-
-        logger.logVerbose("Got {} speaker samples".format(frame.samples))
+        frame = AudioFrame.from_ndarray(data, format='s16p', layout='mono')
 
         # Return
         return frame
@@ -452,6 +456,10 @@ async def gotRtcOffer(offerObj):
     global rtcPeer
 
     logger.logInfo("Got WebRTC offer")
+
+    # Start audio on radios
+    logger.logVerbose("Starting audio devices on radios")
+    startSound()
     
     # Create SDP offer and peer connection objects
     offer = RTCSessionDescription(sdp=offerObj["sdp"], type=offerObj["type"])
@@ -471,7 +479,7 @@ async def gotRtcOffer(offerObj):
     
     # Audio track callback when we get the mic track from the client
     @rtcPeer.on("track")
-    def onTrack(track):
+    async def onTrack(track):
 
         global micTrack
         global spkrTrack
@@ -490,6 +498,8 @@ async def gotRtcOffer(offerObj):
         blackHole = MediaBlackhole()
         blackHole.addTrack(micTrack)
         logger.logVerbose("Added mic track")
+        await blackHole.start()
+        logger.logVerbose("Started mic track")
 
         # Create the speaker track and add the mic track as its input track (so it starts properly)
         spkrTrack = SpkrStreamTrack(micTrack)
@@ -593,11 +603,11 @@ def startSound():
     
     # Start audio on each radio device
     for radio in config.RadioList:
-        radio.startAudio(pa, micSampleQueue, audioTransferSampleRate, micBufferDur, spkrBufferDur)
+        radio.startAudio(pa, micSampleQueue, audioSampleRate, micBufferSize, spkrBufferSize)
 
     # Start the speaker audio handler
-    spkrThread = threading.Thread(target=handleSpkrData, daemon=True)
-    spkrThread.start()
+    #spkrThread = threading.Thread(target=handleSpkrData, daemon=True)
+    #spkrThread.start()
 
 def stopSound():
     """
@@ -613,9 +623,8 @@ def handleSpkrData():
 
     Get the speaker data from each connected radio, add it to the buffer string, and send & clear the buffer if it's big enough
     """
-    global spkrBufferString
-    global spkrBufferLength
-    global spkrBufferDur
+
+    global spkrBufferSize
 
     while True:
 
@@ -637,22 +646,9 @@ def handleSpkrData():
                     pass
 
         if gotSamples:
-            # Convert to uint8 array of mu-law encoded samples
-            muLawArray = MuLaw.encode(outputFloatArray)
-            # this is allegedly a super-fast way to turn a float array into a comma-separated string
-            dataString = ','.join([str(num) for num in muLawArray])
-            # add this dataString to the buffer
-            spkrBufferString += dataString
-            spkrBufferLength += len(muLawArray)
-
-            # Send the buffer string if it's big enough
-            if spkrBufferLength >= spkrBufferDur * audioTransferSampleRate:
-                # send this data string
-                spkrSampleQueue.put_nowait(spkrBufferString)
-                serverLoop.call_soon_threadsafe(messageQueue.put_nowait,"speaker")
-                # clear the buffer
-                spkrBufferString = ""
-                spkrBufferLength = 0
+            # Put the samples into the queue
+            spkrSampleQueue.put_nowait(outputFloatArray)
+            
         else:
             # give the CPU a break
             time.sleep(0.01)
