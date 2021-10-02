@@ -29,6 +29,7 @@ import uuid
 import pyaudio
 from mulaw import MuLaw
 from av.audio.frame import AudioFrame
+import fractions
 
 # Numpy (used for sound processing)
 import numpy as np
@@ -421,12 +422,22 @@ class SpkrStreamTrack(MediaStreamTrack):
     """
     kind = "audio"
 
-    def __init__(self, track):
+    def __init__(self):
         super().__init__()
-        self.track = track
+        self.samplerate = audioSampleRate
+        self.samples = spkrBufferSize
 
     async def recv(self):
-        logger.logVerbose("spkr recv()")
+        logger.logInfo("spkr recv()")
+
+        # Handle timestamps properly
+        if hasattr(self, "_timestamp"):
+            self._timestamp += self.samples
+            wait = self._start + (self._timestamp / self.samplerate) - time.time()
+            await asyncio.sleep(wait)
+        else:
+            self._start = time.time()
+            self._timestamp = 0
 
         # create empty data by default
         data = np.zeros(spkrBufferSize).astype(np.int16)
@@ -441,6 +452,11 @@ class SpkrStreamTrack(MediaStreamTrack):
 
         # Convert to audio 
         frame = AudioFrame.from_ndarray(data, format='s16p', layout='mono')
+
+        # Update time stuff
+        frame.pts = self._timestamp
+        frame.sample_rate = self.samplerate
+        frame.time_base = fractions.Fraction(1, self.samplerate)
 
         # Return
         return frame
@@ -502,7 +518,7 @@ async def gotRtcOffer(offerObj):
         logger.logVerbose("Started mic track")
 
         # Create the speaker track and add the mic track as its input track (so it starts properly)
-        spkrTrack = SpkrStreamTrack(micTrack)
+        spkrTrack = SpkrStreamTrack()
         rtcPeer.addTrack(spkrTrack)
         logger.logVerbose("Added speaker track")
 
