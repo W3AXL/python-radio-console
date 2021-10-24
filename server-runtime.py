@@ -426,6 +426,7 @@ class SpkrStreamTrack(MediaStreamTrack):
         super().__init__()
         self.samplerate = audioSampleRate
         self.samples = spkrBufferSize
+        logger.logVerbose("SpkrStreamTrack initialized")
 
     async def recv(self):
         logger.logInfo("spkr recv()")
@@ -440,18 +441,21 @@ class SpkrStreamTrack(MediaStreamTrack):
             self._timestamp = 0
 
         # create empty data by default
-        data = np.zeros(spkrBufferSize).astype(np.int16)
+        #data = np.zeros(self.samples).astype(np.int16)
+
+        # Test 440hz sinewave
+        times = np.arange(self.samples) / self.samplerate
+        data = np.sin(2 * np.pi * 440 * times)
 
         # Only get speaker data if we have some in the buffer
-        if spkrSampleQueue.qsize() > 1:
-            try:
-                data = spkrSampleQueue.get_nowait()
-
-            except queue.Empty:
-                pass
+        #if spkrSampleQueue.qsize() > 1:
+        #    try:
+        #        data = spkrSampleQueue.get_nowait()
+        #    except queue.Empty:
+        #        pass
 
         # Convert to audio 
-        frame = AudioFrame.from_ndarray(data, format='s16p', layout='mono')
+        frame = AudioFrame.from_ndarray(data, format='s16', layout='mono')
 
         # Update time stuff
         frame.pts = self._timestamp
