@@ -29,6 +29,7 @@ import uuid
 import pyaudio
 from mulaw import MuLaw
 from av.audio.frame import AudioFrame
+
 import fractions
 
 # Numpy (used for sound processing)
@@ -89,7 +90,7 @@ messageQueue = asyncio.Queue()
 audioSampleRate = 48000    # this must match the WebRTC settings on the client (48000hz OPUS)
 
 # frame sizes for pyaudio buffers (these were set by observing what size the aiortc frames were)
-spkrBufferSize =960
+spkrBufferSize = 960
 micBufferSize = 960
 
 spkrThread = None
@@ -429,40 +430,45 @@ class SpkrStreamTrack(MediaStreamTrack):
         logger.logVerbose("SpkrStreamTrack initialized")
 
     async def recv(self):
-        logger.logInfo("spkr recv()")
+        logger.logVerbose("spkr recv()")
 
         # Handle timestamps properly
         if hasattr(self, "_timestamp"):
+            logger.logVerbose("Got timestamp")
             self._timestamp += self.samples
             wait = self._start + (self._timestamp / self.samplerate) - time.time()
+            logger.logVerbose("Waiting {} s".format(wait))
             await asyncio.sleep(wait)
         else:
+            logger.logVerbose("Setting initial timestamp to 0")
             self._start = time.time()
             self._timestamp = 0
 
         # create empty data by default
-        #data = np.zeros(self.samples).astype(np.int16)
-
-        # Test 440hz sinewave
-        times = np.arange(self.samples) / self.samplerate
-        data = np.sin(2 * np.pi * 440 * times)
+        logger.logVerbose("Creating empty np array")
+        data = np.zeros(self.samples).astype(np.int16)
 
         # Only get speaker data if we have some in the buffer
-        #if spkrSampleQueue.qsize() > 1:
-        #    try:
-        #        data = spkrSampleQueue.get_nowait()
-        #    except queue.Empty:
-        #        pass
+        if spkrSampleQueue.qsize() > 1:
+            try:
+                logger.logVerbose("Getting speaker samples from queue")
+                data = spkrSampleQueue.get_nowait()
+            except queue.Empty:
+                pass
 
         # Convert to audio 
-        frame = AudioFrame.from_ndarray(data, format='s16', layout='mono')
+        logger.logVerbose("Converting np array to audio frame")
+        stereo = np.vstack((data,data)) # we have to do this becasue from_ndarray sucks
+        frame = AudioFrame.from_ndarray(stereo, format='s16p')
 
         # Update time stuff
+        logger.logVerbose("Adding frame info")
         frame.pts = self._timestamp
         frame.sample_rate = self.samplerate
         frame.time_base = fractions.Fraction(1, self.samplerate)
 
         # Return
+        logger.logVerbose("Returning audio frame")
         return frame
 
 async def gotRtcOffer(offerObj):
@@ -486,8 +492,13 @@ async def gotRtcOffer(offerObj):
     rtcPeer = RTCPeerConnection()
 
     # Create UUID for peer
-    pcUuid = "PeerConnection({})".format(uuid.uuid4())
+    pcUuid = "Peer({})".format(uuid.uuid4())
     logger.logVerbose("Creating peer connection {}".format(pcUuid))
+
+    # Create the speaker track
+    spkrTrack = SpkrStreamTrack()
+    rtcPeer.addTrack(spkrTrack)
+    logger.logVerbose("Added speaker track")
 
     # ICE connection state callback
     @rtcPeer.on("iceconnectionstatechange")
@@ -521,16 +532,23 @@ async def gotRtcOffer(offerObj):
         await blackHole.start()
         logger.logVerbose("Started mic track")
 
-        # Create the speaker track and add the mic track as its input track (so it starts properly)
-        spkrTrack = SpkrStreamTrack()
-        rtcPeer.addTrack(spkrTrack)
-        logger.logVerbose("Added speaker track")
-
         # Track ended handler
         @track.on("ended")
         async def onEnded():
             logger.logVerbose("Audio track from {} ended".format(pcUuid))
 
+    await doRtcAnswer(offer)
+
+    logger.logVerbose("done")
+
+async def stopRtc():
+
+    # Stop the peer if it's open
+    logger.logVerbose("Stopping RTC connection")
+    if rtcPeer:
+        await rtcPeer.close()
+
+async def doRtcAnswer(offer):
     # Handle the received offer
     logger.logVerbose("Creating remote description from offer")
     await rtcPeer.setRemoteDescription(offer)
@@ -546,16 +564,8 @@ async def gotRtcOffer(offerObj):
     # Send answer
     logger.logVerbose("sending SDP answer")
     message = '{{ "webRtcAnswer": {{ "type": "{}", "sdp": {} }} }}'.format(rtcPeer.localDescription.type, json.dumps(rtcPeer.localDescription.sdp))
+    #logger.logVerbose(message.replace("\\r\\n", "\r\n"))
     messageQueue.put_nowait(message)
-
-    logger.logVerbose("done")
-
-async def stopRtc():
-
-    # Stop the peer if it's open
-    logger.logVerbose("Stopping RTC connection")
-    if rtcPeer:
-        await rtcPeer.close()
 
 """-------------------------------------------------------------------------------
     Sound Device Functions

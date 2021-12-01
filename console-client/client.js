@@ -98,20 +98,74 @@ function pageLoad() {
  * Connect to websocket and setup audio
  */
 function connect() {
+    // Update navbar
+    $("#navbar-status").html("Connecting");
+    $("#navbar-status").addClass("pending");
     // Connect websocket first
     connectWebsocket();
-    // Wait for connect to start audio devices if they haven't already started
+    // Start audio devices if they're not already started
     if (!audio.context) {
-        waitForWebSocket(serverSocket, startAudioDevices);
+        startAudioDevices();
     }
+    // Wait for the websocket to be connected, then start WebRTC
+    waitForWebSocket(serverSocket, startWebRtc);
+}
+
+/**
+ * Called when GUI is fully connected to server
+ */
+function connected() {
+    // Change button
+    $("#server-connect-btn").html("Disconnect");
+    $("#server-connect-btn").prop("disabled",false);
+    // Change status
+    $("#navbar-status").html("Connected");
+    $("#navbar-status").removeClass("pending");
+    $("#navbar-status").addClass("connected");
+    // Get radios
+    serverSocket.send(
+        `{
+            "radios": {
+                "command": "query"
+            }
+        }`
+    )
 }
 
 /**
  * Disconnect from websocket and teardown audio devices
  */
 function disconnect() {
+    // Change button
+    $("#server-connect-btn").html("Disconnecting...");
+    $("#server-connect-btn").prop("disabled", true);
+    // Change status
+    $("#navbar-status").html("Disconnecting");
+    $("#navbar-status").removeClass("connected");
+    $("#navbar-status").addClass("pending");
+    // Change status
+    disconnecting = true;
     // disconnect websocket
     disconnectWebsocket();
+}
+
+/**
+ * Called when client is done disconnecting
+ */
+function disconnected() {
+    // Update button
+    $("#server-connect-btn").html("Connect");
+    $("#server-connect-btn").prop("disabled", false);
+    // Change status
+    $("#navbar-status").html("Disconnected");
+    $("#navbar-status").removeClass("connected");
+    $("#navbar-status").removeClass("pending");
+    // Clear radio cards
+    clearRadios();
+    // Disable volume slider
+    $("#console-volume").prop('disabled', true);
+    // Reset variables
+    disconnecting = false;
 }
 
 // Keydown handler
@@ -760,6 +814,7 @@ function readConfig() {
  */
 function startWebRtc() {
     console.log("Starting WebRTC session");
+    $("#navbar-status").html("Connecting WebRTC");
 
     // Create peer
     rtc.peer = createPeerConnection();
@@ -841,6 +896,9 @@ function createPeerConnection() {
 
     peer.addEventListener('iceconnectionstatechange', function() {
         console.log(`new peer iceConnectionState: ${peer.iceConnectionState}`);
+        if (peer.iceConnectionState == "connected") {
+            connected();
+        }
     }, false);
 
     peer.addEventListener('signalingstatechange', function() {
@@ -1009,9 +1067,6 @@ function startAudioDevices() {
     audio.outputGain.gain.value = 0.75;
     audio.outputGain.connect(audio.context.destination);
 
-    // Start WebRTC (which also activates microphone);
-    startWebRtc();
-
     // Enable volume slider
     $("#console-volume").prop('disabled', false);
 }
@@ -1043,10 +1098,12 @@ function playSound(soundId) {
  */
 function connectWebsocket() {
     // Change button
-    $("#server-connect-btn").html("Connecting...");
+    $("#server-connect-btn").html("Connecting");
     $("#server-connect-btn").prop("disabled",true);
+    // Change status
+    $("#navbar-status").html("Connecting websocket");
     // Log
-    console.log("Connecting to " + config.serverAddress + ":" + config.serverPort);
+    console.log("Websocket connecting to " + config.serverAddress + ":" + config.serverPort);
     // Setup socket
     serverSocket = new WebSocket("ws://" + config.serverAddress + ":" + config.serverPort);
     serverSocket.onerror = handleSocketError;
@@ -1079,39 +1136,18 @@ function waitForWebSocket(socket, callback=null) {
  * Called once the websocket connection is active
  */
 function onConnectWebsocket() {
-    console.log("Connected!");
-    // Change button
-    $("#server-connect-btn").html("Disconnect");
-    $("#server-connect-btn").prop("disabled",false);
-    // Change status
-    $("#navbar-status").html("Connected");
-    $("#navbar-status").removeClass("pending");
-    $("#navbar-status").addClass("connected");
-    // Query for radios
-    serverSocket.send(
-        `{
-            "radios": {
-                "command": "query"
-            }
-        }`
-    )
+    $("#navbar-status").html("Websocket connected");
+    console.log("Websocket connected");
 }
 
 /**
  * Disconnect from the websocket server
  */
 function disconnectWebsocket() {
-    // Change button
-    $("#server-connect-btn").html("Disconnecting...");
-    $("#server-connect-btn").prop("disabled", true);
-    // Change status
-    $("#navbar-status").html("Disconnecting");
-    $("#navbar-status").removeClass("connected");
-    $("#navbar-status").addClass("pending");
+    
     // Disconnect if we had a connection open
     if (serverSocket.readyState == WebSocket.OPEN) {
         console.log("Disconnecting from server");
-        disconnecting = true;
         serverSocket.close();
     }
 }
@@ -1199,25 +1235,24 @@ function recvSocketMessage(event) {
  * @param {event} event socket closed event
  */
 function handleSocketClose(event) {
+    var clean = true;
     console.warn("Server connection closed");
     if (event.data) {console.warn(event.data);}
+
+    // If it wasn't a commanded disconnect, alert the user after we're done cleaning up
     if (!disconnecting) {
+        clean = false;
+    }
+
+    // Cleanup
+    stopWebRtc();
+    serverSocket = null;
+    disconnected();
+
+    // Show the optional alert
+    if (!clean) {
         window.alert("Lost connection to server!");
     }
-    // Update button
-    $("#server-connect-btn").html("Connect");
-    $("#server-connect-btn").prop("disabled", false);
-    // Change status
-    $("#navbar-status").html("Disconnected");
-    $("#navbar-status").removeClass("connected");
-    $("#navbar-status").removeClass("pending");
-    // Clear radio cards
-    clearRadios();
-    // Disable volume slider
-    $("#console-volume").prop('disabled', true);
-    // Reset variables
-    disconnecting = false;
-    serverSocket = null;
 }
 
 /**
