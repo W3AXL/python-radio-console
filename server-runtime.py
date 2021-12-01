@@ -21,7 +21,7 @@ import http.server
 import ssl
 
 # WebRTC Stuff
-from aiortc import MediaStreamTrack, RTCPeerConnection, RTCSessionDescription
+from aiortc import MediaStreamTrack, RTCPeerConnection, RTCSessionDescription, logging
 from aiortc.contrib.media import MediaBlackhole, MediaPlayer, MediaRecorder, AudioFrame
 import uuid
 
@@ -430,45 +430,37 @@ class SpkrStreamTrack(MediaStreamTrack):
         logger.logVerbose("SpkrStreamTrack initialized")
 
     async def recv(self):
-        logger.logVerbose("spkr recv()")
 
         # Handle timestamps properly
         if hasattr(self, "_timestamp"):
-            logger.logVerbose("Got timestamp")
             self._timestamp += self.samples
             wait = self._start + (self._timestamp / self.samplerate) - time.time()
-            logger.logVerbose("Waiting {} s".format(wait))
             await asyncio.sleep(wait)
         else:
-            logger.logVerbose("Setting initial timestamp to 0")
             self._start = time.time()
             self._timestamp = 0
 
         # create empty data by default
-        logger.logVerbose("Creating empty np array")
         data = np.zeros(self.samples).astype(np.int16)
 
         # Only get speaker data if we have some in the buffer
-        if spkrSampleQueue.qsize() > 1:
+        if spkrSampleQueue.qsize() > 0:
             try:
-                logger.logVerbose("Getting speaker samples from queue")
-                data = spkrSampleQueue.get_nowait()
+                data = spkrSampleQueue.get_nowait().astype(np.int16)
             except queue.Empty:
                 pass
 
-        # Convert to audio 
-        logger.logVerbose("Converting np array to audio frame")
-        stereo = np.vstack((data,data)) # we have to do this becasue from_ndarray sucks
-        frame = AudioFrame.from_ndarray(stereo, format='s16p')
+        # To convert to a mono audio frame, we need the array to be an array of single-value arrays for each sample (annoying)
+        data = data.reshape(data.shape[0], -1).T
+        # Create audio frame
+        frame = AudioFrame.from_ndarray(data, format='s16', layout='mono')
 
         # Update time stuff
-        logger.logVerbose("Adding frame info")
         frame.pts = self._timestamp
         frame.sample_rate = self.samplerate
         frame.time_base = fractions.Fraction(1, self.samplerate)
 
         # Return
-        logger.logVerbose("Returning audio frame")
         return frame
 
 async def gotRtcOffer(offerObj):
@@ -636,8 +628,8 @@ def startSound():
         radio.startAudio(pa, micSampleQueue, audioSampleRate, micBufferSize, spkrBufferSize)
 
     # Start the speaker audio handler
-    #spkrThread = threading.Thread(target=handleSpkrData, daemon=True)
-    #spkrThread.start()
+    spkrThread = threading.Thread(target=handleSpkrData, daemon=True)
+    spkrThread.start()
 
 def stopSound():
     """
@@ -658,7 +650,7 @@ def handleSpkrData():
 
     while True:
 
-        outputFloatArray = None
+        outputIntArray = None
         gotSamples = False
         
         # Get samples from each radio and add to the output array
@@ -666,18 +658,18 @@ def handleSpkrData():
             if radio.state == RadioState.Receiving and not radio.muted:
                 try:
                     samples = radio.spkrQueue.get_nowait()
-                    if not outputFloatArray:
+                    if not outputIntArray:
                         gotSamples = True
-                        outputFloatArray = samples
+                        outputIntArray = samples
                     else:
-                        outputFloatArray = np.add(outputFloatArray, samples)
+                        outputIntArray = np.add(outputIntArray, samples)
                 except queue.Empty:
                     #logger.logWarn("Radio {} queue empty".format(radio.name))
                     pass
 
         if gotSamples:
             # Put the samples into the queue
-            spkrSampleQueue.put_nowait(outputFloatArray)
+            spkrSampleQueue.put_nowait(outputIntArray)
             
         else:
             # give the CPU a break
@@ -1014,6 +1006,9 @@ if __name__ == "__main__":
         # Start profiling
         #yappi.set_clock_type('cpu')
         #yappi.start(builtins=True)
+
+        # Enable AIORTC debug
+        #logging.basicConfig(level=logging.DEBUG)
 
         # add cli arguments
         addArguments()

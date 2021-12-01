@@ -36,6 +36,7 @@ var audio = {
     outputBuffer: null,
     outputProcessor: null,
     outputGain: null,
+    dummyOutput: new Audio()
 }
 
 // WebRTC Variables
@@ -914,6 +915,11 @@ function createPeerConnection() {
     peer.addEventListener('track', function(event) {
         if (event.track.kind == 'audio') {
             console.log("Got new audio track from server");
+            // Attach the stream to a dummy audio output so it plays (needed in chrome for some reason)
+            audio.dummyOutput.muted = true;
+            audio.dummyOutput.srcObject = event.streams[0];
+            audio.dummyOutput.play();
+            // Create audio source from the track and attach it to the gain node
             var source = audio.context.createMediaStreamSource(event.streams[0]);
             source.connect(audio.outputGain);
         }
