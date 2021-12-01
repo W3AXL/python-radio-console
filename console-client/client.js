@@ -1081,8 +1081,8 @@ function startAudioDevices() {
  *  Change volume of console based on slider
  */
 function changeVolume() {
-    // Convert 0-100 to 0-1 for multiplication with audio 
-    const newVol = $("#console-volume").val() / 100;
+    // Convert 0-100 to 0-1 for multiplication with audio, using an inverse-square curve for better "logarithmic" volume
+    const newVol = Math.pow($("#console-volume").val() / 100, 2);
     // Set gain node to new value
     audio.outputGain.gain.value = newVol;
 }
