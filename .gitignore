@@ -7,8 +7,9 @@ __pycache__/
 *.so
 
 # VENV stuff
-Scripts/
-scripts/
+[Ss]cripts/
+Include/
+pyvenv.cfg
 
 # Distribution / packaging
 .Python
