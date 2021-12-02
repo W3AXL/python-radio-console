@@ -6,6 +6,16 @@
             "ctrlMode": "SB9600-XTL-O",
             "ctrlPort": "COM2",
             "txDeviceIdx": 17,
+            "rxDeviceIdx": 4,
+            "sigMode": "MDC",
+            "sigId": "4597"
+        },
+        {
+            "name": "Desk UHF XPR",
+            "desc": "UHF XPR4550",
+            "ctrlMode": "XCMP-XPR",
+            "ctrlPort": "192.168.10.1",
+            "txDeviceIdx": 20,
             "rxDeviceIdx": 3,
             "sigMode": "MDC",
             "sigId": "4597"
