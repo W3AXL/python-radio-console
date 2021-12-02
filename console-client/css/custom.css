@@ -111,7 +111,7 @@ ion-icon {
 }
 
 #navbar-status.pending {
-    color: var(--color-alert-mid);
+    color: var(--color-alert-light2);
 }
 
 #navbar-volume {

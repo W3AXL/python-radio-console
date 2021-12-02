@@ -143,11 +143,10 @@ dmypy.json
 cython_debug/
 callgrind.out
 start_profiler.bat
-
-# Project specific configs
-config.json
-interface/xcmp_keys.py
+start_noreset.bat
 start_debug_noreset.bat
+interface/xcmp_keys.py
+config.json
 start_debug.bat
 micAudio.csv
 SDP offer from server.txt
