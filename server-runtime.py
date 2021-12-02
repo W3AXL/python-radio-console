@@ -1008,7 +1008,7 @@ if __name__ == "__main__":
         #yappi.start(builtins=True)
 
         # Enable AIORTC debug
-        #logging.basicConfig(level=logging.DEBUG)
+        logging.basicConfig(level=logging.ERROR)
 
         # add cli arguments
         addArguments()
