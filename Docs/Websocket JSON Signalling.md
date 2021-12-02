@@ -122,6 +122,38 @@ This is used for sending audio data arrays between the client and server
 
 `data` contains the array of mu-law encoded audio samples (as a comma-separated string)
 
+### WebRTC Signalling Commands
+
+These are sent both ways, and contain signalling messages for WebRTC configuration
+
+```json
+{
+    "webRtcOffer": {
+        "type": {},
+        "sdp": {}
+    }
+}
+```
+
+This is the initial WebRTC offer from the client to the server.
+
+`type` contains the SDP type
+`sdp` contains the SDP data
+
+```json
+{
+    "webRtcAnswer": {
+        "type": {},
+        "sdp": {}
+    }
+}
+```
+
+This is the WebRTC SDP answer from the server to the client
+
+`type` contains the SDP type
+`sdp` contains the SDP data
+
 ### NACK Message
 
 ```json

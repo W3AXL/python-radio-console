@@ -36,6 +36,15 @@ var audio = {
     outputBuffer: null,
     outputProcessor: null,
     outputGain: null,
+    dummyOutput: new Audio()
+}
+
+// WebRTC Variables
+var rtc = {
+    // Peer connection object
+    peer: null,
+    // Audio codec (Opus 48khz stereo)
+    codec: "opus/48000/2"
 }
 
 testInput = null,
@@ -90,20 +99,74 @@ function pageLoad() {
  * Connect to websocket and setup audio
  */
 function connect() {
+    // Update navbar
+    $("#navbar-status").html("Connecting");
+    $("#navbar-status").addClass("pending");
     // Connect websocket first
     connectWebsocket();
-    // Wait for connect to start audio devices if they haven't already started
+    // Start audio devices if they're not already started
     if (!audio.context) {
-        waitForWebSocket(serverSocket, startAudioDevices);
+        startAudioDevices();
     }
+    // Wait for the websocket to be connected, then start WebRTC
+    waitForWebSocket(serverSocket, startWebRtc);
+}
+
+/**
+ * Called when GUI is fully connected to server
+ */
+function connected() {
+    // Change button
+    $("#server-connect-btn").html("Disconnect");
+    $("#server-connect-btn").prop("disabled",false);
+    // Change status
+    $("#navbar-status").html("Connected");
+    $("#navbar-status").removeClass("pending");
+    $("#navbar-status").addClass("connected");
+    // Get radios
+    serverSocket.send(
+        `{
+            "radios": {
+                "command": "query"
+            }
+        }`
+    )
 }
 
 /**
  * Disconnect from websocket and teardown audio devices
  */
 function disconnect() {
+    // Change button
+    $("#server-connect-btn").html("Disconnecting...");
+    $("#server-connect-btn").prop("disabled", true);
+    // Change status
+    $("#navbar-status").html("Disconnecting");
+    $("#navbar-status").removeClass("connected");
+    $("#navbar-status").addClass("pending");
+    // Change status
+    disconnecting = true;
     // disconnect websocket
     disconnectWebsocket();
+}
+
+/**
+ * Called when client is done disconnecting
+ */
+function disconnected() {
+    // Update button
+    $("#server-connect-btn").html("Connect");
+    $("#server-connect-btn").prop("disabled", false);
+    // Change status
+    $("#navbar-status").html("Disconnected");
+    $("#navbar-status").removeClass("connected");
+    $("#navbar-status").removeClass("pending");
+    // Clear radio cards
+    clearRadios();
+    // Disable volume slider
+    $("#console-volume").prop('disabled', true);
+    // Reset variables
+    disconnecting = false;
 }
 
 // Keydown handler
@@ -740,7 +803,260 @@ function readConfig() {
 }
 
 /***********************************************************************************
-    Audio Handling Function
+    WebRTC Functions
+
+    These are adapted/borrowed from:
+    https://github.com/webrtc/samples/tree/gh-pages/src/content/peerconnection/audio
+***********************************************************************************/
+
+/**
+ * Initiate WebRTC connection with server
+ * @returns {boolean} true if connection starts successfully
+ */
+function startWebRtc() {
+    console.log("Starting WebRTC session");
+    $("#navbar-status").html("Connecting WebRTC");
+
+    // Create peer
+    rtc.peer = createPeerConnection();
+    if (rtc.peer) {
+        console.log("Created peer connection");
+    } else {
+        console.error("Failed to create peer connection");
+        return false
+    }
+    
+    // Find the right getUserMedia()
+    if (!navigator.getUserMedia) {
+        navigator.getUserMedia = navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia || navigator.msGetUserMedia;
+    }
+
+    // Open the microphone
+    if (navigator.getUserMedia) {
+        // Get the microphone
+        navigator.getUserMedia({audio:true},
+            // Add tracks to peer connection and negotiate if successful
+            function(stream) {
+                // Add the first available mic track to the peer connection
+                rtc.peer.addTrack(stream.getTracks()[0])
+                // Create and send the WebRTC offer
+                return sendRtcOffer();
+            },
+            // Report a failure to capture mic
+            function(e) {
+                alert('Error capturing microphone device');
+                return false;
+            }
+        );
+    } else {
+        alert('Cannot capture microphone: getUserMedia() not supported in this browser');
+        return false;
+    }
+}
+
+function stopWebRtc() {
+
+    // Close any active peer transceivers
+    if (rtc.peer.getTransceivers) {
+        rtc.peer.getTransceivers().forEach(function(tx) {
+            if (tx.stop) {
+                tx.stop();
+            }
+        })
+    }
+
+    // Close any local audio
+    rtc.peer.getSenders().forEach(function(sender) {
+        sender.track.stop();
+    });
+
+    // Close peer connection
+    setTimeout(function() {
+        rtc.peer.close();
+    }, 500);
+}
+
+/**
+ * Create a new WebRTC peer connection
+ * @returns {RTCPeerConnection} the created peer connection object
+ */
+function createPeerConnection() {
+
+    // Create config object
+    var config = {
+        sdpSemantics: 'unified-plan'
+    };
+
+    // Create peer
+    var peer = new RTCPeerConnection(config);
+
+    // Register event listeners for debug
+    peer.addEventListener('icegatheringstatechange', function() {
+        console.log(`new peer iceGatheringState: ${peer.iceGatheringState}`);
+    }, false);
+
+    peer.addEventListener('iceconnectionstatechange', function() {
+        console.log(`new peer iceConnectionState: ${peer.iceConnectionState}`);
+        if (peer.iceConnectionState == "connected") {
+            connected();
+        }
+    }, false);
+
+    peer.addEventListener('signalingstatechange', function() {
+        console.log(`new peer signallingState: ${peer.signalingState}`);
+    })
+
+    // Print initial states
+    console.log(`new peer iceGatheringState: ${peer.iceGatheringState}`);
+    console.log(`new peer iceConnectionState: ${peer.iceConnectionState}`);
+    console.log(`new peer signallingState: ${peer.signalingState}`);
+
+    // Connect audio stream from peer to the web audio objects
+    peer.addEventListener('track', function(event) {
+        if (event.track.kind == 'audio') {
+            console.log("Got new audio track from server");
+            // Attach the stream to a dummy audio output so it plays (needed in chrome for some reason)
+            audio.dummyOutput.muted = true;
+            audio.dummyOutput.srcObject = event.streams[0];
+            audio.dummyOutput.play();
+            // Create audio source from the track and attach it to the gain node
+            var source = audio.context.createMediaStreamSource(event.streams[0]);
+            source.connect(audio.outputGain);
+        }
+    })
+
+    // Return the new peer object
+    return peer;
+}
+
+/**
+ * Create and send the SDP offer to the server
+ * @returns {boolean} true on success
+ */
+function sendRtcOffer() {
+    // Generate the SDP offer and assign it to the peer object
+    rtc.peer.createOffer().then(function(offer) {
+        return rtc.peer.setLocalDescription(offer);
+    }).then(function() {
+        // Wait for ICE gathering to complete (this looks messy but it's just waiting for that)
+        return new Promise(function(resolve) {
+            if (rtc.peer.iceGatheringState === 'complete') {
+                resolve();
+            } else {
+                function checkState() {
+                    if (rtc.peer.iceGatheringState === 'complete') {
+                        rtc.peer.removeEventListener('icegatheringstatechange', checkState);
+                        resolve();
+                    }
+                }
+                rtc.peer.addEventListener('icegatheringstatechange', checkState);
+            }
+        });
+    }).then(function() {
+        // Generate the specifics of the offer
+        var offer = rtc.peer.localDescription;
+        offer.sdp = sdpFilterCodec('audio', rtc.codec, offer.sdp);
+
+        // Send the offer to the server via WebSocket
+        serverSocket.send(
+        `{
+            "webRtcOffer": {
+                "type": ${JSON.stringify(offer.type)},
+                "sdp": ${JSON.stringify(offer.sdp)}
+            }
+        }`
+        );
+    }).catch(function(e) {
+        console.error(e);
+        return false;
+    });
+    // Return true if nothing bad happened
+    return true;
+}
+
+/**
+ * Take the SDP response from the server and configure the peer
+ * @param {string} answerType SDP type
+ * @param {string} answerSdp SDP
+ */
+function gotRtcResponse(answerType, answerSdp) {
+    console.log("Got WebRTC response from server");
+    var answer = {
+        type: answerType,
+        sdp: answerSdp
+    }
+    rtc.peer.setRemoteDescription(answer);
+}
+
+/**
+ * Find an SDP based on the specified codec
+ * 
+ * This was stolen directly from the aiortc example
+ * 
+ * @param {string} kind 'audio' or 'video'
+ * @param {string} codec specific codec descriptor
+ * @param {*} realSdp existing SDP
+ * @returns new SDP using specified codec
+ */
+function sdpFilterCodec(kind, codec, realSdp) {
+    var allowed = []
+    var rtxRegex = new RegExp('a=fmtp:(\\d+) apt=(\\d+)\r$');
+    var codecRegex = new RegExp('a=rtpmap:([0-9]+) ' + escapeRegExp(codec))
+    var videoRegex = new RegExp('(m=' + kind + ' .*?)( ([0-9]+))*\\s*$')
+    
+    var lines = realSdp.split('\n');
+
+    var isKind = false;
+    for (var i = 0; i < lines.length; i++) {
+        if (lines[i].startsWith('m=' + kind + ' ')) {
+            isKind = true;
+        } else if (lines[i].startsWith('m=')) {
+            isKind = false;
+        }
+
+        if (isKind) {
+            var match = lines[i].match(codecRegex);
+            if (match) {
+                allowed.push(parseInt(match[1]));
+            }
+
+            match = lines[i].match(rtxRegex);
+            if (match && allowed.includes(parseInt(match[2]))) {
+                allowed.push(parseInt(match[1]));
+            }
+        }
+    }
+
+    var skipRegex = 'a=(fmtp|rtcp-fb|rtpmap):([0-9]+)';
+    var sdp = '';
+
+    isKind = false;
+    for (var i = 0; i < lines.length; i++) {
+        if (lines[i].startsWith('m=' + kind + ' ')) {
+            isKind = true;
+        } else if (lines[i].startsWith('m=')) {
+            isKind = false;
+        }
+
+        if (isKind) {
+            var skipMatch = lines[i].match(skipRegex);
+            if (skipMatch && !allowed.includes(parseInt(skipMatch[2]))) {
+                continue;
+            } else if (lines[i].match(videoRegex)) {
+                sdp += lines[i].replace(videoRegex, '$1 ' + allowed.join(' ')) + '\n';
+            } else {
+                sdp += lines[i] + '\n';
+            }
+        } else {
+            sdp += lines[i] + '\n';
+        }
+    }
+
+    return sdp;
+}
+
+/***********************************************************************************
+    Audio Handling Functions
 ***********************************************************************************/
 
 /** 
@@ -752,29 +1068,6 @@ function startAudioDevices() {
     audio.context = new AudioContext();
     console.log("Created audio context");
 
-    // Find the right getUserMedia()
-    if (!navigator.getUserMedia) {
-        navigator.getUserMedia = navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia || navigator.msGetUserMedia;
-    }
-
-    // Try to get a user audio input
-    if (navigator.getUserMedia) {
-        // Get the microphone
-        navigator.getUserMedia({audio:true},
-            function(stream) {
-                startMicrophone(stream);
-                return true;
-            },
-            function(e) {
-                alert('Error capturing microphone device');
-                return false;
-            }
-        );
-    } else {
-        alert('Cannot capture microphone: getUserMedia() not supported in this browser');
-        return false;
-    }
-
     // Create gain node for output volume and connect it to the default output device
     audio.outputGain = audio.context.createGain();
     audio.outputGain.gain.value = 0.75;
@@ -785,223 +1078,13 @@ function startAudioDevices() {
 }
 
 /**
- * Start capturing the microphone
- * @param {MediaStream} stream the MediaStream for the microphone
- */
-function startMicrophone(stream) {
-    console.log("Starting microphone");
-
-    // Create an empty buffer
-    audio.inputBuffer = [];
-
-    // Create input stream source
-    audio.input = audio.context.createMediaStreamSource(stream);
-    
-    // Import the microphone processor (async function so we do .then())
-    audio.context.audioWorklet.addModule('microphone-processor.js').then(() => {
-        // create a new node of it
-        audio.inputProcessor = new AudioWorkletNode(audio.context, 'microphone-processor');
-        // Bind the data handler
-        audio.inputProcessor.port.onmessage = event => {
-            sendMicData(event.data);
-        }
-        // connect everything together
-        audio.input.connect(audio.inputProcessor);
-    });
-
-    // Tell the server we're ready to do audio things
-    serverSocket.send(
-        `{
-            "audioControl": {
-                "command": "startAudio",
-                "index": null
-            }
-        }`
-    )
-}
-
-/**
- * Buffer and send the mic data string to the server
- * @param {Float32Array} data Float32 intput samples
- */
-function sendMicData(data) {
-    // only send stuff if we're actually PTTing into a radio
-    if (pttActive && serverSocket && selectedRadio) {
-        // Convert the Float32Array data to a Mu-Law Uint8Array
-        const muLawData = encodeMuLaw(data);
-        // add new data to buffer
-        // this is the only good way to concat typed arrays in JS
-        var newBuffer = new Uint8Array(audio.inputBuffer.length + muLawData.length);
-        newBuffer.set(audio.inputBuffer);
-        newBuffer.set(muLawData, audio.inputBuffer.length);
-        audio.inputBuffer = newBuffer;
-        // Push data if buffer is full
-        if (audio.inputBuffer.length >= audio.micBufferDur * audio.context.sampleRate) {
-            // Resample
-            const resampled = Float32Array.from(waveResampler.resample(audio.inputBuffer, audio.context.sampleRate, audio.transferSamplerate, {method: "point"}));
-            // Convert to string
-            var dataString = "";
-            resampled.forEach((element) => {
-                dataString += (element.toString() + ",");
-            })
-            // Send string
-            serverSocket.send(
-                `{
-                    "audioData": {
-                        "source": "mic",
-                        "data": "${dataString}"
-                    }
-                }`
-            )
-            // Clear buffer
-            audio.inputBuffer = [];
-        }
-    }
-}
-
-/**
- * Handle new radio speaker data from the server
- * @param {string} dataString string of comma-separated mu-law encoded speaker audio data from server
- */
-function getSpkrData(dataString) {
-    // Convert the comma-separated string of mu-law samples to a Uint8Array
-    const spkrMuLawData = Uint8Array.from(dataString.split(','));
-    // Decode to Float32Array
-    const spkrData = decodeMuLaw(spkrMuLawData);
-    // Resample to client samplerate
-    const resampled = Float32Array.from(waveResampler.resample(spkrData, audio.transferSamplerate, audio.context.sampleRate, {method: "point"}));
-    // Create a new buffer and source to play the received data
-    const buffer = audio.context.createBuffer(1, resampled.length, audio.context.sampleRate);
-    buffer.copyToChannel(resampled, 0);
-    var source = audio.context.createBufferSource();
-    source.buffer = buffer;
-    // Connect to the gain node and play
-    source.connect(audio.outputGain);
-    source.start(0);
-}
-
-/**
  *  Change volume of console based on slider
  */
 function changeVolume() {
-    // Convert 0-100 to 0-1 for multiplication with audio 
-    const newVol = $("#console-volume").val() / 100;
+    // Convert 0-100 to 0-1 for multiplication with audio, using an inverse-square curve for better "logarithmic" volume
+    const newVol = Math.pow($("#console-volume").val() / 100, 2);
     // Set gain node to new value
     audio.outputGain.gain.value = newVol;
-}
-
-/***********************************************************************************
-    Audio Encoding/Decoding Functions
-
-    Borrowed from many places, including:
-        - https://github.com/rochars/alawmulaw/blob/master/lib/mulaw.js
-
-***********************************************************************************/
-
-const muLawClip = 32635;
-
-const muLawBias = 0x84;
-
-const muLawEncodeTable = [
-    0,0,1,1,2,2,2,2,3,3,3,3,3,3,3,3,
-    4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,
-    5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,
-    5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,
-    6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,
-    6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,
-    6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,
-    6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,
-    7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,
-    7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,
-    7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,
-    7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,
-    7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,
-    7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,
-    7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,
-    7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7
-];
-
-const muLawDecodeTable = [0, 132, 396, 924, 1980, 4092, 8316, 16764];
-
-/**
- * Convert a Float32 array of samples to mu-law encoded 8 bit samples
- * @param {Float32Array} samples input Float32 samples
- * @returns {Uint8Array} array of Mu-Law encoded samples
- */
-function encodeMuLaw(samples) {
-    // Convert input float samples to PCM
-    var intSamples = floatToPcm(samples);
-    // Create output sample array
-    var output = new Uint8Array(samples.length);
-    // Process each sample with the discrete mu-law encoding algorithm
-    intSamples.forEach((sample, idx) => {
-        // int vars (saves memory I guess?)
-        let sign, exponent, mantissa;
-        // get sign/magnitude
-        sign = (sample >> 8) & 0x80;
-        if (sign != 0) sample = -sample;
-        // mu-law algorithm
-        sample = sample + muLawBias;
-        if (sample > muLawClip) sample = muLawClip;
-        exponent = muLawEncodeTable[(sample>>7) & 0xFF];
-        mantissa = (sample >> (exponent+3)) & 0x0F;
-        output[idx] = ~(sign | (exponent << 4) | mantissa);
-    });
-    // return
-    return output;
-}
-
-/**
- * Convert mu-law encoded Uint8 samples to Float32 samples
- * @param {Uint8Array} samples input Mu-law Uint8 samples
- * @returns {Float32Array} output Float32 samples
- */
-function decodeMuLaw(samples) {
-    // Create output array
-    var output = new Float32Array(samples.length);
-    // Iterate over input array and decode mu-law
-    samples.forEach((muLawSample, idx) => {
-        // int vars
-        let sign, exponent, mantissa;
-        // do mu-law stuff
-        muLawSample = ~muLawSample;
-        sign = (muLawSample & 0x80);
-        exponent = (muLawSample >> 4) & 0x07;
-        mantissa = muLawSample & 0x0F;
-        sample = muLawDecodeTable[exponent] + (mantissa << (exponent + 3));
-        if (sign != 0) sample = -sample;
-        output[idx] = sample;
-    });
-    // Return float samples
-    return pcmToFloat(output);
-}
-
-/**
- * Convert float32 samples to 16-bit PCM by clamping to [-1, 1],
- * multiplying by 32768, and taking the integer portion
- * @param {Float32Array} samples array of input Float32 samples
- * @returns {Int16Array} array of output signed PCM samples
- */
-function floatToPcm(samples) {
-    var output = new Int16Array(samples.length);
-    samples.forEach((itm, idx) => {
-        output[idx] = Math.floor(Math.max(-1, Math.min(itm, 1)) * 32768);
-    });
-    return output;
-}
-
-/**
- * Convert Int16 PCM samples to Float 32 samples by dividing
- * 32768 and clamping to [-1, 1]
- * @param {Int16Array} samples array of input Int16 samples
- * @returns {Float32Array} array of output Float32 samples
- */
-function pcmToFloat(samples) {
-    var output = new Float32Array(samples.length);
-    samples.forEach((itm, idx) => {
-        output[idx] = Math.max(-1, Math.min(itm / 32768, 1));
-    });
-    return output;
 }
 
 /**
@@ -1021,10 +1104,12 @@ function playSound(soundId) {
  */
 function connectWebsocket() {
     // Change button
-    $("#server-connect-btn").html("Connecting...");
+    $("#server-connect-btn").html("Connecting");
     $("#server-connect-btn").prop("disabled",true);
+    // Change status
+    $("#navbar-status").html("Connecting websocket");
     // Log
-    console.log("Connecting to " + config.serverAddress + ":" + config.serverPort);
+    console.log("Websocket connecting to " + config.serverAddress + ":" + config.serverPort);
     // Setup socket
     serverSocket = new WebSocket("ws://" + config.serverAddress + ":" + config.serverPort);
     serverSocket.onerror = handleSocketError;
@@ -1057,39 +1142,18 @@ function waitForWebSocket(socket, callback=null) {
  * Called once the websocket connection is active
  */
 function onConnectWebsocket() {
-    console.log("Connected!");
-    // Change button
-    $("#server-connect-btn").html("Disconnect");
-    $("#server-connect-btn").prop("disabled",false);
-    // Change status
-    $("#navbar-status").html("Connected");
-    $("#navbar-status").removeClass("pending");
-    $("#navbar-status").addClass("connected");
-    // Query for radios
-    serverSocket.send(
-        `{
-            "radios": {
-                "command": "query"
-            }
-        }`
-    )
+    $("#navbar-status").html("Websocket connected");
+    console.log("Websocket connected");
 }
 
 /**
  * Disconnect from the websocket server
  */
 function disconnectWebsocket() {
-    // Change button
-    $("#server-connect-btn").html("Disconnecting...");
-    $("#server-connect-btn").prop("disabled", true);
-    // Change status
-    $("#navbar-status").html("Disconnecting");
-    $("#navbar-status").removeClass("connected");
-    $("#navbar-status").addClass("pending");
+    
     // Disconnect if we had a connection open
     if (serverSocket.readyState == WebSocket.OPEN) {
         console.log("Disconnecting from server");
-        disconnecting = true;
         serverSocket.close();
     }
 }
@@ -1146,6 +1210,14 @@ function recvSocketMessage(event) {
                 updateRadioControls();
                 break;
 
+            // WebRTC SDP answer
+            case "webRtcAnswer":
+                // get params
+                answerType = value['type'];
+                answerSdp = value['sdp'];
+                gotRtcResponse(answerType,answerSdp);
+                break;
+
             // Speaker audio data
             case "audioData":
                 // make sure it's actually speaker data
@@ -1169,25 +1241,24 @@ function recvSocketMessage(event) {
  * @param {event} event socket closed event
  */
 function handleSocketClose(event) {
+    var clean = true;
     console.warn("Server connection closed");
     if (event.data) {console.warn(event.data);}
+
+    // If it wasn't a commanded disconnect, alert the user after we're done cleaning up
     if (!disconnecting) {
+        clean = false;
+    }
+
+    // Cleanup
+    stopWebRtc();
+    serverSocket = null;
+    disconnected();
+
+    // Show the optional alert
+    if (!clean) {
         window.alert("Lost connection to server!");
     }
-    // Update button
-    $("#server-connect-btn").html("Connect");
-    $("#server-connect-btn").prop("disabled", false);
-    // Change status
-    $("#navbar-status").html("Disconnected");
-    $("#navbar-status").removeClass("connected");
-    $("#navbar-status").removeClass("pending");
-    // Clear radio cards
-    clearRadios();
-    // Disable volume slider
-    $("#console-volume").prop('disabled', true);
-    // Reset variables
-    disconnecting = false;
-    serverSocket = null;
 }
 
 /**
@@ -1197,4 +1268,19 @@ function handleSocketClose(event) {
 function handleSocketError(event) {
     console.error("Server connection error: " + event.data);
     window.alert("Server connection errror: " + event.data);
+}
+
+/***********************************************************************************
+    Utility Functions
+***********************************************************************************/
+
+/**
+ * Escape a string to regex?
+ * 
+ * This was also stolen from the aiortc example. Not exactly sure what it does yet
+ * @param {string} string string to escape
+ * @returns {string} replaced string
+ */
+function escapeRegExp(string) {
+    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // $& means the whole matched string
 }

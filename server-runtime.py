@@ -8,6 +8,7 @@ import time
 import json
 import queue
 import audioop
+from typing_extensions import runtime
 
 # TCP Socket Server
 import websockets
@@ -20,13 +21,16 @@ import http.server
 import ssl
 
 # WebRTC Stuff
-from aiortc import MediaStreamTrack, RTCPeerConnection, RTCSessionDescription
-from aiortc.contrib.media import MediaBlackhole, MediaPlayer, MediaRecorder
+from aiortc import MediaStreamTrack, RTCPeerConnection, RTCSessionDescription, logging
+from aiortc.contrib.media import MediaBlackhole, MediaPlayer, MediaRecorder, AudioFrame
 import uuid
 
 # Sound stuff
 import pyaudio
 from mulaw import MuLaw
+from av.audio.frame import AudioFrame
+
+import fractions
 
 # Numpy (used for sound processing)
 import numpy as np
@@ -76,15 +80,18 @@ profiling = False
 server = None
 serverLoop = None
 
+# WebRTC variables
+rtcPeer = None
+
 # Message queue for sending to client
 messageQueue = asyncio.Queue()
 
 # Audio globals
-audioTransferSampleRate = 16000     # this is the samplerate used for audio transfer across the websocket
+audioSampleRate = 48000    # this must match the WebRTC settings on the client (48000hz OPUS)
 
-# Buffer durations in s (these must match the javascript variables)
-spkrBufferDur = 0.2
-micBufferDur = 0.2
+# frame sizes for pyaudio buffers (these were set by observing what size the aiortc frames were)
+spkrBufferSize = 960
+micBufferSize = 960
 
 spkrThread = None
 
@@ -93,12 +100,15 @@ micSampleQueue = queue.Queue()
 
 # Radio spkr output vars
 spkrSampleQueue = queue.Queue()
-spkrBufferString = ""
-spkrBufferLength = 0
 
 # Test input & output audio streams
 micStream = None
 spkrStream = None
+
+# WebRTC Tracks
+micTrack = None
+spkrTrack = None
+blackHole = None
 
 # Sound device lists
 inputs = []
@@ -379,6 +389,175 @@ def getAllRadiosStatusJson():
     # Convert into a json string
     return json.dumps(statusList)
     
+"""-------------------------------------------------------------------------------
+    WebRTC Functions
+-------------------------------------------------------------------------------"""
+
+class MicStreamTrack(MediaStreamTrack):
+    """
+    An audio stream object for the mic audio from the client
+    """
+    kind = "audio"
+
+    def __init__(self, track):
+        super().__init__()
+        self.track = track
+
+    async def recv(self):
+
+        # Get a new PyAV frame
+        frame = await self.track.recv()
+
+        # Convert to int16 numpy array and get first set of data only (the array is inside another array)
+        intArray = frame.to_ndarray(dtype=np.int16)[0]
+
+        # This array is interleaved L/R samples, so pick out only one
+        monoArray = intArray[0::2].copy()
+
+        # Put these samples into the mic queue
+        micSampleQueue.put_nowait(monoArray)
+
+class SpkrStreamTrack(MediaStreamTrack):
+    """
+    An audio stream object for the speaker data from the server
+    """
+    kind = "audio"
+
+    def __init__(self):
+        super().__init__()
+        self.samplerate = audioSampleRate
+        self.samples = spkrBufferSize
+        logger.logVerbose("SpkrStreamTrack initialized")
+
+    async def recv(self):
+
+        # Handle timestamps properly
+        if hasattr(self, "_timestamp"):
+            self._timestamp += self.samples
+            wait = self._start + (self._timestamp / self.samplerate) - time.time()
+            await asyncio.sleep(wait)
+        else:
+            self._start = time.time()
+            self._timestamp = 0
+
+        # create empty data by default
+        data = np.zeros(self.samples).astype(np.int16)
+
+        # Only get speaker data if we have some in the buffer
+        if spkrSampleQueue.qsize() > 0:
+            try:
+                data = spkrSampleQueue.get_nowait().astype(np.int16)
+            except queue.Empty:
+                pass
+
+        # To convert to a mono audio frame, we need the array to be an array of single-value arrays for each sample (annoying)
+        data = data.reshape(data.shape[0], -1).T
+        # Create audio frame
+        frame = AudioFrame.from_ndarray(data, format='s16', layout='mono')
+
+        # Update time stuff
+        frame.pts = self._timestamp
+        frame.sample_rate = self.samplerate
+        frame.time_base = fractions.Fraction(1, self.samplerate)
+
+        # Return
+        return frame
+
+async def gotRtcOffer(offerObj):
+    """
+    Called when we receive a WebRTC offer from the client
+
+    Args:
+        offerObj (dict): WebRTC SDP offer object
+    """
+
+    global rtcPeer
+
+    logger.logInfo("Got WebRTC offer")
+
+    # Start audio on radios
+    logger.logVerbose("Starting audio devices on radios")
+    startSound()
+    
+    # Create SDP offer and peer connection objects
+    offer = RTCSessionDescription(sdp=offerObj["sdp"], type=offerObj["type"])
+    rtcPeer = RTCPeerConnection()
+
+    # Create UUID for peer
+    pcUuid = "Peer({})".format(uuid.uuid4())
+    logger.logVerbose("Creating peer connection {}".format(pcUuid))
+
+    # Create the speaker track
+    spkrTrack = SpkrStreamTrack()
+    rtcPeer.addTrack(spkrTrack)
+    logger.logVerbose("Added speaker track")
+
+    # ICE connection state callback
+    @rtcPeer.on("iceconnectionstatechange")
+    async def onIceConnectionStateChange():
+        logger.logVerbose("Ice connection state is now {}".format(rtcPeer.iceConnectionState))
+        if rtcPeer.iceConnectionState == "failed":
+            await rtcPeer.close()
+            logger.logError("WebRTC peer connection {} failed".format(pcUuid))
+    
+    # Audio track callback when we get the mic track from the client
+    @rtcPeer.on("track")
+    async def onTrack(track):
+
+        global micTrack
+        global spkrTrack
+        global blackHole
+        global rtcPeer
+
+        logger.logVerbose("Got {} track from peer {}".format(track.kind, pcUuid))
+
+        # make sure it's audio
+        if track.kind != "audio":
+            logger.logError("Got non-audio track from peer {}".format(pcUuid))
+            return
+        
+        # Create the mic stream for this track, and add its output to a media blackhole so it starts
+        micTrack = MicStreamTrack(track)
+        blackHole = MediaBlackhole()
+        blackHole.addTrack(micTrack)
+        logger.logVerbose("Added mic track")
+        await blackHole.start()
+        logger.logVerbose("Started mic track")
+
+        # Track ended handler
+        @track.on("ended")
+        async def onEnded():
+            logger.logVerbose("Audio track from {} ended".format(pcUuid))
+
+    await doRtcAnswer(offer)
+
+    logger.logVerbose("done")
+
+async def stopRtc():
+
+    # Stop the peer if it's open
+    logger.logVerbose("Stopping RTC connection")
+    if rtcPeer:
+        await rtcPeer.close()
+
+async def doRtcAnswer(offer):
+    # Handle the received offer
+    logger.logVerbose("Creating remote description from offer")
+    await rtcPeer.setRemoteDescription(offer)
+
+    # Create answer
+    logger.logVerbose("Creating WebRTC answer")
+    answer = await rtcPeer.createAnswer()
+
+    # Set local description
+    logger.logVerbose("setting local SDP")
+    await rtcPeer.setLocalDescription(answer)
+
+    # Send answer
+    logger.logVerbose("sending SDP answer")
+    message = '{{ "webRtcAnswer": {{ "type": "{}", "sdp": {} }} }}'.format(rtcPeer.localDescription.type, json.dumps(rtcPeer.localDescription.sdp))
+    #logger.logVerbose(message.replace("\\r\\n", "\r\n"))
+    messageQueue.put_nowait(message)
 
 """-------------------------------------------------------------------------------
     Sound Device Functions
@@ -446,7 +625,7 @@ def startSound():
     
     # Start audio on each radio device
     for radio in config.RadioList:
-        radio.startAudio(pa, micSampleQueue, audioTransferSampleRate, micBufferDur, spkrBufferDur)
+        radio.startAudio(pa, micSampleQueue, audioSampleRate, micBufferSize, spkrBufferSize)
 
     # Start the speaker audio handler
     spkrThread = threading.Thread(target=handleSpkrData, daemon=True)
@@ -460,41 +639,18 @@ def stopSound():
     for radio in config.RadioList:
         radio.stopAudio()
 
-def handleMicData(dataString):
-    """
-    Route mic data from the client to the correct output devices
-
-    Args:
-        data (string): string of mu-law encoded mic data samples to process
-    """
-    # Split into a list of strings
-    stringList = dataString.split(",")
-    # Remove empty strings
-    stringList[:] = [item for item in stringList if item]
-    # Convert string list to floats
-    uint8array = np.asarray(stringList, dtype=np.uint8)
-    # Decode mu-law to float32
-    floatArray = MuLaw.decode(uint8array)
-    # Put to queue
-    micSampleQueue.put_nowait(floatArray)
-    # Print
-    #logger.logInfo("Got {} mic samples from client".format(len(floatArray)))
-    #logger.logInfo("Put mic samples in queue, new size {}".format(micSampleQueue.qsize()))
-
-
 def handleSpkrData():
     """
     This is an infinite loop, to be run in a thread
 
     Get the speaker data from each connected radio, add it to the buffer string, and send & clear the buffer if it's big enough
     """
-    global spkrBufferString
-    global spkrBufferLength
-    global spkrBufferDur
+
+    global spkrBufferSize
 
     while True:
 
-        outputFloatArray = None
+        outputIntArray = None
         gotSamples = False
         
         # Get samples from each radio and add to the output array
@@ -502,32 +658,19 @@ def handleSpkrData():
             if radio.state == RadioState.Receiving and not radio.muted:
                 try:
                     samples = radio.spkrQueue.get_nowait()
-                    if not outputFloatArray:
+                    if not outputIntArray:
                         gotSamples = True
-                        outputFloatArray = samples
+                        outputIntArray = samples
                     else:
-                        outputFloatArray = np.add(outputFloatArray, samples)
+                        outputIntArray = np.add(outputIntArray, samples)
                 except queue.Empty:
                     #logger.logWarn("Radio {} queue empty".format(radio.name))
                     pass
 
         if gotSamples:
-            # Convert to uint8 array of mu-law encoded samples
-            muLawArray = MuLaw.encode(outputFloatArray)
-            # this is allegedly a super-fast way to turn a float array into a comma-separated string
-            dataString = ','.join([str(num) for num in muLawArray])
-            # add this dataString to the buffer
-            spkrBufferString += dataString
-            spkrBufferLength += len(muLawArray)
-
-            # Send the buffer string if it's big enough
-            if spkrBufferLength >= spkrBufferDur * audioTransferSampleRate:
-                # send this data string
-                spkrSampleQueue.put_nowait(spkrBufferString)
-                serverLoop.call_soon_threadsafe(messageQueue.put_nowait,"speaker")
-                # clear the buffer
-                spkrBufferString = ""
-                spkrBufferLength = 0
+            # Put the samples into the queue
+            spkrSampleQueue.put_nowait(outputIntArray)
+            
         else:
             # give the CPU a break
             time.sleep(0.01)
@@ -572,7 +715,7 @@ async def consumer_handler(websocket, path):
             try:
                 cmdObject = json.loads(data)
             except ValueError as e:
-                logger.logWarn("Invalid data recieved from client: {}".format(e.args[0]))
+                logger.logWarn("Invalid data recieved from client, {}\nData: {}".format(e.args[0], data))
                 continue
 
             # Iterate through the received command keys (there should only ever be one, but it's possible to recieve multiple)
@@ -599,10 +742,12 @@ async def consumer_handler(websocket, path):
 
                     # Start PTT
                     if command == "startTx":
+                        logger.logVerbose("Starting TX on radio index {}".format(index))
                         setTransmit(index, True)
 
                     # Stop PTT
                     elif command == "stopTx":
+                        logger.logVerbose("Stopping TX on radio index {}".format(index))
                         setTransmit(index, False)
 
                     # Channel Up
@@ -656,6 +801,17 @@ async def consumer_handler(websocket, path):
                         toggleMute(index, False)
 
                 #
+                #   WebRTC Messages
+                #
+
+                elif key == "webRtcOffer":
+                    # Get params
+                    offerObj = cmdObject[key]
+
+                    # Create peer connection
+                    await gotRtcOffer(offerObj)
+
+                #
                 #   Audio Data Messages
                 #
 
@@ -704,6 +860,11 @@ async def producer_hander(websocket, path):
                 response = '{{ "radios": {{ "command": "list", "radioList": {} }} }}'.format(getAllRadiosStatusJson())
                 # Send
                 await websocket.send(response)
+
+            # Send WebRTC SDP answer
+            elif "webRtcAnswer" in message:
+                logger.logInfo("sending WebRTC answer to {}".format(websocket.remote_address[0]))
+                await websocket.send(message)
             
             # send status update for specific radio
             elif "status:" in message:
@@ -839,12 +1000,15 @@ def twosCompliment(int_numb):
 -------------------------------------------------------------------------------"""
 
 if __name__ == "__main__":
-
+    
     try:
 
         # Start profiling
         #yappi.set_clock_type('cpu')
         #yappi.start(builtins=True)
+
+        # Enable AIORTC debug
+        #logging.basicConfig(level=logging.DEBUG)
 
         # add cli arguments
         addArguments()
@@ -853,7 +1017,7 @@ if __name__ == "__main__":
         parseArguments()
 
         # print OS
-        logger.logVerbose("Detected operating system: {}".format(osType))
+        #logger.logVerbose("Detected operating system: {}".format(osType))
 
         # Get sound devices
         getSoundDevices()
@@ -867,18 +1031,28 @@ if __name__ == "__main__":
         # Connect to radios
         connectRadios()
 
-        # Runtime loop
-        asyncio.get_event_loop().run_forever()
+        serverLoop.run_forever()
 
     except KeyboardInterrupt:
         logger.logWarn("Caught KeyboardInterrupt, shutting down")
+
+        # Stop RTC
+        serverLoop.run_until_complete(stopRtc())
+
         # Cleanly disconnect any connected radios
         for radio in config.RadioList:
             if radio.state != RadioState.Disconnected:
                 radio.disconnect()
+        logger.logVerbose("Disconnected from radios")
+
         # Stop PyAudio
         stopSound()
         pa.terminate()
+        logger.logVerbose("Audio devices stopped")
+
+        # Stop Loops
+        serverLoop.stop()
+        logger.logVerbose("Server loop stopped")
 
         # Stop profiling
         #stats = yappi.get_func_stats()
