@@ -343,8 +343,8 @@ class Radio():
         # Clear buffer
         self.clearSpkrQueue()
 
-        # Set mic queue
-        self.micQueue = micQueue
+        # Create queue for mic samples
+        self.micQueue = queue.Queue()
 
         # Create mic stream
         self.micStream = pa.open(
@@ -389,12 +389,12 @@ class Radio():
 
         # Check if we have a status
         if status:
-            self.logger.logWarn("Got PyAudio status: {}".format(status))
+            self.logger.logWarn("{} got PyAudio status: {}".format(self.name, status))
 
         # Start with empty samples
         data = np.zeros(frame_count).astype(np.int16)
 
-        # only get samples if there's more than one in the queue
+        # only get samples if there's more than one chunk in the queue
         if self.micQueue.qsize() > 1:
             try:
                 data = self.micQueue.get_nowait()
@@ -419,7 +419,7 @@ class Radio():
 
         # log status if we have one
         if status:
-            self.logger.logWarn("Got PyAudio status: {}".format(status))
+            self.logger.logWarn("{} got PyAudio status: {}".format(self.name, status))
 
         # only send speaker data if we're receiving and not muted
         if self.state == RadioState.Receiving and not self.muted:

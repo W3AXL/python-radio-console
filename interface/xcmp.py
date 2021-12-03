@@ -110,6 +110,8 @@ class XPR:
         Callback for when we receive an XCMP msg
         """
 
+        self.logger.logVerbose("Got XCMP message from radio {}: {}".format(self.index, msgIn))
+
         if (msgIn['type'] == 2):    # call status info
             payload = msgIn['payload']
             self.lastid = payload['rid']

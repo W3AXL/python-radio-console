@@ -412,10 +412,12 @@ class MicStreamTrack(MediaStreamTrack):
         intArray = frame.to_ndarray(dtype=np.int16)[0]
 
         # This array is interleaved L/R samples, so pick out only one
-        monoArray = intArray[0::2].copy()
+        monoArray = intArray[0::2].copy() 
 
-        # Put these samples into the mic queue
-        micSampleQueue.put_nowait(monoArray)
+        # Put samples to radio, if there's one transmitting
+        for radio in config.RadioList:
+            if radio.state == RadioState.Transmitting:
+                radio.micQueue.put_nowait(monoArray)
 
 class SpkrStreamTrack(MediaStreamTrack):
     """
