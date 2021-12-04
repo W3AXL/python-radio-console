@@ -39,7 +39,7 @@ class Radio():
                        "Singletone",
                        "QCII"]
 
-    def __init__(self, index, name, desc=None, ctrlMode=None, ctrlPort=None, txDev=None, rxDev=None, signalMode=None, signalId=None):
+    def __init__(self, index, name, desc=None, ctrlMode=None, ctrlPort=None, txDev=None, rxDev=None, signalMode=None, signalId=None, logger=Logger()):
         """Radio configuration object
 
         Args:
@@ -95,7 +95,7 @@ class Radio():
         self.state = RadioState.Disconnected
 
         # Create logger
-        self.logger = Logger()
+        self.logger = logger
 
         # Speaker & Mic Sample Queues
         self.micQueue = None
@@ -304,7 +304,7 @@ class Radio():
         }
         return config
 
-    def decodeConfig(index, radioDict):
+    def decodeConfig(index, radioDict, logger=Logger()):
         """Decode a dict of config parameters into a new radio object
 
         Args:
@@ -322,7 +322,8 @@ class Radio():
                      radioDict['txDeviceIdx'],
                      radioDict['rxDeviceIdx'],
                      radioDict['sigMode'],
-                     radioDict['sigId'])
+                     radioDict['sigId'],
+                     logger)
 
     """-------------------------------------------------------------------------------
         Sound Device Functions
@@ -370,6 +371,7 @@ class Radio():
 
         # Start streams
         self.logger.logInfo("Starting audio streams for {}".format(self.name))
+        self.logger.logVerbose("TX dev: {}, RX dev: {}".format(self.txDev, self.rxDev))
         self.micStream.start_stream()
         self.spkrStream.start_stream()
 

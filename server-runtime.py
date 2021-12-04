@@ -232,7 +232,7 @@ def loadConfig(filename):
 
             # Iterate through radios in idct
             for index, radioDict in enumerate(configDict["RadioList"]):
-                config.RadioList.append(Radio.decodeConfig(index, radioDict))
+                config.RadioList.append(Radio.decodeConfig(index, radioDict, logger))
 
             # Print on success
             logger.logInfo("Sucessfully loaded config file {}".format(filename))

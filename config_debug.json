@@ -5,7 +5,7 @@
             "desc": "VHF XTL5000",
             "ctrlMode": "SB9600-XTL-O",
             "ctrlPort": "COM2",
-            "txDeviceIdx": 17,
+            "txDeviceIdx": 18,
             "rxDeviceIdx": 4,
             "sigMode": "MDC",
             "sigId": "4597"
@@ -15,7 +15,7 @@
             "desc": "UHF XPR4550",
             "ctrlMode": "XCMP-XPR",
             "ctrlPort": "192.168.10.1",
-            "txDeviceIdx": 20,
+            "txDeviceIdx": 21,
             "rxDeviceIdx": 3,
             "sigMode": "MDC",
             "sigId": "4597"
