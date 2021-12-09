@@ -56,6 +56,18 @@
                 <input type="range" class="topcoat-range" id="console-volume" value="75" oninput="changeVolume()" disabled>
             </div>
 
+            <!-- Mic & Speaker Volume Meters -->
+            <div id="navbar-meters" class="navbar-item">
+                <div class="meter-container">
+                    <ion-icon name="mic-sharp"></ion-icon>
+                    <meter id="meter-mic" min="0" max="0.4" high="0.3"></meter>
+                </div>
+                <div class="meter-container">
+                    <ion-icon name="volume-off-sharp"></ion-icon>
+                    <meter id="meter-spkr" min="0" max="0.4" high="0.3"></meter>
+                </div>
+            </div>
+
             <!-- Clear Float -->
             <br class="navbar-clear" />
         </div>

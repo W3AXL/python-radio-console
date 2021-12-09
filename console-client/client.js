@@ -21,21 +21,18 @@ var serverSocket = null;
 var audio = {
     // Audio context
     context: null,
-    // length of buffers in s (these must match the python script)
-    spkrBufferDur: 0.2,
-    micBufferDur: 0.2,
-    // audio transfer sample rate
-    transferSamplerate: 16000,
-    // Input device, buffer, resampler, and processor
+    // Input device, stream, meter, etc
     input: null,
     inputStream: null,
-    inputBuffer: null,
-    inputProcessor: null,
-    // Output device, buffer, processor, and gain (for volume)
+    inputAnalyzer: null,
+    inputPcmData: null,
+    inputMeter: document.getElementById("meter-mic"),
+    // Output device, analyzer, and gain (for volume)
     output: null,
-    outputBuffer: null,
-    outputProcessor: null,
     outputGain: null,
+    outputAnalyzer: null,
+    outputPcmData: null,
+    outputMeter: document.getElementById("meter-spkr"),
     dummyOutput: new Audio()
 }
 
@@ -837,6 +834,11 @@ function startWebRtc() {
         navigator.getUserMedia({audio:true},
             // Add tracks to peer connection and negotiate if successful
             function(stream) {
+                // Set up mic meter dependecies
+                audio.inputStream = audio.context.createMediaStreamSource(stream);
+                audio.inputAnalyzer = audio.context.createAnalyser();
+                audio.inputPcmData = new Float32Array(audio.inputAnalyzer.fftSize);
+                audio.inputStream.connect(audio.inputAnalyzer);
                 // Add the first available mic track to the peer connection
                 rtc.peer.addTrack(stream.getTracks()[0])
                 // Create and send the WebRTC offer
@@ -919,9 +921,12 @@ function createPeerConnection() {
             audio.dummyOutput.muted = true;
             audio.dummyOutput.srcObject = event.streams[0];
             audio.dummyOutput.play();
-            // Create audio source from the track and attach it to the gain node
+            // Create audio source from the track and attach it to the gain node & audio analyzer
             var source = audio.context.createMediaStreamSource(event.streams[0]);
             source.connect(audio.outputGain);
+            source.connect(audio.outputAnalyzer);
+            // If we got a speaker track back, we have both audio streams and can start the meter frame callback
+            window.requestAnimationFrame(audioMeterCallback);
         }
     })
 
@@ -1068,6 +1073,10 @@ function startAudioDevices() {
     audio.context = new AudioContext();
     console.log("Created audio context");
 
+    // Create analyzer node for volume meter under volume slider
+    audio.outputAnalyzer = audio.context.createAnalyser();
+    audio.outputPcmData = new Float32Array(audio.outputAnalyzer.fftSize);
+
     // Create gain node for output volume and connect it to the default output device
     audio.outputGain = audio.context.createGain();
     audio.outputGain.gain.value = 0.75;
@@ -1075,6 +1084,31 @@ function startAudioDevices() {
 
     // Enable volume slider
     $("#console-volume").prop('disabled', false);
+}
+
+/**
+ * Updates audio meters based on current data. Only called after both mic & speaker are set up and running (otherwise errors)
+ */
+function audioMeterCallback() {
+    // Get data from speaker & mic
+    audio.outputAnalyzer.getFloatTimeDomainData(audio.outputPcmData);
+    audio.inputAnalyzer.getFloatTimeDomainData(audio.inputPcmData);
+
+    // Output meter
+    let sumSquares = 0.0;
+    for (const amplitude of audio.outputPcmData) { sumSquares += amplitude * amplitude; }
+    audio.outputMeter.value = Math.sqrt(sumSquares / audio.outputPcmData.length);
+
+    // Input meter (only show when PTT)
+    if (pttActive) {
+        sumSquares = 0.0;
+        for (const amplitude of audio.inputPcmData) { sumSquares += amplitude * amplitude; }
+        audio.inputMeter.value = Math.sqrt(sumSquares / audio.outputPcmData.length);
+    } else {
+        audio.inputMeter.value = 0.0;
+    }
+
+    window.requestAnimationFrame(audioMeterCallback);
 }
 
 /**
@@ -1142,7 +1176,7 @@ function waitForWebSocket(socket, callback=null) {
  * Called once the websocket connection is active
  */
 function onConnectWebsocket() {
-    $("#navbar-status").html("Websocket connected");
+    //$("#navbar-status").html("Websocket connected");
     console.log("Websocket connected");
 }
 

@@ -114,6 +114,52 @@ ion-icon {
     color: var(--color-alert-light2);
 }
 
+/* Navbar Volume Meters */
+
+#navbar-meters {
+    float: right;
+    width: 128px;
+    height: 75%;
+    margin-top: 7px;
+}
+
+#navbar-meters .meter-container {
+    height: 50%;
+    width: 100%;
+    display: flex;
+    align-content: center;
+    justify-content: center;
+}
+
+#navbar-meters .meter-container ion-icon {
+    height: 100%;
+}
+
+#navbar-meters meter {
+    width: 75%;
+    height: 75%;
+    margin-top: 2px;
+    margin-left: 2px;
+}
+
+#navbar-meters meter::-webkit-meter-bar {
+    background-color: var(--color-bg-mid2);
+}
+
+#navbar-meters meter::-webkit-meter-optimum-value {
+    background-color: var(--color-alert-green-mid);
+}
+
+#navbar-meters meter::-webkit-meter-suboptimum-value {
+    background-color: var(--color-alert-mid);
+}
+
+#navbar-meters meter::-webkit-meter-even-less-good-value {
+    background-color: var(--color-alert-red-mid);
+}
+
+/* Navbar Volume Slider */
+
 #navbar-volume {
     float: right;
     width: 192px;
@@ -129,13 +175,15 @@ ion-icon {
 }
 
 #navbar-volume .topcoat-range {
-    height: 8px;
-    margin-top: 20px;
+    height: 10px;
+    margin-top: 19px;
+    border-radius: 4px;
 }
 
 #navbar-volume .topcoat-range::-webkit-slider-thumb {
     height: 24px;
     width: 12px;
+    border-radius: 4px;
 }
 
 #navbar-clock {
