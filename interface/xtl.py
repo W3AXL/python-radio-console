@@ -177,7 +177,9 @@ class XTL:
 
         while self.doListen:
             # get a message if there is one
-            if self.bus.ser.in_waiting:
+            if self.bus.ser.in_waiting > 0:
+                while self.bus.isBusy():
+                    pass
                 # Read rest of message
                 rxMsg = self.bus.read(self.bus.ser.in_waiting)
                 # Put into queue
