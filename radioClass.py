@@ -421,7 +421,8 @@ class Radio():
 
         # log status if we have one
         if status:
-            self.logger.logWarn("{} got PyAudio status: {}".format(self.name, status))
+            self.logger.logWarn("{} got PyAudio status: {}".format(self.name, self.getPyaudioCallback(status)))
+            self.logger.logWarn("Queue sizes: spkr ({}), mic ({})".format(self.spkrQueue.qsize(),self.micQueue.qsize()))
 
         # only send speaker data if we're receiving and not muted
         if self.state == RadioState.Receiving and not self.muted:
@@ -431,6 +432,18 @@ class Radio():
             self.spkrQueue.put_nowait(intArray)
 
         return (None, pyaudio.paContinue)
+
+    def getPyaudioCallback(self, code):
+        if code == 1:
+            return "PyAudio Input Underflow ({})".format(pyaudio.paInputUnderflow)
+        elif code == 2:
+            return "PyAudio Input Underflow ({})".format(pyaudio.paInputOverflow)
+        elif code == 4:
+            return "PyAudio Input Underflow ({})".format(pyaudio.paOutputUnderflow)
+        elif code == 8:
+            return "PyAudio Input Underflow ({})".format(pyaudio.paOutputOverflow)
+        else:
+            return code
 
     def stopAudio(self):
         """
