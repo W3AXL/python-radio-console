@@ -126,9 +126,9 @@ class Radio():
 
         # XTL5000 O-head
         if self.ctrlMode == "SB9600-XTL-O":
-            self.interface = XTL(self.index, self.ctrlPort, 'O5', self.statusCallback)
+            self.interface = XTL(self.index, self.ctrlPort, 'O5', self.statusCallback, self.logger)
         elif self.ctrlMode == "XCMP-XPR":
-            self.interface = XPR(self.index, self.ctrlPort, self.statusCallback)
+            self.interface = XPR(self.index, self.ctrlPort, self.statusCallback, self.logger)
         
         # Connect to radio (optional reset)
         self.interface.connect(reset=reset)

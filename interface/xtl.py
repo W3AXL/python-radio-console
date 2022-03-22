@@ -81,7 +81,7 @@ class XTL:
             'vol_up': 0x531
         }
 
-    def __init__(self, index, comPort, headType, statusCallback):
+    def __init__(self, index, comPort, headType, statusCallback, logger=Logger()):
         """Init Function
 
         Args:
@@ -112,7 +112,7 @@ class XTL:
         self.lowpower = False
 
         # Logger
-        self.logger = Logger()
+        self.logger = logger
 
 
     def connect(self, reset=True):
@@ -184,7 +184,7 @@ class XTL:
                 rxMsg = self.bus.read(self.bus.ser.in_waiting)
                 # Put into queue
                 self.rxMsgQueue.put_nowait(rxMsg)
-                #self.logger.logInfo("Got msg {}".format(hexlify(msg," ")))
+                #self.logger.logVerbose("Got msg {}".format(hexlify(rxMsg," ")))
 
             # check for outgoing messages
             try:
@@ -213,6 +213,8 @@ class XTL:
             # block until we have a message (this runs in a thread so that's okay)
             msg = self.rxMsgQueue.get()
 
+            #self.logger.logVerbose("Processing {}".format(hexlify(msg," ")))
+
             # throw away invalid messages
             if len(msg) < 5:
                 self.logger.logWarn("Skipping invalid message with length {}".format(len(msg)))
@@ -228,8 +230,8 @@ class XTL:
             # Handle SB9600
             else:
 
-                # See if there are multiple messages combined and get them first
-                if len(msg) > 5 and len(msg) % 5 == 0:
+                # See if there are multiple messages combined and get them one at a time
+                if len(msg) > 5:
                     while len(msg) > 5:
                         # Get the next message
                         curMsg = msg[0:5]
@@ -247,6 +249,11 @@ class XTL:
                             print("SB9600 CRC failure")
                         # Trim that message from the array and repeat
                         msg = msg[5:]
+
+                        # If we were commanded to go into SBEP and we have more data remaining, process it as SBEP now so we don't miss it
+                        if self.inSBEP and len(msg) > 5:
+                            length = self.processSBEP(msg)
+                            msg = msg[length:]
 
                 # If we only had one message, or we have one left, process it
                 if len(msg) == 5:
@@ -343,7 +350,7 @@ class XTL:
             msg (byte[]): message array of bytes
         """
 
-        #self.logger.logInfo("SBEP msg {}".format(hexlify(msg)))
+        self.logger.logVerbose("SBEP msg {}".format(msg))
 
         # get important bits
         address = msg[0]
@@ -352,6 +359,9 @@ class XTL:
         opcode = msg[4]          
         # Get data based on length
         data = msg[8:length+2]
+
+        # Get total msg length in bytes for return to processing function
+        totalLength = length + 10
 
         # Display Address
         if address == 0x1f:
@@ -363,13 +373,13 @@ class XTL:
                 if newText != self.zoneText and not any(s in newText for s in self.O5Address.ignored_strings):
                     self.zoneText = newText
                     self.newStatus = True
-                return
+                return totalLength
             elif subdev == self.O5Address.display_subdevs['text_channel']:
                 newText = data.rstrip().decode('ascii')
                 if newText != self.chanText and not any(s in newText for s in self.O5Address.ignored_strings):
                     self.chanText = newText
                     self.newStatus = True
-                return
+                return totalLength
 
         # Display icon update 
         elif address == 0xf4:
@@ -386,22 +396,22 @@ class XTL:
                 if state != self.scanning:
                     self.scanning = state
                     self.newStatus = True
-                return
+                return totalLength
             elif iconAddr == self.O5Address.display_icons['low_power']:
                 if state != self.lowpower:
                     self.lowpower = state
                     self.newStatus = True
-                return
+                return totalLength
             elif iconAddr == self.O5Address.display_icons['monitor']:
                 if state != self.monitor:
                     self.monitor = state
                     self.newStatus = True
-                return
+                return totalLength
             elif iconAddr == self.O5Address.display_icons['direct']:
                 if state != self.talkaround:
                     self.talkaround = state
                     self.newStatus = True
-                return
+                return totalLength
 
             # Use amber LED as a redundant RX state indicator
             elif iconAddr == self.O5Address.display_icons['led_amber']:
@@ -412,14 +422,14 @@ class XTL:
 
             # print if we don't actually know what the icon is
             #self.printMsg("SBEP Icon","{} ({}) icon {}".format(icon, hex(msg[3]), state))
-            return
+            return totalLength
 
         # Fallback to printing raw message
         else:
             #print("RECVD<: SBEP decoded")
             #print("        Raw Msg: {}".format(hexlify(msg, ' ')))
             #print("        Address: {}, Subaddr: {}, Length: {}, Opcode: {}".format(hex(address), hex(subaddr), length, hex(opcode)))
-            return
+            return totalLength
 
     def processSB9600(self, address, param1, param2, function):
         """
@@ -432,7 +442,7 @@ class XTL:
             function (byte): Function byte
         """
 
-        #self.logger.logInfo("SB9600 msg {} {} {} {}".format(hex(address),hex(param1),hex(param2),hex(function)))
+        self.logger.logVerbose("SB9600 msg {} {} {} {}".format(hex(address),hex(param1),hex(param2),hex(function)))
 
         if address == 0x00:
             """
@@ -450,6 +460,8 @@ class XTL:
                     self.sbepSpeed = 9600
                 else:
                     self.sbepSpeed = param1
+
+                self.logger.logVerbose("Entering SBEP mode at {} baud".format(self.sbepSpeed))
 
                 return
 

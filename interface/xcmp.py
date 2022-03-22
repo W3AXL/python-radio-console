@@ -16,7 +16,7 @@ except ImportError:
 
 class XPR:
 
-    def __init__(self, index, hostname, statusCallback):
+    def __init__(self, index, hostname, statusCallback, logger=Logger()):
         """Init Function
 
         Args:
