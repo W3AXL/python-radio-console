@@ -10,6 +10,8 @@ __pycache__/
 [Ss]cripts/
 Include/
 pyvenv.cfg
+bin/
+lib64
 
 # Distribution / packaging
 .Python
