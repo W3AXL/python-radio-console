@@ -1,5 +1,6 @@
 # Base libraries
 import sys
+import glob
 import os
 import argparse
 import platform
@@ -167,6 +168,7 @@ def parseArguments():
     # List available serial devices
     if args.list_ports:
         logger.logInfo("Listing available serial ports")
+        getSerialDevices()
         exit(0)
 
     # List available sound devices
@@ -676,6 +678,42 @@ def handleSpkrData():
         else:
             # give the CPU a break
             time.sleep(0.01)
+
+"""-------------------------------------------------------------------------------
+    Serial Port Functions
+-------------------------------------------------------------------------------"""
+
+def getSerialDevices():
+    """
+    Gets a list of avaialble serial devices based on operating system
+    """
+
+    # Windows
+    if sys.platform.startswith('win'):
+        ports = ['COM%s' % (i + 1) for i in range(256)]
+
+    # Linux
+    elif sys.platform.startswith('linux') or sys.platform.startswith('cygwin'):
+        ports = glob.glob('/dev/tty[A-Za-z]*')
+    
+    # Fallback
+    else:
+        logger.logError("Unknown OS detected!")
+        exit(1)
+
+    # Find which ports are valid
+    results = []
+    for port in ports:
+        try:
+            s = serial.Serial(port)
+            s.close()
+            results.append(port)
+        except (OSError, serial.SerialException):
+            pass
+
+    # Print the result
+    for port in results:
+        logger.logInfo("Port {}".format(port))
 
 
 """-------------------------------------------------------------------------------

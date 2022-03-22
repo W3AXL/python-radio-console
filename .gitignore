@@ -148,10 +148,17 @@ start_profiler.bat
 start_noreset.bat
 start_debug_noreset.bat
 interface/xcmp_keys.py
-config.json
 start_debug.bat
 micAudio.csv
 SDP offer from server.txt
 
 # VSCode config
 .vscode/
+
+# Custom startup scripts
+start.sh
+start_debug.sh
+
+# Custom configs
+config.json
+config_debug.json
