@@ -152,3 +152,6 @@ config.json
 start_debug.bat
 micAudio.csv
 SDP offer from server.txt
+
+# VSCode config
+.vscode/
