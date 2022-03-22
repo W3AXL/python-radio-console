@@ -1145,7 +1145,7 @@ function connectWebsocket() {
     // Log
     console.log("Websocket connecting to " + config.serverAddress + ":" + config.serverPort);
     // Setup socket
-    serverSocket = new WebSocket("ws://" + config.serverAddress + ":" + config.serverPort);
+    serverSocket = new WebSocket("wss://" + config.serverAddress + ":" + config.serverPort);
     serverSocket.onerror = handleSocketError;
     serverSocket.onmessage = recvSocketMessage;
     serverSocket.onclose = handleSocketClose;

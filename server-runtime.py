@@ -9,6 +9,7 @@ import time
 import json
 import queue
 import audioop
+import ssl
 from typing_extensions import runtime
 
 # TCP Socket Server
@@ -957,8 +958,11 @@ def startServer():
     global serverLoop
 
     logger.logInfo("Starting websocket server on address {}, port {}".format(address, serverport))
+    # use ssl on the web socket
+    ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    ssl_context.load_cert_chain("certs/localhost.crt", "certs/localhost.key")
     # create server object
-    server = websockets.serve(websocketHandler, address, serverport)
+    server = websockets.serve(websocketHandler, address, serverport, ssl=ssl_context)
     # start server async loop
     serverLoop = asyncio.get_event_loop()
     serverLoop.run_until_complete(server)
