@@ -351,7 +351,8 @@ class XTL:
             msg (byte[]): message array of bytes
         """
 
-        self.logger.logVerbose("SBEP msg {}".format(hexlify(msg, " ")))
+        #self.logger.logVerbose("SBEP msg  {}".format(hexlify(msg, " ")))
+        #self.logger.logVerbose("SBEP text {}".format(msg.decode('ascii','ignore')))
 
         # get important bits
         address = msg[0]
@@ -382,6 +383,10 @@ class XTL:
                     self.chanText = newText
                     self.newStatus = True
                     self.logger.logVerbose("Got new channel text: {}".format(newText))
+                return totalLength
+            elif subdev == self.O5Address.display_subdevs['text_softkeys']:
+                keyText = data.decode('ascii').rstrip().rstrip('\x00').split('^')[1:6]
+                self.logger.logVerbose("Got new softkeys: {}".format(keyText))
                 return totalLength
 
         # Display icon update 
