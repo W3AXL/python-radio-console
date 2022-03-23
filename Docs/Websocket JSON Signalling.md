@@ -82,6 +82,7 @@ These are sent from the client to the server
    - requires a number in the `options` field
 - `button` indicates a button press. `options` specifies the button, valid options are:
    - `softkey1` through `softkey5` requisite softkey (dynamic for O5 control head or static for user-defined buttons)
+   - `left` and `right` for paging through softkeys
 
 ### Audio Control Commands
 

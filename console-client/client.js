@@ -391,21 +391,26 @@ function updateRadioControls() {
         // Populate text
         $("#selected-zone-text").html(radio.zone);
         $("#selected-chan-text").html(radio.chan);
-        // Enable buttons
+        // Enable softkeys
         $("#radio-controls button").prop("disabled", false);
+        // Get softkey text
+        radio.softkeys.forEach(function(keytext, index) {
+            $(`#softkey${index+1} .softkey`).html(keytext);
+        });
         // Set softkeys on/off
-        if (radio.softkey1) { $("#softkey1").addClass("button-active") } else { $("#softkey1").removeClass("button-active") }
-        if (radio.softkey2) { $("#softkey2").addClass("button-active") } else { $("#softkey2").removeClass("button-active") }
-        if (radio.softkey3) { $("#softkey3").addClass("button-active") } else { $("#softkey3").removeClass("button-active") }
-        if (radio.softkey4) { $("#softkey4").addClass("button-active") } else { $("#softkey4").removeClass("button-active") }
-        if (radio.softkey5) { $("#softkey5").addClass("button-active") } else { $("#softkey5").removeClass("button-active") }
+        radio.softkeyStates.forEach(function(state, index) {
+            if (state) { $(`#softkey${index+1}`).addClass("button-active") } else { $(`#softkey${index+1}`).removeClass("button-active") }
+        });
     
         // Clear if we don't
     } else {
         // Clear text
         $("#selected-zone-text").html("");
         $("#selected-chan-text").html("");
-        // Disable buttons
+        for (i=0; i<5; i++) {
+            $(`#softkey${i+1} .softkey`).html("");
+        }
+        // Disable softkeys
         $("#radio-controls button").prop('disabled', true);
         $("#radio-controls button").removeClass("button-active");
     }
@@ -502,14 +507,36 @@ function changeChannel(down) {
  * @param {int} idx softkey index
  */
 function softkey(idx) {
-    if (!pttActive && selectRadio && serverSocket) {
-        console.log("Toggling softkey " + String(idx));
+    sendButton(`softkey${idx}`);
+}
+
+/**
+ * Left arrow button
+ */
+function button_left() {
+    sendButton("left");
+}
+
+/**
+ * Right arrow button
+ */
+function button_right() {
+    sendButton("right");
+}
+
+/**
+ * Send button command to selected radio
+ * @param {string} buttonName name of button
+ */
+function sendButton(buttonName) {
+    if (!pttActive && selectedRadio && serverSocket) {
+        console.log(`Sending button: ${buttonName}`);
         serverSocket.send(
             `{
                 "radioControl": {
                     "index": ${selectedRadioIdx},
                     "command": "button",
-                    "options": "softkey${idx}"
+                    "options": "${buttonName}"
                 }
             }`
         )
@@ -1174,6 +1201,8 @@ function recvSocketMessage(event) {
                 // Strip out \u0000's from strings (TODO: figure out why python's decode method adds these and how to get rid of them)
                 radioStatus['zone'] = radioStatus['zone'].replace(/\0/g, '');
                 radioStatus['chan'] = radioStatus['chan'].replace(/\0/g, '');
+                // Debug
+                console.debug(radioStatus);
                 // Update radio entry
                 radioList[idx] = radioStatus;
                 // Update radio card
