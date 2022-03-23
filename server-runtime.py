@@ -147,6 +147,7 @@ def addArguments():
     parser.add_argument("-nr","--no-reset", help="Don't reset connected radios on start", action="store_true")
     parser.add_argument("-sp","--serverport", help="Websocket server port")
     parser.add_argument("-v","--verbose", help="Enable verbose logging", action="store_true")
+    parser.add_argument("-vv","--verbose2", help="Debug verbosity in logging", action="store_true")
     parser.add_argument("-wc","--webguicert", help="Web GUI certificate for TLS")
     parser.add_argument("-wp","--webguiport", help="Web GUI port")
     parser.add_argument("-cp", "--cpu-profiling", help="Enable yappi CPU profiling", action="store_true")
@@ -168,7 +169,12 @@ def parseArguments():
     # Verbose logging
     if args.verbose:
         logger.setVerbose(args.verbose)
-        logger.logInfo("Verbose logging enabled")
+        logger.logVerbose("Verbose logging enabled")
+
+    if args.verbose2:
+        logger.setVerbose(True)
+        logger.setDebug(True)
+        logger.logDebug("Debug logging enabled")
 
     # List available serial devices
     if args.list_ports:
@@ -325,6 +331,24 @@ def toggleSoftkey(index, softkeyidx):
         softkeyidx (int): Index of softkey (1-5)
     """
     config.RadioList[index].toggleSoftkey(softkeyidx)
+
+def leftArrow(index):
+    """
+    Presses left arrow button (for softkey scrolling)
+
+    Args:
+        index (int): Index of radio in RadioList
+    """
+    config.RadioList[index].leftArrow()
+
+def rightArrow(index):
+    """
+    Presses right arrow button (for softkey scrolling)
+
+    Args:
+        index (int): Index of radio in RadioList
+    """
+    config.RadioList[index].rightArrow()
 
 def toggleMute(index, state):
     """
@@ -787,7 +811,13 @@ async def consumer_handler(websocket, path):
                         # Toggle a softkey
                         if "softkey" in button:
                             softkeyidx = int(button[7])
-                            toggleSoftkey(index, softkeyidx)                            
+                            toggleSoftkey(index, softkeyidx)
+
+                        # Left/right arrow keys
+                        elif button == "left":
+                            leftArrow(index)
+                        elif button == "right":
+                            rightArrow(index)
 
                 #
                 #   Audio Control Messages

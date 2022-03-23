@@ -12,9 +12,10 @@ class Logger:
         Logging Print Functions
     -------------------------------------------------------------------------------"""
 
-    def __init__(self, verbose=False):
+    def __init__(self, verbose=False, debug=False):
         # Save verbosity
         self.verbose = verbose
+        self.debug = debug
 
     def initLogs(self):
         # Init colorama
@@ -22,6 +23,15 @@ class Logger:
 
     def setVerbose(self, verbose):
         self.verbose = verbose
+
+    def setDebug(self, debug):
+        self.debug = debug
+
+    def logDebug(self, msg):
+        if self.debug:
+            callingFunction = inspect.currentframe().f_back.f_code.co_name
+            timeString = datetime.now().strftime("%m/%d %H:%M:%S.%f")[:-3]
+            print(Fore.BLUE + Style.DIM + "[{}] ({:^16}) DEBG: {}".format(timeString, callingFunction, str(msg)) + Style.RESET_ALL)
 
     def logVerbose(self, msg):
         if self.verbose:

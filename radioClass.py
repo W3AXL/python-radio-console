@@ -81,11 +81,7 @@ class Radio():
         self.selected = False
         self.muted = False
         self.softkeys = ["","","","",""]
-        self.softkey1 = False
-        self.softkey2 = False
-        self.softkey3 = False
-        self.softkey4 = False
-        self.softkey5 = False
+        self.softkeyStates = [False, False, False, False, False]
 
         # Radio interface class
         self.interface = None
@@ -175,35 +171,17 @@ class Radio():
         """
         self.interface.toggleSoftkey(idx)
 
-    def toggleMonitor(self):
+    def leftArrow(self):
         """
-        Toggles monitor state
+        Scrolls left through softkeys
         """
-        self.interface.toggleMonitor()
+        self.interface.leftArrow()
 
-    def nuisanceDelete(self):
+    def rightArrow(self):
         """
-        Nuisance delete scan
+        Scrolls right through softkeys
         """
-        self.interface.nuisanceDelete()
-
-    def togglePower(self):
-        """
-        Power toggle button
-        """
-        self.interface.togglePower()
-
-    def toggleScan(self):
-        """
-        Toggles state of scan
-        """
-        self.interface.toggleScan()
-
-    def toggleDirect(self):
-        """
-        Toggle state of talkaround
-        """
-        self.interface.toggleDirect()
+        self.interface.rightArrow()
 
     def setMute(self, state):
         """
@@ -227,10 +205,8 @@ class Radio():
         self.state = self.interface.state
         self.chan = self.interface.chanText
         self.zone = self.interface.zoneText
-        self.scanning = self.interface.scanning
-        self.talkaround = self.interface.talkaround
-        self.monitor = self.interface.monitor
-        self.lowpower = self.interface.lowpower
+        self.softkeys = self.interface.softkeys
+        self.softkeyStates = self.interface.softkeyStates
 
     def parseState(self):
         """Return current state of radio
@@ -287,10 +263,8 @@ class Radio():
             "muted": self.muted,
             "error": self.error,
             "errorText": errorText,
-            "scanning": self.scanning,
-            "talkaround": self.talkaround,
-            "monitor": self.monitor,
-            "lowpower": self.lowpower
+            "softkeys": self.softkeys,
+            "softkeyStates": self.softkeyStates
         }
         
         # Return the dict

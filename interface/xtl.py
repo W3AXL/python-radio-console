@@ -1,3 +1,5 @@
+from os import stat_result
+from xml.sax import parseString
 from interface import sb9600
 import threading
 
@@ -106,10 +108,17 @@ class XTL:
         self.state = RadioState.Disconnected
         self.zoneText = ""
         self.chanText = ""
+        self.softkeys = ["","","","",""]
+        self.softkeyStates = [False, False, False, False, False]
+        
+        # Internal status flags for tracking softkeys
         self.scanning = False
-        self.talkaround = False
         self.monitor = False
+        self.direct = False
         self.lowpower = False
+
+        # SB9600 retry counter (if sending a message fails)
+        self.retries = 1
 
         # Logger
         self.logger = logger
@@ -192,10 +201,15 @@ class XTL:
                 txMsg = self.txMsgQueue.get_nowait()
                 # figure out what to do with it
                 if txMsg['type'] == 'SB9600':
-                    try:
-                        self.bus.sb9600_send(txMsg['addr'], txMsg['prm1'], txMsg['prm2'], txMsg['func'])
-                    except RuntimeError as ex:
-                        self.logger.logWarn("Couldn't verify button message was sent properly! Maybe other data on bus?")
+                    sent = False
+                    tries = 0
+                    while (not sent) and (tries <= self.retries):
+                        try:
+                            tries += 1
+                            self.bus.sb9600_send(txMsg['addr'], txMsg['prm1'], txMsg['prm2'], txMsg['func'])
+                            sent = True
+                        except RuntimeError as ex:
+                            self.logger.logWarn("Message send failed, attempt {}/{}".format(tries, self.retries+1))
             # Do nothing if queue empty
             except queue.Empty:
                 pass
@@ -315,7 +329,19 @@ class XTL:
         Args:
             idx (int): 1-5, softkey number
         """
-        self.pressButton(self.O5Address.button_map["btn_key_{}".format(idx)])
+        self.pressButton(self.O5Address.button_map["btn_key_{}".format(idx)], 0.05)
+
+    def leftArrow(self):
+        """
+        Presses left arrow button
+        """
+        self.pressButton(self.O5Address.button_map["btn_dp_lf"], 0.05)
+
+    def rightArrow(self):
+        """
+        Presses right arrow button
+        """
+        self.pressButton(self.O5Address.button_map["btn_dp_rg"], 0.05)
 
     def processSBEP(self, msg):
         """
@@ -325,8 +351,8 @@ class XTL:
             msg (byte[]): message array of bytes
         """
 
-        #self.logger.logVerbose("SBEP msg  {}".format(hexlify(msg, " ")))
-        #self.logger.logVerbose("SBEP text {}".format(msg.decode('ascii','ignore')))
+        self.logger.logDebug("SBEP msg  {}".format(hexlify(msg, " ")))
+        self.logger.logDebug("SBEP text {}".format(msg.decode('ascii','ignore')))
 
         # get important bits
         address = msg[0]
@@ -359,8 +385,10 @@ class XTL:
                     self.logger.logVerbose("Got new channel text: {}".format(newText))
                 return totalLength
             elif subdev == self.O5Address.display_subdevs['text_softkeys']:
-                keyText = data.decode('ascii').rstrip().rstrip('\x00').split('^')[1:6]
-                self.logger.logVerbose("Got new softkeys: {}".format(keyText))
+                self.softkeys = data.decode('ascii').rstrip().rstrip('\x00').split('^')[1:6]
+                self.newStatus = True
+                self.updateSoftkeys()
+                self.logger.logVerbose("Got new softkeys: {}".format(self.softkeys))
                 return totalLength
 
         # Display icon update 
@@ -374,24 +402,33 @@ class XTL:
             else:
                 state = opcode
             # Update proper state
+            # TODO: detect proper softkey for each status icon and update its status
             if iconAddr == self.O5Address.display_icons['scan']:
+                self.logger.logVerbose("Got new scanning state: {}".format(state))
                 if state != self.scanning:
                     self.scanning = state
+                    self.updateSoftkeys()
                     self.newStatus = True
                 return totalLength
             elif iconAddr == self.O5Address.display_icons['low_power']:
+                self.logger.logVerbose("Got new lowpower state: {}".format(state))
                 if state != self.lowpower:
                     self.lowpower = state
+                    self.updateSoftkeys()
                     self.newStatus = True
                 return totalLength
             elif iconAddr == self.O5Address.display_icons['monitor']:
+                self.logger.logVerbose("Got new monitor state: {}".format(state))
                 if state != self.monitor:
                     self.monitor = state
+                    self.updateSoftkeys()
                     self.newStatus = True
                 return totalLength
             elif iconAddr == self.O5Address.display_icons['direct']:
-                if state != self.talkaround:
-                    self.talkaround = state
+                self.logger.logVerbose("Got new direct state: {}".format(state))
+                if state != self.direct:
+                    self.direct = state
+                    self.updateSoftkeys()
                     self.newStatus = True
                 return totalLength
 
@@ -400,7 +437,6 @@ class XTL:
                 if state and self.state != RadioState.Receiving:
                     self.state = RadioState.Receiving
                     self.newStatus = True
-
 
             # print if we don't actually know what the icon is
             #self.printMsg("SBEP Icon","{} ({}) icon {}".format(icon, hex(msg[3]), state))
@@ -424,7 +460,7 @@ class XTL:
             function (byte): Function byte
         """
 
-        self.logger.logVerbose("SB9600 msg {} {} {} {}".format(hex(address),hex(param1),hex(param2),hex(function)))
+        self.logger.logDebug("SB9600 msg {} {} {} {}".format(hex(address),hex(param1),hex(param2),hex(function)))
 
         if address == 0x00:
             """
@@ -443,7 +479,7 @@ class XTL:
                 else:
                     self.sbepSpeed = param1
 
-                self.logger.logVerbose("Entering SBEP mode at {} baud".format(self.sbepSpeed))
+                self.logger.logDebug("Entering SBEP mode at {} baud".format(self.sbepSpeed))
 
                 return
 
@@ -453,13 +489,15 @@ class XTL:
                 if param1 == 0x01:
                     if param2 == 0x01:
                         if not self.monitor:
-                            self.monitor = True
-                            self.newStatus = True
+                            #self.monitor = True
+                            #self.newStatus = True
+                            pass
                         return
                     else:
                         if self.monitor:
-                            self.monitor = False
-                            self.newStatus = True
+                            #self.monitor = False
+                            #self.newStatus = True
+                            pass
                         return
 
                 # TX mode
@@ -605,6 +643,40 @@ class XTL:
             if code == value:
                 return key
         return "{} (Unknown)".format(hex(code))
+    
+    def findSoftkey(self, name):
+        """
+        Finds the index (beginning at 0) of the softkey with the given name, or returns False if not present
+
+        Args:
+            name (str): softkey name
+        """
+        try:
+            index = self.softkeys.index(name)
+        except ValueError:
+            index = None
+        return index
+
+    def updateSoftkeys(self):
+        """
+        Updates the softkey states based on the currently shown softkeys
+        """
+        # Scan
+        idx = self.findSoftkey("SCAN")
+        if idx != None:
+            self.softkeyStates[idx] = self.scanning
+        # Mon
+        idx = self.findSoftkey("MON ")
+        if idx != None:
+            self.softkeyStates[idx] = self.monitor
+        # Dir
+        idx = self.findSoftkey("DIR ")
+        if idx != None:
+            self.softkeyStates[idx] = self.direct
+        # Pwr
+        idx = self.findSoftkey("PWR ")
+        if idx != None:
+            self.softkeyStates[idx] = self.lowpower
     
     def getButton(self, code):
         """Lookup button by opcode
