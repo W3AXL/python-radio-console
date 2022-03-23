@@ -78,6 +78,10 @@ webguiport = None
 noreset = False
 profiling = False
 
+# SSL globals
+certfile = 'certs/localhost.crt'
+keyfile = 'certs/localhost.key'
+
 # Websocket server and event loop
 server = None
 serverLoop = None
@@ -89,7 +93,7 @@ rtcPeer = None
 messageQueue = asyncio.Queue()
 
 # Audio globals
-audioSampleRate = 48000    # this must match the WebRTC settings on the client (48000hz OPUS)
+audioSampleRate = 48000  # this must match the WebRTC settings on the client
 
 # frame sizes for pyaudio buffers (these were set by observing what size the aiortc frames were)
 spkrBufferSize = 960
@@ -223,6 +227,9 @@ def loadConfig(filename):
         bool: success or failure
     """
 
+    global certfile
+    global keyfile
+
     try:
         # make sure file is valid
         if not os.path.exists(filename):
@@ -236,6 +243,13 @@ def loadConfig(filename):
             # Iterate through radios in idct
             for index, radioDict in enumerate(configDict["RadioList"]):
                 config.RadioList.append(Radio.decodeConfig(index, radioDict, logger))
+
+            # Get globals
+            if "Certfile" in configDict.keys() and "Keyfile" in configDict.keys():
+                certfile = configDict["Certfile"]
+                logger.logInfo("Using SSL cerfile: {}".format(certfile))
+                keyfile = configDict["Keyfile"]
+                logger.logInfo("Using SSL keyfile: {}".format(keyfile))
 
             # Print on success
             logger.logInfo("Sucessfully loaded config file {}".format(filename))
@@ -454,7 +468,7 @@ class SpkrStreamTrack(MediaStreamTrack):
                 data = spkrSampleQueue.get_nowait().astype(np.int16)
             except queue.Empty:
                 pass
-
+            
         # To convert to a mono audio frame, we need the array to be an array of single-value arrays for each sample (annoying)
         data = data.reshape(data.shape[0], -1).T
         # Create audio frame
@@ -479,6 +493,7 @@ async def gotRtcOffer(offerObj):
     global rtcPeer
 
     logger.logInfo("Got WebRTC offer")
+    logger.logVerbose("SDP: {}".format(offerObj['sdp']))
 
     # Start audio on radios
     logger.logVerbose("Starting audio devices on radios")
@@ -561,7 +576,7 @@ async def doRtcAnswer(offer):
     # Send answer
     logger.logVerbose("sending SDP answer")
     message = '{{ "webRtcAnswer": {{ "type": "{}", "sdp": {} }} }}'.format(rtcPeer.localDescription.type, json.dumps(rtcPeer.localDescription.sdp))
-    #logger.logVerbose(message.replace("\\r\\n", "\r\n"))
+    logger.logVerbose(message.replace("\\r\\n", "\r\n"))
     messageQueue.put_nowait(message)
 
 """-------------------------------------------------------------------------------
@@ -678,7 +693,7 @@ def handleSpkrData():
             
         else:
             # give the CPU a break
-            time.sleep(0.01)
+            time.sleep(0.05)
 
 """-------------------------------------------------------------------------------
     Serial Port Functions
@@ -956,11 +971,12 @@ def startServer():
 
     global server
     global serverLoop
+    global config
 
     logger.logInfo("Starting websocket server on address {}, port {}".format(address, serverport))
     # use ssl on the web socket
     ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-    ssl_context.load_cert_chain("certs/localhost.crt", "certs/localhost.key")
+    ssl_context.load_cert_chain(certfile, keyfile)
     # create server object
     server = websockets.serve(websocketHandler, address, serverport, ssl=ssl_context)
     # start server async loop
@@ -972,8 +988,8 @@ def startServer():
     httpServer = http.server.HTTPServer((address, webguiport), httpServerHandler)
     httpServer.socket = ssl.wrap_socket(httpServer.socket,
                                  server_side=True,
-                                 certfile='certs/localhost.crt',
-                                 keyfile='certs/localhost.key',
+                                 certfile=certfile,
+                                 keyfile=keyfile,
                                  ssl_version=ssl.PROTOCOL_TLS)
     # start thread for HTTPS server
     httpThread = threading.Thread(target=httpServer.serve_forever, daemon=True)
@@ -1080,6 +1096,10 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         logger.logWarn("Caught KeyboardInterrupt, shutting down")
 
+        # Stop profiling
+        #stats = yappi.get_func_stats()
+        #stats.save('callgrind.out', type='callgrind')
+
         # Stop RTC
         serverLoop.run_until_complete(stopRtc())
 
@@ -1097,10 +1117,6 @@ if __name__ == "__main__":
         # Stop Loops
         serverLoop.stop()
         logger.logVerbose("Server loop stopped")
-
-        # Stop profiling
-        #stats = yappi.get_func_stats()
-        #stats.save('callgrind.out', type='callgrind')
 
         # Exit without error
         exit(0)

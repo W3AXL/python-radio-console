@@ -40,8 +40,9 @@ var audio = {
 var rtc = {
     // Peer connection object
     peer: null,
-    // Audio codec (Opus 48khz stereo)
-    codec: "opus/48000/2"
+    // Audio codec
+    //codec: "opus/48000/2"
+    codec: "PCMU/8000"
 }
 
 testInput = null,
@@ -962,6 +963,10 @@ function sendRtcOffer() {
         var offer = rtc.peer.localDescription;
         offer.sdp = sdpFilterCodec('audio', rtc.codec, offer.sdp);
 
+        // Debug
+        console.debug("SDP offer:");
+        console.debug(offer.sdp);
+
         // Send the offer to the server via WebSocket
         serverSocket.send(
         `{
@@ -1004,6 +1009,8 @@ function gotRtcResponse(answerType, answerSdp) {
  * @returns new SDP using specified codec
  */
 function sdpFilterCodec(kind, codec, realSdp) {
+    console.debug("Non-filtered SDP:");
+    console.debug(realSdp);
     var allowed = []
     var rtxRegex = new RegExp('a=fmtp:(\\d+) apt=(\\d+)\r$');
     var codecRegex = new RegExp('a=rtpmap:([0-9]+) ' + escapeRegExp(codec))
