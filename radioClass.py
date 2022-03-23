@@ -391,13 +391,14 @@ class Radio():
 
         # Check if we have a status
         if status:
-            self.logger.logWarn("{} got PyAudio status: {}".format(self.name, status))
+            self.logger.logWarn("{} got PyAudio status: {}".format(self.name, self.getPyaudioCallback(status)))
+            self.logger.logWarn("Mic queue size {}".format(self.spkrQueue.qsize(),self.micQueue.qsize()))
 
         # Start with empty samples
         data = np.zeros(frame_count).astype(np.int16)
 
         # only get samples if there's more than one chunk in the queue
-        if self.micQueue.qsize() > 1:
+        if self.micQueue.qsize() > 0:
             try:
                 data = self.micQueue.get_nowait()
 
@@ -409,7 +410,7 @@ class Radio():
 
     def spkrCallback(self, in_data, frame_count, time_info, status):
         """
-        Callback for radio spkr -> client input device
+        Callback for radio spkr -> client device
         fires whenever new speaker data is available (all the time)
 
         Args:
@@ -420,9 +421,8 @@ class Radio():
         """
 
         # log status if we have one
-        if status:
+        if status and status not in [1,2,4,8]:
             self.logger.logWarn("{} got PyAudio status: {}".format(self.name, self.getPyaudioCallback(status)))
-            self.logger.logWarn("Queue sizes: spkr ({}), mic ({})".format(self.spkrQueue.qsize(),self.micQueue.qsize()))
 
         # only send speaker data if we're receiving and not muted
         if self.state == RadioState.Receiving and not self.muted:
