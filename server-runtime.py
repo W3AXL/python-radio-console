@@ -31,6 +31,7 @@ import uuid
 import pyaudio
 from mulaw import MuLaw
 from av.audio.frame import AudioFrame
+import samplerate
 
 import fractions
 
@@ -414,16 +415,24 @@ class MicStreamTrack(MediaStreamTrack):
         # Get a new PyAV frame
         frame = await self.track.recv()
 
-        # Convert to int16 numpy array and get first set of data only (the array is inside another array)
-        intArray = frame.to_ndarray(dtype=np.int16)[0]
+        # Data will be an int16 160-long array of mu-law samples
+        raw = frame.to_ndarray().flatten()
 
-        # This array is interleaved L/R samples, so pick out only one
-        monoArray = intArray[0::2].copy() 
+        # Resample into a 960-sample long int16 array
+        try:
+            data = samplerate.resample(raw, 6, converter_type='sinc_fastest')
+        except Exception as ex:
+            logger.logError("Caught resample exception: {}".format(ex.args))
+
+        # Divide by int16 range
+        data = data / 32768
+
+        #print("Mic frame info: ndim {}, shape {}, size {}, type {}, min {}, max {}".format(data.ndim, data.shape, data.size, data.dtype, np.min(data), np.max(data)))
 
         # Put samples to radio, if there's one transmitting
         for radio in config.RadioList:
             if radio.state == RadioState.Transmitting:
-                radio.micQueue.put_nowait(monoArray)
+                radio.micQueue.put_nowait(data)
 
 class SpkrStreamTrack(MediaStreamTrack):
     """

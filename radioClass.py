@@ -106,6 +106,9 @@ class Radio():
         # Volume set from client
         self.volume = 1.0
 
+        # Default samplerate
+        self.audioSampleRate = 48000
+
         # flag to keep transmitting until the mic queue is empty
         self.delayedTxStart = False
         self.delayedTxStop = False
@@ -326,6 +329,8 @@ class Radio():
             spkrBufferFrames (int): size of speaker buffer
         """
 
+        self.audioSampleRate = audioSampleRate
+
         # Clear buffer
         self.clearSpkrQueue()
 
@@ -334,7 +339,7 @@ class Radio():
 
         # Create mic stream
         self.micStream = pa.open(
-            format = pyaudio.paInt16,
+            format = pyaudio.paFloat32,
             channels = 1,
             rate = audioSampleRate,
             output = True,
@@ -380,13 +385,18 @@ class Radio():
             self.logger.logWarn("Mic queue size {}".format(self.spkrQueue.qsize(),self.micQueue.qsize()))
 
         # Start with empty samples
-        data = np.zeros(frame_count).astype(np.int16)
+        data = np.zeros(frame_count).astype(np.float32)
+
+        # Debug - sine wave
+        #data = (np.sin(2*np.pi*np.arange(frame_count)*440/self.audioSampleRate)).astype(np.float32)
+
+        #print("Sent mic frame: ndim {}, shape {}, size {}, type {}, min {}, max {}".format(data.ndim, data.shape, data.size, data.dtype, np.min(data), np.max(data)))
 
         # only get samples if there's more than one chunk in the queue
         if self.micQueue.qsize() > 0:
             try:
                 data = self.micQueue.get_nowait()
-
+        
             except queue.Empty:
                 # warn and send the zeroes
                 self.logger.logWarn("Radio {} mic queue empty!".format(self.name))
