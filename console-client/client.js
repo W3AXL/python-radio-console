@@ -393,11 +393,13 @@ function updateRadioControls() {
         $("#selected-chan-text").html(radio.chan);
         // Enable buttons
         $("#radio-controls button").prop("disabled", false);
-        // Set buttons to active based on state
-        if (radio.scanning) { $("#control-scan").addClass("button-active") } else { $("#control-scan").removeClass("button-active") }
-        if (radio.talkaround) { $("#control-dir").addClass("button-active") } else { $("#control-dir").removeClass("button-active") }
-        if (radio.monitor) { $("#control-mon").addClass("button-active") } else { $("#control-mon").removeClass("button-active") }
-        if (radio.lowpower) { $("#control-lpwr").addClass("button-active") } else { $("#control-lpwr").removeClass("button-active") }
+        // Set softkeys on/off
+        if (radio.softkey1) { $("#softkey1").addClass("button-active") } else { $("#softkey1").removeClass("button-active") }
+        if (radio.softkey2) { $("#softkey2").addClass("button-active") } else { $("#softkey2").removeClass("button-active") }
+        if (radio.softkey3) { $("#softkey3").addClass("button-active") } else { $("#softkey3").removeClass("button-active") }
+        if (radio.softkey4) { $("#softkey4").addClass("button-active") } else { $("#softkey4").removeClass("button-active") }
+        if (radio.softkey5) { $("#softkey5").addClass("button-active") } else { $("#softkey5").removeClass("button-active") }
+    
         // Clear if we don't
     } else {
         // Clear text
@@ -496,89 +498,18 @@ function changeChannel(down) {
 }
 
 /**
- * Toggle monitor
+ * Toggle a softkey on the selected radio
+ * @param {int} idx softkey index
  */
-function toggleMonitor() {
-    if (!pttActive && selectedRadio && serverSocket) {
-        console.log("Toggling monitor on " + selectedRadio);
+function softkey(idx) {
+    if (!pttActive && selectRadio && serverSocket) {
+        console.log("Toggling softkey " + String(idx));
         serverSocket.send(
             `{
                 "radioControl": {
                     "index": ${selectedRadioIdx},
                     "command": "button",
-                    "options": "monitor"
-                }
-            }`
-        )
-    }
-}
-
-/**
- * Hit nuisance delete button
- */
- function nuisanceDelete() {
-    if (!pttActive && selectedRadio && serverSocket) {
-        console.log("Nuisance delete: " + selectedRadio);
-        serverSocket.send(
-            `{
-                "radioControl": {
-                    "index": ${selectedRadioIdx},
-                    "command": "button",
-                    "options": "nuisance"
-                }
-            }`
-        )
-    }
-}
-
-/**
- * Toggle low power
- */
-function togglePower() {
-    if (!pttActive && selectedRadio && serverSocket) {
-        console.log("Toggling power on " + selectedRadio);
-        serverSocket.send(
-            `{
-                "radioControl": {
-                    "index": ${selectedRadioIdx},
-                    "command": "button",
-                    "options": "power"
-                }
-            }`
-        )
-    }
-}
-
-/**
- * Turn scan on or off for selected radio
- */
-function toggleScan() {
-    if (!pttActive && selectedRadio && serverSocket) {
-        console.log("Toggling scan for " + selectedRadio);
-        serverSocket.send(
-            `{
-                "radioControl": {
-                    "index": ${selectedRadioIdx},
-                    "command": "button",
-                    "options": "scan"
-                }
-            }`
-        )
-    }
-}
-
-/**
- * Toggle talkaround (I should really standardize on Talkaround vs Direct)
- */
-function toggleDirect() {
-    if (!pttActive && selectedRadio && serverSocket) {
-        console.log("Toggling talkaround for " + selectedRadio);
-        serverSocket.send(
-            `{
-                "radioControl": {
-                    "index": ${selectedRadioIdx},
-                    "command": "button",
-                    "options": "direct"
+                    "options": "softkey${idx}"
                 }
             }`
         )

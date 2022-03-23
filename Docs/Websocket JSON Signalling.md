@@ -81,11 +81,7 @@ These are sent from the client to the server
 - `chanGoto` is used to goto a specific channel index **(not yet implemented)**
    - requires a number in the `options` field
 - `button` indicates a button press. `options` specifies the button, valid options are:
-   - `monitor` monitor
-   - `nuisance` nuisance delete
-   - `power` low/high power
-   - `scan` scan
-   - `direct` talkaround/repeater
+   - `softkey1` through `softkey5` requisite softkey (dynamic for O5 control head or static for user-defined buttons)
 
 ### Audio Control Commands
 

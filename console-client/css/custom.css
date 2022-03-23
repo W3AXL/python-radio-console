@@ -473,7 +473,7 @@ ion-icon {
 
 #radio-controls button {
     height: 48px;
-    width: 48px;
+    width: 72px;
     padding: 8px;
     box-sizing: border-box;
     font-size: 22px;
@@ -484,6 +484,7 @@ ion-icon {
     padding: 0;
     line-height: normal;
     font-weight: bolder;
+    font-size: 18px;
 }
 
 #radio-controls .button-active {
