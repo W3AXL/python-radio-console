@@ -121,34 +121,46 @@
             <div id="radio-controls">
                 <!-- Left Button Bar -->
                 <div class="topcoat-button-bar">
-                    <!-- Mon Button -->
+                    <!-- Left Arrow -->
                     <div class="topcoat-button-bar__item">
-                        <button id="control-mon" title="Monitor" class="topcoat-button-bar__button--large" onclick="toggleMonitor()" disabled>
-                            <ion-icon name="volume-off-sharp"></ion-icon>
+                        <button id="leftarrow" class="topcoat-button-bar__button--large" onclick="softkeys_left()" disabled style="width:48px">
+                            <ion-icon name="caret-back-sharp"></ion-icon>
                         </button>
                     </div>
-                    <!-- Nuis Button -->
+                    <!-- Softkey 1 -->
                     <div class="topcoat-button-bar__item">
-                        <button id="control-nuis" title="Nuisance Delete" class="topcoat-button-bar__button--large" onclick="nuisanceDelete()" disabled>
-                            <ion-icon name="ban-sharp"></ion-icon>
+                        <button id="softkey1" class="topcoat-button-bar__button--large" onclick="softkey(1)" disabled>
+                            <span class="softkey"></span>
                         </button>
                     </div>
-                    <!-- Low Power Button -->
+                    <!-- Softkey 2 -->
                     <div class="topcoat-button-bar__item">
-                        <button id="control-lpwr" title="Low Power" class="topcoat-button-bar__button--large" onclick="togglePower()" disabled>
-                            <span>L</span>
+                        <button id="softkey2" class="topcoat-button-bar__button--large" onclick="softkey(2)" disabled>
+                            <span class="softkey"></span>
                         </button>
                     </div>
-                    <!-- Scan Button -->
+                    <!-- Softkey 3 -->
                     <div class="topcoat-button-bar__item">
-                        <button id="control-scan" title="Scan" class="topcoat-button-bar__button--large" onclick="toggleScan()" disabled>
-                            <ion-icon name="reload-sharp"></ion-icon>
+                        <button id="softkey3" class="topcoat-button-bar__button--large" onclick="softkey(3)" disabled>
+                            <span class="softkey"></span>
                         </button>
                     </div>
-                    <!-- Dir Button -->
+                    <!-- Softkey 4 -->
                     <div class="topcoat-button-bar__item">
-                        <button id="control-dir" title="Talkaround" class="topcoat-button-bar__button--large" onclick="toggleDirect()" disabled>
-                            <ion-icon name="exit-sharp"></ion-icon>
+                        <button id="softkey4" class="topcoat-button-bar__button--large" onclick="softkey(4)" disabled>
+                            <span class="softkey"></span>
+                        </button>
+                    </div>
+                    <!-- Softkey 5 -->
+                    <div class="topcoat-button-bar__item">
+                        <button id="softkey5" class="topcoat-button-bar__button--large" onclick="softkey(5)" disabled>
+                            <span class="softkey"></span>
+                        </button>
+                    </div>
+                    <!-- Right Arrow -->
+                    <div class="topcoat-button-bar__item">
+                        <button id="rightarrow" class="topcoat-button-bar__button--large" onclick="softkeys_right()" disabled style="width:48px">
+                            <ion-icon name="caret-forward-sharp"></ion-icon>
                         </button>
                     </div>
                 </div>

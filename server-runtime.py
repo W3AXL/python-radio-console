@@ -316,50 +316,15 @@ def changeChannel(index, down):
     """
     config.RadioList[index].changeChannel(down)
 
-def toggleMonitor(index):
+def toggleSoftkey(index, softkeyidx):
     """
-    Toggles monitor on radio
+    Toggles softkey on radio
 
     Args:
         index (int): Index of radio in RadioList
+        softkeyidx (int): Index of softkey (1-5)
     """
-    config.RadioList[index].toggleMonitor()
-
-def nuisanceDelete(index):
-    """
-    Nuisance deletes channel on radio
-
-    Args:
-        index (int): Index of radio in RadioList
-    """
-    config.RadioList[index].nuisanceDelete()
-
-def togglePower(index):
-    """
-    Toggle power on radio
-
-    Args:
-        index (int): Index of radio in RadioList
-    """
-    config.RadioList[index].togglePower()
-
-def toggleScan(index):
-    """
-    Enables or disabled scan on radio
-
-    Args:
-        index (int): index of radio
-    """
-    config.RadioList[index].toggleScan()
-
-def toggleDirect(index):
-    """
-    Toggles direct/talkaround
-
-    Args:
-        index (index): index of radio
-    """
-    config.RadioList[index].toggleDirect()
+    config.RadioList[index].toggleSoftkey(softkeyidx)
 
 def toggleMute(index, state):
     """
@@ -819,20 +784,10 @@ async def consumer_handler(websocket, path):
                         # Get button
                         button = options
 
-                        if button == "monitor":
-                            toggleMonitor(index)
-
-                        elif button == "nuisance":
-                            nuisanceDelete(index)
-
-                        elif button == "power":
-                            togglePower(index)
-
-                        elif button == "scan":
-                            toggleScan(index)
-
-                        elif button == "direct":
-                            toggleDirect(index)
+                        # Toggle a softkey
+                        if "softkey" in button:
+                            softkeyidx = int(button[7])
+                            toggleSoftkey(index, softkeyidx)                            
 
                 #
                 #   Audio Control Messages

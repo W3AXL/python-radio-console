@@ -308,40 +308,14 @@ class XTL:
         else:
             self.sendButton(self.O5Address.button_map['knob_chan'], 0x01)
 
-    def toggleMonitor(self):
+    def toggleSoftkey(self, idx):
         """
-        Monitor button
-        """
-        # Press nuis button
-        self.pressButton(self.O5Address.button_map["btn_key_1"], 0.05) 
+        Press softkey button
 
-    def nuisanceDelete(self):
+        Args:
+            idx (int): 1-5, softkey number
         """
-        Nuisance delete button
-        """
-        # Press nuis button
-        self.pressButton(self.O5Address.button_map["btn_key_2"], 0.05)
-
-    def togglePower(self):
-        """
-        Power button
-        """
-        # Press nuis button
-        self.pressButton(self.O5Address.button_map["btn_key_3"], 0.05)
-
-    def toggleScan(self):
-        """
-        Change state of scan by sending softkey button to toggle
-        """
-        # Press scan button
-        self.pressButton(self.O5Address.button_map['btn_key_4'], 0.05)
-
-    def toggleDirect(self):
-        """
-        DIR button
-        """
-        # Press scan button
-        self.pressButton(self.O5Address.button_map['btn_key_5'], 0.05)
+        self.pressButton(self.O5Address.button_map["btn_key_{}".format(idx)])
 
     def processSBEP(self, msg):
         """

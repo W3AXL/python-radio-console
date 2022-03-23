@@ -78,12 +78,14 @@ class Radio():
         self.chan = ""
         self.lastid = ""
         self.error = False
-        self.scanning = False
-        self.talkaround = False
-        self.monitor = False
-        self.lowpower = False
         self.selected = False
         self.muted = False
+        self.softkeys = ["","","","",""]
+        self.softkey1 = False
+        self.softkey2 = False
+        self.softkey3 = False
+        self.softkey4 = False
+        self.softkey5 = False
 
         # Radio interface class
         self.interface = None
@@ -163,6 +165,15 @@ class Radio():
             down (bool, optional): Whether to go down.
         """
         self.interface.changeChannel(down)
+
+    def toggleSoftkey(self, idx):
+        """
+        Toggles specified softkey
+
+        Args:
+            idx (int): 1-5, index of softkey
+        """
+        self.interface.toggleSoftkey(idx)
 
     def toggleMonitor(self):
         """
