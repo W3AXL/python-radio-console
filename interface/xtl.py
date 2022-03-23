@@ -252,6 +252,7 @@ class XTL:
 
                         # If we were commanded to go into SBEP and we have more data remaining, process it as SBEP now so we don't miss it
                         if self.inSBEP and len(msg) > 5:
+                            self.inSBEP = False
                             length = self.processSBEP(msg)
                             msg = msg[length:]
 
@@ -350,7 +351,7 @@ class XTL:
             msg (byte[]): message array of bytes
         """
 
-        self.logger.logVerbose("SBEP msg {}".format(msg))
+        self.logger.logVerbose("SBEP msg {}".format(hexlify(msg, " ")))
 
         # get important bits
         address = msg[0]
@@ -373,12 +374,14 @@ class XTL:
                 if newText != self.zoneText and not any(s in newText for s in self.O5Address.ignored_strings):
                     self.zoneText = newText
                     self.newStatus = True
+                    self.logger.logVerbose("Got new zone text: {}".format(newText))
                 return totalLength
             elif subdev == self.O5Address.display_subdevs['text_channel']:
                 newText = data.rstrip().decode('ascii')
                 if newText != self.chanText and not any(s in newText for s in self.O5Address.ignored_strings):
                     self.chanText = newText
                     self.newStatus = True
+                    self.logger.logVerbose("Got new channel text: {}".format(newText))
                 return totalLength
 
         # Display icon update 
