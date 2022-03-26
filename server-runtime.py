@@ -676,10 +676,12 @@ def handleSpkrData():
             if radio.state == RadioState.Receiving and not radio.muted:
                 try:
                     samples = radio.spkrQueue.get_nowait()
-                    if not outputIntArray:
-                        gotSamples = True
-                        outputIntArray = samples
-                    else:
+                    # Try to check if the array exists. If it does, we'll get an error thrown when we try to do == None and fallback to the multiple samples case
+                    try:
+                        if outputIntArray == None:
+                            gotSamples = True
+                            outputIntArray = samples
+                    except ValueError:
                         outputIntArray = np.add(outputIntArray, samples)
                 except queue.Empty:
                     #logger.logWarn("Radio {} queue empty".format(radio.name))
