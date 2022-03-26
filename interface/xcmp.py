@@ -16,7 +16,7 @@ except ImportError:
 
 class XPR:
 
-    def __init__(self, index, hostname, statusCallback, logger=Logger()):
+    def __init__(self, hostname, statusCallback, logger=Logger()):
         """Init Function
 
         Args:
@@ -45,7 +45,6 @@ class XPR:
         These variables are common to all radio interface classes and are 
         queried by the base RadioClass whenever statusCallback() is called
         """
-        self.index = index
         self.state = RadioState.Disconnected
         self.zoneText = ""
         self.chanText = ""
@@ -110,7 +109,7 @@ class XPR:
         Callback for when we receive an XCMP msg
         """
 
-        self.logger.logVerbose("Got XCMP message from radio {}: {}".format(self.index, msgIn))
+        self.logger.logVerbose("Got XCMP message from radio: {}".format(msgIn))
 
         if (msgIn['type'] == 2):    # call status info
             payload = msgIn['payload']
@@ -140,7 +139,7 @@ class XPR:
         """
         Call the status callback with the index of the radio
         """
-        self.statusCallback(self.index)
+        self.statusCallback()
 
     def transmit(self, transmit):
         """

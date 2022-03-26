@@ -83,7 +83,7 @@ class XTL:
             'vol_up': 0x531
         }
 
-    def __init__(self, index, comPort, headType, statusCallback, logger=Logger()):
+    def __init__(self, comPort, headType, statusCallback, logger=Logger()):
         """Init Function
 
         Args:
@@ -104,7 +104,6 @@ class XTL:
         These variables are common to all radio interface classes and are 
         queried by the base RadioClass whenever statusCallback() is called
         """
-        self.index = index
         self.state = RadioState.Disconnected
         self.zoneText = ""
         self.chanText = ""
@@ -296,7 +295,7 @@ class XTL:
         """
         Call the status callback with the index of the radio
         """
-        self.statusCallback(self.index)
+        self.statusCallback()
 
     def transmit(self, transmit):
         """
