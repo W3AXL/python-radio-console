@@ -5,6 +5,7 @@
 // User Config Var
 var config = {
     timeFormat: "Local",
+    rxAudioAgc: false,
 
     serverAddress: "",
     serverPort: 0,
@@ -31,6 +32,7 @@ var audio = {
     output: null,
     outputGain: null,
     outputAnalyzer: null,
+    outputAgc: null,
     outputPcmData: null,
     outputMeter: document.getElementById("meter-spkr"),
     dummyOutput: new Audio()
@@ -720,13 +722,18 @@ function saveServerConfig() {
  */
 function saveClientConfig() {
     // Get values
-    var timeFormat = $("#client-timeformat").val()
+    var timeFormat = $("#client-timeformat").val();
+    var rxAudioAgc = $("#client-rxagc").is(":checked");
 
     // Set config
     config.timeFormat = timeFormat;
+    config.rxAudioAgc = rxAudioAgc;
 
     // Save config to cookie
     saveConfig();
+
+    // Update AGC connections
+    updateAgc();
 }
 
 /**
@@ -753,6 +760,7 @@ function readConfig() {
         $("#server-autoconnect").prop('checked',config.serverAutoConn);
         // Update client popup values
         $("#client-timeformat").val(config.timeFormat);
+        $("#client-rxagc").prop("checked", config.rxAudioAgc);
     } else {
         console.warn("No config cookie detected, using defaults");
     }
@@ -881,9 +889,16 @@ function createPeerConnection() {
             audio.dummyOutput.srcObject = event.streams[0];
             audio.dummyOutput.play();
             // Create audio source from the track and attach it to the gain node & audio analyzer
-            var source = audio.context.createMediaStreamSource(event.streams[0]);
-            source.connect(audio.outputGain);
-            source.connect(audio.outputAnalyzer);
+            audio.output = audio.context.createMediaStreamSource(event.streams[0]);
+            // Connect to either output gain or agc module depending on agc setting
+            if (config.rxAudioAgc) {
+                audio.output.connect(audio.outputAgc);
+                audio.outputAgc.connect(audio.outputGain);
+                audio.outputAgc.connect(audio.outputAnalyzer);
+            } else {
+                audio.output.connect(audio.outputGain);
+                audio.output.connect(audio.outputAnalyzer);
+            }
             // If we got a speaker track back, we have both audio streams and can start the meter frame callback
             window.requestAnimationFrame(audioMeterCallback);
         }
@@ -1042,6 +1057,14 @@ function startAudioDevices() {
     audio.outputAnalyzer = audio.context.createAnalyser();
     audio.outputPcmData = new Float32Array(audio.outputAnalyzer.fftSize);
 
+    // Create AGC node using DynamisCompressor object
+    audio.outputAgc = audio.context.createDynamicsCompressor();
+    audio.outputAgc.threshold.setValueAtTime(-50, audio.context.currentTime);
+    audio.outputAgc.knee.setValueAtTime(40, audio.context.currentTime);
+    audio.outputAgc.ratio.setValueAtTime(6, audio.context.currentTime);
+    audio.outputAgc.attack.setValueAtTime(0, audio.context.currentTime);
+    audio.outputAgc.release.setValueAtTime(0.25, audio.context.currentTime);
+
     // Create gain node for output volume and connect it to the default output device
     audio.outputGain = audio.context.createGain();
     audio.outputGain.gain.value = 0.75;
@@ -1092,6 +1115,26 @@ function changeVolume() {
  */
 function playSound(soundId) {
     document.getElementById(soundId).play();
+}
+
+/**
+ * Updates RX AGC connections based on config setting
+ */
+function updateAgc() {
+    // Disconnect stream source & agc node
+    audio.output.disconnect();
+    audio.outputAgc.disconnect();
+    // Set up connections based on config
+    if (config.rxAudioAgc) {
+        console.log("Connecting AGC blocks");
+        audio.output.connect(audio.outputAgc);
+        audio.outputAgc.connect(audio.outputGain);
+        audio.outputAgc.connect(audio.outputAnalyzer);
+    } else {
+        console.log("Bypassing AGC blocks");
+        audio.output.connect(audio.outputGain);
+        audio.output.connect(audio.outputAnalyzer);
+    }
 }
 
 /***********************************************************************************

@@ -447,8 +447,10 @@ class Radio():
         """
         if self.micStream:
             self.micStream.stop_stream()
+            self.micStream.close()
         if self.spkrStream:
             self.spkrStream.stop_stream()
+            self.spkrStream.close()
         if self.micQueue:
             self.clearMicQueue()
         if self.spkrQueue:

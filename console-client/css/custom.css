@@ -608,7 +608,11 @@ ion-icon {
 }
 
 .popup-table input {
-    line-height: 2.5rem;
+    line-height: 1.5rem;
+}
+
+.popup-table button {
+    line-height: 2rem;
 }
 
 .popup-table input[type='text'] {

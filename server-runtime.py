@@ -651,7 +651,7 @@ def startSound():
 
 def stopSound():
     """
-    Stops audio on each connected radio
+    Stops audio on each connected radio and terminate pyaudio
     """
 
     for radio in config.RadioList:
