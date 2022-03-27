@@ -16,6 +16,9 @@ pyvenv.cfg
 bin/
 lib64
 
+# Ignore local PyAV build
+av/
+
 # Distribution / packaging
 .Python
 build/
