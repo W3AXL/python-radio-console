@@ -24,16 +24,11 @@ import ssl
 
 # WebRTC Stuff
 from aiortc import MediaStreamTrack, RTCPeerConnection, RTCSessionDescription, logging
-from aiortc.contrib.media import MediaBlackhole, MediaPlayer, MediaRecorder, AudioFrame
+from aiortc.contrib.media import MediaBlackhole, MediaPlayer, MediaRecorder, MediaRelay, AudioFrame
 import uuid
 
 # Sound stuff
-import pyaudio
-from mulaw import MuLaw
 from av.audio.frame import AudioFrame
-import samplerate
-
-import fractions
 
 # Numpy (used for sound processing)
 import numpy as np
@@ -68,6 +63,12 @@ class Config():
 configFile = ""
 config = Config()
 
+# List of AIORTC recorders (so we can keep track of and close them during shutdown)
+recorders = []
+
+# Flag that says when we got the first track from the client (which would be the mic track)
+gotMicTrack = False
+
 # Argument parser
 parser = argparse.ArgumentParser()
 
@@ -96,18 +97,6 @@ messageQueue = asyncio.Queue()
 # Audio globals
 audioSampleRate = 48000  # this must match the WebRTC settings on the client
 
-# frame sizes for pyaudio buffers (these were set by observing what size the aiortc frames were)
-spkrBufferSize = 960
-micBufferSize = 960
-
-spkrThread = None
-
-# Client mic input vars
-micSampleQueue = queue.Queue()
-
-# Radio spkr output vars
-spkrSampleQueue = queue.Queue()
-
 # Test input & output audio streams
 micStream = None
 spkrStream = None
@@ -121,9 +110,6 @@ blackHole = None
 inputs = []
 outputs = []
 hostapis = []
-
-# pyAudio instantiation
-pa = pyaudio.PyAudio()
 
 # Detect operating system
 osType = platform.system()
@@ -272,8 +258,8 @@ def printRadios():
     for idx, radio in enumerate(config.RadioList):
         print("      - radio{}: {}".format(idx, radio.name))
         print("                {} control ({})".format(radio.ctrlMode, radio.ctrlPort))
-        print("                Tx Audio dev: {} ({})".format(radio.txDev, getDeviceName(radio.txDev)))
-        print("                Rx Audio dev: {} ({})".format(radio.rxDev, getDeviceName(radio.rxDev)))
+        print("                Tx Audio dev: {}".format(radio.txDev))
+        print("                Rx Audio dev: {}".format(radio.rxDev))
 
 """-------------------------------------------------------------------------------
     Radio Functions
@@ -398,87 +384,7 @@ def getAllRadiosStatusJson():
     
 """-------------------------------------------------------------------------------
     WebRTC Functions
--------------------------------------------------------------------------------"""
-
-class MicStreamTrack(MediaStreamTrack):
-    """
-    An audio stream object for the mic audio from the client
-    """
-    kind = "audio"
-
-    def __init__(self, track):
-        super().__init__()
-        self.track = track
-
-    async def recv(self):
-
-        # Get a new PyAV frame
-        frame = await self.track.recv()
-
-        # Data will be an int16 160-long array of mu-law samples
-        raw = frame.to_ndarray().flatten()
-
-        # Resample into a 960-sample long int16 array
-        try:
-            data = samplerate.resample(raw, 6, converter_type='sinc_fastest')
-        except Exception as ex:
-            logger.logError("Caught resample exception: {}".format(ex.args))
-
-        # Divide by int16 range
-        data = data / 32768
-
-        #print("Mic frame info: ndim {}, shape {}, size {}, type {}, min {}, max {}".format(data.ndim, data.shape, data.size, data.dtype, np.min(data), np.max(data)))
-
-        # Put samples to radio, if there's one transmitting
-        for radio in config.RadioList:
-            if radio.state == RadioState.Transmitting:
-                radio.micQueue.put_nowait(data)
-
-class SpkrStreamTrack(MediaStreamTrack):
-    """
-    An audio stream object for the speaker data from the server
-    """
-    kind = "audio"
-
-    def __init__(self):
-        super().__init__()
-        self.samplerate = audioSampleRate
-        self.samples = spkrBufferSize
-        logger.logVerbose("SpkrStreamTrack initialized")
-
-    async def recv(self):
-
-        # Handle timestamps properly
-        if hasattr(self, "_timestamp"):
-            self._timestamp += self.samples
-            wait = self._start + (self._timestamp / self.samplerate) - time.time()
-            await asyncio.sleep(wait)
-        else:
-            self._start = time.time()
-            self._timestamp = 0
-
-        # create empty data by default
-        data = np.zeros(self.samples).astype(np.int16)
-
-        # Only get speaker data if we have some in the buffer
-        if spkrSampleQueue.qsize() > 0:
-            try:
-                data = spkrSampleQueue.get_nowait().astype(np.int16)
-            except queue.Empty:
-                pass
-            
-        # To convert to a mono audio frame, we need the array to be an array of single-value arrays for each sample (annoying)
-        data = data.reshape(data.shape[0], -1).T
-        # Create audio frame
-        frame = AudioFrame.from_ndarray(data, format='s16', layout='mono')
-
-        # Update time stuff
-        frame.pts = self._timestamp
-        frame.sample_rate = self.samplerate
-        frame.time_base = fractions.Fraction(1, self.samplerate)
-
-        # Return
-        return frame
+-------------------------------------------------------------------------------"""     
 
 async def gotRtcOffer(offerObj):
     """
@@ -494,8 +400,8 @@ async def gotRtcOffer(offerObj):
     logger.logVerbose("SDP: {}".format(offerObj['sdp']))
 
     # Start audio on radios
-    logger.logVerbose("Starting audio devices on radios")
-    startSound()
+    #logger.logVerbose("Starting audio devices on radios")
+    #startSound()
     
     # Create SDP offer and peer connection objects
     offer = RTCSessionDescription(sdp=offerObj["sdp"], type=offerObj["type"])
@@ -505,10 +411,17 @@ async def gotRtcOffer(offerObj):
     pcUuid = "Peer({})".format(uuid.uuid4())
     logger.logVerbose("Creating peer connection {}".format(pcUuid))
 
-    # Create the speaker track
-    spkrTrack = SpkrStreamTrack()
-    rtcPeer.addTrack(spkrTrack)
-    logger.logVerbose("Added speaker track")
+    # Create speaker tracks for each radio
+    for radio in config.RadioList:
+        logger.logInfo("Creating RTC speaker track for radio {}".format(radio.name))
+        player = MediaPlayer(radio.rxDev, format='alsa')
+        rtcPeer.addTrack(player.audio)
+
+    # DEBUG: just do the first radio in the list
+    #radio = config.RadioList[0]
+    #logger.logInfo("Creating RTC speaker track for radio {}".format(radio.name))
+    #player = MediaPlayer(radio.rxDev, format='alsa')
+    #rtcPeer.addTrack(player.audio)
 
     # ICE connection state callback
     @rtcPeer.on("iceconnectionstatechange")
@@ -526,6 +439,8 @@ async def gotRtcOffer(offerObj):
         global spkrTrack
         global blackHole
         global rtcPeer
+        global recorders
+        global gotMicTrack
 
         logger.logVerbose("Got {} track from peer {}".format(track.kind, pcUuid))
 
@@ -533,19 +448,38 @@ async def gotRtcOffer(offerObj):
         if track.kind != "audio":
             logger.logError("Got non-audio track from peer {}".format(pcUuid))
             return
-        
-        # Create the mic stream for this track, and add its output to a media blackhole so it starts
-        micTrack = MicStreamTrack(track)
-        blackHole = MediaBlackhole()
-        blackHole.addTrack(micTrack)
-        logger.logVerbose("Added mic track")
-        await blackHole.start()
-        logger.logVerbose("Started mic track")
+
+        # if we already got a mic track, ignore this one
+        if gotMicTrack:
+            logger.logWarn("Ignoring additional track from peer since we already have the mic")
+            return
+
+        gotMicTrack = True
+
+        # Create a relay for the incoming mic track
+        micRelay = MediaRelay()
+        # Add the mic track to each radio's tx device
+        for radio in config.RadioList:
+            logger.logInfo("Creating RTC mic track for radio {}".format(radio.name))
+            recorder = MediaRecorder(radio.txDev, format='alsa')
+            recorder.addTrack(micRelay.subscribe(track))
+            recorders.append(recorder)
+            await recorder.start()
+
+        # DEBUG: just do the first radio in the list
+        #radio = config.RadioList[0]
+        #logger.logInfo("Creating RTC mic track for radio {}".format(radio.name))
+        #recorder = MediaRecorder(radio.txDev, format='alsa')
+        #recorder.addTrack(track)
+        #await recorder.start()
 
         # Track ended handler
         @track.on("ended")
         async def onEnded():
             logger.logVerbose("Audio track from {} ended".format(pcUuid))
+            logger.logInfo("Shutting down media devices")
+            for recorder in recorders:
+                await recorder.stop()
 
     await doRtcAnswer(offer)
 
@@ -590,22 +524,6 @@ def getSoundDevices():
     global outputs
     global hostapis
 
-    # get portaudio info
-    info = pa.get_host_api_info_by_index(0)
-    numdevices = info.get('deviceCount')
-
-    for i in range(0, numdevices):
-        if (pa.get_device_info_by_host_api_device_index(0, i).get('maxInputChannels')) > 0:
-            inputs.append({
-                'index': i,
-                'name': pa.get_device_info_by_host_api_device_index(0,i).get('name')
-            })
-        elif (pa.get_device_info_by_host_api_device_index(0, i).get('maxOutputChannels')) > 0:
-            outputs.append({
-                'index': i,
-                'name': pa.get_device_info_by_host_api_device_index(0,i).get('name')
-            })
-
 def printSoundDevices():
     """
     Print queried sound devices
@@ -613,87 +531,8 @@ def printSoundDevices():
 
     # Print inputs first
     logger.logInfo("Available input devices:")
-    for input in inputs:
-        print("{}: {}".format(input['index'],input['name']))
-    # Line break
-    print()
-    # Print outputs
-    logger.logInfo("Available output devices")
-    for output in outputs:
-        print("{}: {}".format(output['index'],output['name']))
-    # Line break
-    print()
-
-def getDeviceName(idx):
-    """
-    Returns the name of the specified PortAudio device index
-
-    Args:
-        idx (int): device index
-
-    Returns:
-        string: Device name
-    """
-    return pa.get_device_info_by_host_api_device_index(0, idx).get('name')
-
-def startSound():
-    """
-    Start audio devices for each connected radio
-    """
     
-    # Start audio on each radio device
-    for radio in config.RadioList:
-        radio.startAudio(pa, micSampleQueue, audioSampleRate, micBufferSize, spkrBufferSize)
-
-    # Start the speaker audio handler
-    spkrThread = threading.Thread(target=handleSpkrData, daemon=True)
-    spkrThread.start()
-
-def stopSound():
-    """
-    Stops audio on each connected radio and terminate pyaudio
-    """
-
-    for radio in config.RadioList:
-        radio.stopAudio()
-
-def handleSpkrData():
-    """
-    This is an infinite loop, to be run in a thread
-
-    Get the speaker data from each connected radio, add it to the buffer string, and send & clear the buffer if it's big enough
-    """
-
-    global spkrBufferSize
-
-    while True:
-
-        outputIntArray = None
-        gotSamples = False
-        
-        # Get samples from each radio and add to the output array
-        for radio in config.RadioList:
-            if radio.state == RadioState.Receiving and not radio.muted:
-                try:
-                    samples = radio.spkrQueue.get_nowait()
-                    # Try to check if the array exists. If it does, we'll get an error thrown when we try to do == None and fallback to the multiple samples case
-                    try:
-                        if outputIntArray == None:
-                            gotSamples = True
-                            outputIntArray = samples
-                    except ValueError:
-                        outputIntArray = np.add(outputIntArray, samples)
-                except queue.Empty:
-                    #logger.logWarn("Radio {} queue empty".format(radio.name))
-                    pass
-
-        if gotSamples:
-            # Put the samples into the queue
-            spkrSampleQueue.put_nowait(outputIntArray)
-            
-        else:
-            # give the CPU a break
-            time.sleep(0.05)
+    print()
 
 """-------------------------------------------------------------------------------
     Serial Port Functions
@@ -842,8 +681,7 @@ async def consumer_handler(websocket, path):
 
                     # Start audio command
                     if command == "startAudio":
-                        logger.logInfo("Starting radio audio devices")
-                        startSound()
+                        logger.logWarn("Deprecated command: startAudio")
 
                     # Mute commands
                     elif command == "mute":
@@ -875,7 +713,7 @@ async def consumer_handler(websocket, path):
         except websockets.exceptions.ConnectionClosed:
             logger.logWarn("Client disconnected!")
             # stop sound devices and exit
-            stopSound()
+            serverLoop.run_until_complete(stopRtc())
             break
 
 
@@ -911,15 +749,6 @@ async def producer_hander(websocket, path):
                 index = int(message[7:])
                 # Format JSON response
                 response = '{{ "radio": {{ "index": {}, "status": {} }} }}'.format(index,getRadioStatusJson(index))
-                # Send
-                await websocket.send(response)
-            
-            # send speaker data from queue
-            elif "speaker" in message:
-                # Get samples
-                speakerData = spkrSampleQueue.get_nowait()
-                # Format response JSON
-                response = '{{ "audioData": {{ "source": "speaker", "data": "{}" }} }}'.format(speakerData)
                 # Send
                 await websocket.send(response)
             
@@ -1091,11 +920,6 @@ if __name__ == "__main__":
             if radio.state != RadioState.Disconnected:
                 radio.disconnect()
         logger.logVerbose("Disconnected from radios")
-
-        # Stop PyAudio
-        stopSound()
-        pa.terminate()
-        logger.logVerbose("Audio devices stopped")
 
         # Stop Loops
         serverLoop.stop()

@@ -15,6 +15,9 @@ var config = {
 // Radio List (populated from server)
 var radioList = [];
 
+// Radio speaker streams
+var radioStreams = [];
+
 // Websocket connection to server
 var serverSocket = null;
 
@@ -35,7 +38,7 @@ var audio = {
     outputAgc: null,
     outputPcmData: null,
     outputMeter: document.getElementById("meter-spkr"),
-    dummyOutput: new Audio()
+    dummyOutputs: []
 }
 
 // WebRTC Variables
@@ -108,8 +111,6 @@ function connect() {
     if (!audio.context) {
         startAudioDevices();
     }
-    // Wait for the websocket to be connected, then start WebRTC
-    waitForWebSocket(serverSocket, startWebRtc);
 }
 
 /**
@@ -123,14 +124,6 @@ function connected() {
     $("#navbar-status").html("Connected");
     $("#navbar-status").removeClass("pending");
     $("#navbar-status").addClass("connected");
-    // Get radios
-    serverSocket.send(
-        `{
-            "radios": {
-                "command": "query"
-            }
-        }`
-    )
 }
 
 /**
@@ -773,6 +766,13 @@ function readConfig() {
     https://github.com/webrtc/samples/tree/gh-pages/src/content/peerconnection/audio
 ***********************************************************************************/
 
+function dummyTrack() {
+    osc = audio.context.createOscillator();
+    dst = osc.connect(audio.context.createMediaStreamDestination());
+    osc.start();
+    return Object.assign(dst.stream.getAudioTracks()[0], {enabled: false});
+}
+
 /**
  * Initiate WebRTC connection with server
  * @returns {boolean} true if connection starts successfully
@@ -807,7 +807,11 @@ function startWebRtc() {
                 audio.inputPcmData = new Float32Array(audio.inputAnalyzer.fftSize);
                 audio.inputStream.connect(audio.inputAnalyzer);
                 // Add the first available mic track to the peer connection
-                rtc.peer.addTrack(stream.getTracks()[0])
+                rtc.peer.addTrack(stream.getTracks()[0]);
+                // Add additional silent audio tracks so we can send the proper amount of speaker tracks back from the server
+                for (var i=0; i<radioList.length - 1; i++) {
+                    rtc.peer.addTrack(dummyTrack());
+                }
                 // Create and send the WebRTC offer
                 return sendRtcOffer();
             },
@@ -883,22 +887,28 @@ function createPeerConnection() {
     // Connect audio stream from peer to the web audio objects
     peer.addEventListener('track', function(event) {
         if (event.track.kind == 'audio') {
-            console.log("Got new audio track from server");
-            // Attach the stream to a dummy audio output so it plays (needed in chrome for some reason)
-            audio.dummyOutput.muted = true;
-            audio.dummyOutput.srcObject = event.streams[0];
-            audio.dummyOutput.play();
-            // Create audio source from the track and attach it to the gain node & audio analyzer
-            audio.output = audio.context.createMediaStreamSource(event.streams[0]);
-            // Connect to either output gain or agc module depending on agc setting
-            if (config.rxAudioAgc) {
-                audio.output.connect(audio.outputAgc);
-                audio.outputAgc.connect(audio.outputGain);
-                audio.outputAgc.connect(audio.outputAnalyzer);
-            } else {
-                audio.output.connect(audio.outputGain);
-                audio.output.connect(audio.outputAnalyzer);
-            }
+            var newIdx = radioStreams.length;
+            console.log(`Got new audio track from server, index ${newIdx}`);
+
+            // Create a dummy stream for this stream (needed for Chromium-based browsers I guess)
+            var newDummy = new Audio();
+            newDummy.muted = true;
+            newDummy.srcObject = event.streams[0];
+            newDummy.play();
+            audio.dummyOutputs.push(newDummy);
+            console.debug(`Started dummy audio element for stream ${newIdx}`);
+
+            // Create audio source from the track
+            var newStream = audio.context.createMediaStreamSource(event.streams[0]);
+
+            // Connect it to the AGC block
+            //newStream.connect(audio.outputAgc);
+            // Debug - connect straight to destination
+            newStream.connect(audio.context.destination);
+
+            // Add to list of radio streams
+            radioStreams.push(newStream);
+            
             // If we got a speaker track back, we have both audio streams and can start the meter frame callback
             window.requestAnimationFrame(audioMeterCallback);
         }
@@ -979,11 +989,10 @@ function gotRtcResponse(answerType, answerSdp) {
  * @param {string} kind 'audio' or 'video'
  * @param {string} codec specific codec descriptor
  * @param {*} realSdp existing SDP
+ * @param {int} numberOfTracks number of audio tracks to add (should be the same as the number of radios configured)
  * @returns new SDP using specified codec
  */
 function sdpFilterCodec(kind, codec, realSdp) {
-    console.debug("Non-filtered SDP:");
-    console.debug(realSdp);
     var allowed = []
     var rtxRegex = new RegExp('a=fmtp:(\\d+) apt=(\\d+)\r$');
     var codecRegex = new RegExp('a=rtpmap:([0-9]+) ' + escapeRegExp(codec))
@@ -1070,6 +1079,10 @@ function startAudioDevices() {
     audio.outputGain.gain.value = 0.75;
     audio.outputGain.connect(audio.context.destination);
 
+    // Connect AGC
+    audio.outputAgc.connect(audio.outputGain);
+    audio.outputAgc.connect(audio.outputAnalyzer);
+
     // Enable volume slider
     $("#console-volume").prop('disabled', false);
 }
@@ -1121,19 +1134,14 @@ function playSound(soundId) {
  * Updates RX AGC connections based on config setting
  */
 function updateAgc() {
-    // Disconnect stream source & agc node
-    audio.output.disconnect();
-    audio.outputAgc.disconnect();
-    // Set up connections based on config
+
+    // Set compressor threshold based on AGC on/off
     if (config.rxAudioAgc) {
-        console.log("Connecting AGC blocks");
-        audio.output.connect(audio.outputAgc);
-        audio.outputAgc.connect(audio.outputGain);
-        audio.outputAgc.connect(audio.outputAnalyzer);
+        console.log("Enabling AGC");
+        audio.outputAgc.threshold.setValueAtTime(0,audio.context.currentTime);
     } else {
-        console.log("Bypassing AGC blocks");
-        audio.output.connect(audio.outputGain);
-        audio.output.connect(audio.outputAnalyzer);
+        console.log("Byassing AGC");
+        audio.outputAgc.threshold.setValueAtTime(-50, audio.context.currentTime);
     }
 }
 
@@ -1186,6 +1194,35 @@ function waitForWebSocket(socket, callback=null) {
 function onConnectWebsocket() {
     //$("#navbar-status").html("Websocket connected");
     console.log("Websocket connected");
+    // Query radios
+    console.log("Querying master radio list");
+    serverSocket.send(
+        `{
+            "radios": {
+                "command": "query"
+            }
+        }`
+    )
+    // Start webrtc
+    waitForRadioList(startWebRtc);
+}
+
+/**
+ * Waits for the radiolist to be populated before calling callback
+ * @param {function} callback 
+ */
+function waitForRadioList(callback) {
+    setTimeout(
+        function() {
+            if (radioList.length > 0) {
+                if (callback != null) {
+                    callback();
+                }
+            } else {
+                waitForRadioList(callback);
+            }
+        },
+    5); // 5 ms timeout
 }
 
 /**
