@@ -9,6 +9,9 @@ __pycache__/
 logs/
 startScreen.sh
 
+*.bat
+*.sh
+
 # VENV stuff
 [Ss]cripts/
 Include/
