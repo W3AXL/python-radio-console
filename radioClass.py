@@ -32,14 +32,7 @@ class Radio():
                     "Soundcard-CM108",  # CM108 GPIO PTT
                     "Soundcard-VOX"]    # Radio-controlled VOX PTT
 
-    # Valid signalling modes for the radio
-    signallingModes = ["None",
-                       "MDC",
-                       "ANI",
-                       "Singletone",
-                       "QCII"]
-
-    def __init__(self, index, name, desc=None, ctrlMode=None, ctrlPort=None, txDev=None, rxDev=None, signalMode=None, signalId=None, logger=Logger()):
+    def __init__(self, index, name, desc=None, ctrlMode=None, ctrlPort=None, txDev=None, rxDev=None, logger=Logger()):
         """Radio configuration object
 
         Args:
@@ -50,17 +43,11 @@ class Radio():
             ctrlDev (string): Device for radio control (serial, USB, IP, etc)
             txDev (string): Transmit audio device
             rxDev (string): Receieve audio device
-            signalMode (string): Optional signalling mode
-            signalId (any): Optional signalling ID
         """
 
         # Make sure control mode is valid
         if ctrlMode not in self.controlModes:
             raise ValueError("Invalid control mode specified: {}".format(ctrlMode))
-
-        # Make sure signalling mode is valid
-        if signalMode not in self.signallingModes:
-            raise ValueError("Invalid signalling mode specified: {}".format(signalMode))
 
         # Save parameters
         self.index = index
@@ -70,8 +57,6 @@ class Radio():
         self.ctrlPort = ctrlPort
         self.txDev = txDev
         self.rxDev = rxDev
-        self.sigMode = signalMode
-        self.sigId = signalId
 
         # Init client-facing parameters
         self.zone = ""
@@ -287,9 +272,7 @@ class Radio():
             "ctrlMode": self.ctrlMode,
             "ctrlPort": self.ctrlPort,
             "txDeviceIdx": self.txDev,
-            "rxDeviceIdx": self.rxDev,
-            "sigMode": self.sigMode,
-            "sigId": self.sigId
+            "rxDeviceIdx": self.rxDev
         }
         return config
 
@@ -310,8 +293,6 @@ class Radio():
                      radioDict['ctrlPort'],
                      radioDict['txDeviceIdx'],
                      radioDict['rxDeviceIdx'],
-                     radioDict['sigMode'],
-                     radioDict['sigId'],
                      logger)
 
     """-------------------------------------------------------------------------------

@@ -190,13 +190,6 @@ def parseArguments():
         printSoundDevices()
         exit(0)
 
-    # Make sure a config file was specified
-    if not args.config:
-        Logger.logWarn("No config file specified, exiting")
-        exit(0)
-    else:
-        loadConfig(args.config)
-
     # Make sure port and optionally an address were specified
     if not args.serverport:
         logger.logError("No server port specified!")
@@ -219,6 +212,13 @@ def parseArguments():
 
     if args.cpu_profiling:
         profiling = True
+
+    # Make sure a config file was specified
+    if not args.config:
+        Logger.logWarn("No config file specified, exiting")
+        exit(0)
+    else:
+        loadConfig(args.config)
 
 """-------------------------------------------------------------------------------
     Config Parsing Functions
@@ -862,19 +862,6 @@ async def consumer_handler(websocket, path):
 
                     # Create peer connection
                     await gotRtcOffer(offerObj)
-
-                #
-                #   Audio Data Messages
-                #
-
-                elif key == "audioData":
-                    # Get params
-                    params = cmdObject[key]
-                    source = params["source"]
-                    data = params["data"]
-                    
-                    if source == "mic":
-                        handleMicData(data)
 
                 #
                 #   NACK if command wasn't handled above
