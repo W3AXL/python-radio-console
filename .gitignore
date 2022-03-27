@@ -19,6 +19,9 @@ pyvenv.cfg
 bin/
 lib64
 
+# Custom PyAV build
+av/
+
 # Distribution / packaging
 .Python
 build/
