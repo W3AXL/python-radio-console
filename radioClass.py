@@ -18,20 +18,6 @@ import numpy as np
 
 import threading
 
-import json
-
-# Websocket stuff
-import websockets
-import websockets.exceptions
-import asyncio
-import ssl
-
-# WebRTC Stuff
-from aiortc import MediaStreamTrack, RTCPeerConnection, RTCSessionDescription, logging
-from aiortc.contrib.media import MediaBlackhole, MediaPlayer, MediaRecorder, AudioFrame
-import uuid
-
-
 class Radio():
     """Radio Class for generic radio control
     """
@@ -53,20 +39,17 @@ class Radio():
                        "Singletone",
                        "QCII"]
 
-    def __init__(self, name, certFile, keyFile, wsPort, wsAddr, desc=None, ctrlMode=None, ctrlPort=None, txDev=None, rxDev=None, logger=Logger()):
+    def __init__(self, index, name, desc=None, ctrlMode=None, ctrlPort=None, txDev=None, rxDev=None, signalMode=None, signalId=None, logger=Logger()):
         """Radio configuration object
 
         Args:
+            index (int): index of the radio in the global radio list
             name (string): Radio name
             desc (string): Radio description
-            certFile (string): SSL certificate file (for Websocket/WebRTC SSL)
-            keyFile (string): SSL certificate key (for Websocket/WebRTC SSL)
-            wsPort (int): Port for websocket connection
-            wsAddr (string): Optional address on which to run websocket server
             ctrlMode (string): Radio control mode (SB9600, CAT, etc)
             ctrlDev (string): Device for radio control (serial, USB, IP, etc)
-            txDev (int): Transmit audio device index
-            rxDev (int): Receieve audio device index
+            txDev (string): Transmit audio device
+            rxDev (string): Receieve audio device
             signalMode (string): Optional signalling mode
             signalId (any): Optional signalling ID
         """
@@ -75,20 +58,20 @@ class Radio():
         if ctrlMode not in self.controlModes:
             raise ValueError("Invalid control mode specified: {}".format(ctrlMode))
 
+        # Make sure signalling mode is valid
+        if signalMode not in self.signallingModes:
+            raise ValueError("Invalid signalling mode specified: {}".format(signalMode))
+
         # Save parameters
+        self.index = index
         self.name = name
         self.desc = desc
         self.ctrlMode = ctrlMode
         self.ctrlPort = ctrlPort
         self.txDev = txDev
         self.rxDev = rxDev
-
-        # Websocket parameters
-        self.certFile = certFile
-        self.keyFile = keyFile
-        self.wsPort = wsPort
-        self.wsAddr = wsAddr
-        self.wsQueue = asyncio.Queue()
+        self.sigMode = signalMode
+        self.sigId = signalId
 
         # Init client-facing parameters
         self.zone = ""
@@ -112,15 +95,6 @@ class Radio():
         # Create logger
         self.logger = logger
 
-        # Websocket Objects
-        self.wsserver = None    # Websocket server
-        self.wsloop = None      # Websocket handler loop
-
-        # WebRTC objects
-        self.rtcPeer = None     # WebRTC peer object
-        self.micSink = None     # WebRTC output device
-        self.spkrSource = None  # WebRTC input device
-
         # Speaker & Mic Sample Queues
         self.micQueue = None
         self.spkrQueue = queue.Queue()
@@ -137,227 +111,35 @@ class Radio():
 
         # flag to keep transmitting until the mic queue is empty
         self.delayedTxStart = False
-        self.delayedTxStop = False        
+        self.delayedTxStop = False
+        
 
-    def connect(self, reset=True):
+    def connect(self, statusCallback, reset=True):
         """Connect to radio using specified communication scheme
 
         Args:
+            statusCallback (function): callback to fire when radio status is updated, must take one integer argument
             reset (bool, optional): whether to reset the radio on connect or not. Defaults to True.
         """
 
+        # Store callback
+        self.statusCallback = statusCallback
+
         # XTL5000 O-head
         if self.ctrlMode == "SB9600-XTL-O":
-            self.interface = XTL(self.ctrlPort, 'O5', self.updateStatus, self.logger)
+            self.interface = XTL(self.index, self.ctrlPort, 'O5', self.statusCallback, self.logger)
         # XPR XCMP Control
         elif self.ctrlMode == "XCMP-XPR":
-            self.interface = XPR(self.ctrlPort, self.updateStatus, self.logger)
+            self.interface = XPR(self.index, self.ctrlPort, self.statusCallback, self.logger)
         
         # Connect to radio (optional reset)
         self.interface.connect(reset=reset)
-
-        # Start websocket listener
-        self.startWebsocket()
 
     def disconnect(self):
         """
         Disconnect the radio
         """
-        self.stopRtc()
-        self.wsloop.stop()
         self.interface.disconnect()
-        self.logger.logVerbose("Disconnected from radio {}".format(self.name))
-
-    """-------------------------------------------------------------------------------
-        Websocket server functions
-    -------------------------------------------------------------------------------"""
-
-    def startWebsocket(self):
-        """
-        Starts websocket server
-        """
-
-        if not self.wsAddr:
-            self.wsAddr = 'localhost'
-        
-        self.logger.logInfo("Starting websocket server for radio {} on address {}, port {}".format(self.name, self.wsAddr, self.wsPort))
-
-        # use ssl on the web socket
-        ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-        ssl_context.load_cert_chain(self.certFile, self.keyFile)
-        
-        # create server object
-        server = websockets.serve(self.websocketHandler, self.wsAddr, self.wsPort, ssl=ssl_context)
-        
-        # start server async loop
-        self.wsloop = asyncio.get_event_loop()
-        #serverLoop.run_until_complete(server)
-        self.wsloop.run_forever()
-
-    async def websocketHandler(self, websocket, path):
-        """
-        Sets up handlers for websocket
-        """
-
-        consumerTask = asyncio.ensure_future(self.consumerHandler(self, websocket, path))
-
-        producerTask = asyncio.ensure_future(self.producer_hander(self, websocket, path))
-
-        done, pending = await asyncio.wait(
-            [consumerTask, producerTask],
-            return_when=asyncio.FIRST_COMPLETED,
-        )
-        for task in pending:
-            task.cancel()
-        
-
-    async def consumerHandler(self, websocket, path):
-        """
-        Websocket handler for data received from client
-
-        Args:
-            websocket (websocket): websocket object
-            path (path): not sure what this does, we don't use it
-        """
-
-        while True:
-            try:
-                # Wait for data
-                data = await websocket.recv()
-
-                # Try and convert the recieved data to JSON and warn on fail
-                try:
-                    cmdObject = json.loads(data)
-                except ValueError as e:
-                    self.logger.logWarn("Invalid data recieved from client for radio {}, {}\nData: {}".format(self.name, e.args[0], data))
-                    continue
-
-                # Iterate through the received command keys (there should only ever be one, but it's possible to recieve multiple)
-
-                for key in cmdObject.keys():
-
-                    #
-                    # Radio Query Command
-                    #
-
-                    if key == "radio" and cmdObject[key]["command"] == "query":
-                        await self.wsQueue.put("radioInfo")
-
-                    #
-                    # Radio Control Commands
-                    #
-
-                    elif key == "radioControl":
-                        # Get object inside
-                        params = cmdObject[key]
-                        command = params["command"]
-                        options = params["options"]
-
-                        # Start PTT
-                        if command == "startTx":
-                            self.logger.logVerbose("Starting TX on radio {}".format(self.name))
-                            self.transmit(True)
-
-                        # Stop PTT
-                        elif command == "stopTx":
-                            self.logger.logVerbose("Stopping TX on radio {}".format(self.name))
-                            self.transmit(False)
-
-                        # Channel Up
-                        elif command == "chanUp":
-                            self.changeChannel(False)
-
-                        # Channel Down
-                        elif command == "chanDn":
-                            self.changeChannel(True)
-
-                        # Buttons
-                        elif command == "button":
-                            # Get button
-                            button = options
-
-                            # Toggle a softkey
-                            if "softkey" in button:
-                                softkeyidx = int(button[7])
-                                self.toggleSoftkey(softkeyidx)
-
-                            # Left/right arrow keys
-                            elif button == "left":
-                                self.leftArrow()
-                            elif button == "right":
-                                self.rightArrow()
-
-                    #
-                    #   WebRTC Messages
-                    #
-
-                    elif key == "webRtcOffer":
-                        # Get params
-                        offerObj = cmdObject[key]
-
-                        # Create peer connection
-                        await self.gotRtcOffer(offerObj)
-
-                    #
-                    #   NACK if command wasn't handled above
-                    #
-
-                    else:
-                        # Send NACK
-                        await self.wsQueue.put('NACK')
-
-            # Handle connection closing event (stop audio devices)
-            except websockets.exceptions.ConnectionClosed:
-                self.logger.logWarn("Client disconnected from radio {}!".format(self.name))
-                # stop sound devices and exit
-                self.disconnect()
-                break
-
-
-    async def producer_hander(self, websocket, path):
-        """
-        Websocket handler for sending data to client
-
-        Args:
-            websocket (websocket): socket object
-            path (path): still not sure what this does
-        """
-        while True:
-            try:
-                # Wait for new data in queue
-                message = await self.wsQueue.get()
-
-                # send all radios
-                if message == "radioInfo":
-                    self.logger.logInfo("sending radio info for {} to {}".format(self.name, websocket.remote_address[0]))
-                    # Generate response JSON
-                    response = '{{ "radio": {{ "command": "list", "radioList": {} }} }}'.format(self.encodeClientStatus())
-                    self.logger.logVerbose(json.dumps(response))
-                    # Send
-                    await websocket.send(response)
-
-                # Send WebRTC SDP answer
-                elif "webRtcAnswer" in message:
-                    self.logger.logInfo("sending WebRTC answer for {} to {}".format(self.name, websocket.remote_address[0]))
-                    await websocket.send(message)
-                
-                # send status update for specific radio
-                elif "status" in message:
-                    self.logger.logInof("sending radio status for {} to {}".format(self.name, websocket.remote_address[0]))
-                    # Format JSON response
-                    response = '{{ "radio": {{ "status": {} }} }}'.format(self.encodeClientStatus())
-                    self.logger.logVerbose(json.dumps(response))
-                    # Send
-                    await websocket.send(response)
-                
-                # send NACK to unknown command
-                elif "NACK" in message:
-                    self.logger.logWarn("invalid command received from {}".format(websocket.remote_address[0]))
-                    await websocket.send('{{"nack": {{ }} }}')
-            
-            except websockets.exceptions.ConnectionClosed:
-                # The consumer handler will already cover this
-                break
 
     """-------------------------------------------------------------------------------
         Radio command functions (shared by all interface types)
@@ -410,17 +192,11 @@ class Radio():
         Set status of radio mute and update
         """
         self.muted = state
-        self.updateStatus()
+        self.statusCallback(self.index)
 
     """-------------------------------------------------------------------------------
         Radio Status Functions
     -------------------------------------------------------------------------------"""
-
-    def updateStatus(self):
-        """
-        Add a status update to the outgoing WS queue
-        """
-        self.wsloop.call_soon_threadsafe(self.wsQueue.put_nowait,"status")
 
     def getStatus(self):
         """
@@ -517,7 +293,7 @@ class Radio():
         }
         return config
 
-    def decodeConfig(radioDict, certFile, keyFile, wsAddr, logger=Logger()):
+    def decodeConfig(index, radioDict, logger=Logger()):
         """Decode a dict of config parameters into a new radio object
 
         Args:
@@ -526,111 +302,174 @@ class Radio():
         Returns:
             Radio: a new Radio object
         """
-
         # create a new radio object from config data
-        return Radio(
-            name = radioDict['name'],
-            certFile = certFile,
-            keyFile = keyFile,
-            wsPort = radioDict['port'],
-            wsAddr = wsAddr,
-            desc = radioDict['desc'],
-            ctrlMode = radioDict['ctrlMode'],
-            ctrlPort = radioDict['ctrlPort'],
-            txDev = radioDict['txDev'],
-            rxDev = radioDict['rxDev'],
-            logger = logger
-        )
+        return Radio(index,
+                     radioDict['name'],
+                     radioDict['desc'],
+                     radioDict['ctrlMode'],
+                     radioDict['ctrlPort'],
+                     radioDict['txDeviceIdx'],
+                     radioDict['rxDeviceIdx'],
+                     radioDict['sigMode'],
+                     radioDict['sigId'],
+                     logger)
 
     """-------------------------------------------------------------------------------
-        WebRTC Configuration Functions
+        Sound Device Functions
     -------------------------------------------------------------------------------"""
 
-    async def gotRtcOffer(self, offerObj):
+    def startAudio(self, pa, micQueue, audioSampleRate, micBufferFrames, spkrBufferFrames):
         """
-        Handler for a received WebRTC offer
+        Start PyAudio devices for radio
 
         Args:
-            offerObj (dict): WebRTC offer
+            pa (pyaudio): PyAudio instance
+            micQueue (Queue): queue of float32 mic samples at transfer sample rate
+            audioSampleRate (int): desired samplerate (must match what's configured on the client WebRTC connection)
+            micBufferFrames (int): size of mic buffer
+            spkrBufferFrames (int): size of speaker buffer
         """
 
-        self.logger.logInfo("Got WebRTC offer for radio {}".format(self.name))
-        self.logger.logVerbose("SDP: {}".format(offerObj['sdp']))
+        self.audioSampleRate = audioSampleRate
+
+        # Clear buffer
+        self.clearSpkrQueue()
+
+        # Create queue for mic samples
+        self.micQueue = queue.Queue()
+
+        # Create mic stream
+        self.micStream = pa.open(
+            format = pyaudio.paFloat32,
+            channels = 1,
+            rate = audioSampleRate,
+            output = True,
+            output_device_index = self.txDev,
+            stream_callback = self.micCallback,
+            frames_per_buffer = micBufferFrames
+        )
+
+        # Create speaker stream
+        self.spkrStream = pa.open(
+            format = pyaudio.paInt16,
+            channels = 1,
+            rate = audioSampleRate,
+            input = True,
+            input_device_index = self.rxDev,
+            stream_callback = self.spkrCallback,
+            frames_per_buffer = spkrBufferFrames
+        )
+
+        # Start streams
+        self.logger.logInfo("Starting audio streams for {}".format(self.name))
+        self.logger.logVerbose("TX dev: {}, RX dev: {}".format(self.txDev, self.rxDev))
+        self.micStream.start_stream()
+        self.spkrStream.start_stream()
+
+    def micCallback(self, in_data, frame_count, time_info, status):
+        """
+        Callback for client mic -> radio output device
+
+        Args:
+            in_data (array): not used for output device
+            frame_count (int): number of frames to process
+            time_info (time_info): not used
+            status (pyaudio.status): pyaudio status
+
+        Returns:
+            constant: paContinue
+        """
+
+        # Check if we have a status
+        if status:
+            self.logger.logWarn("{} got PyAudio status: {}".format(self.name, self.getPyaudioCallback(status)))
+            self.logger.logWarn("Mic queue size {}".format(self.spkrQueue.qsize(),self.micQueue.qsize()))
+
+        # Start with empty samples
+        data = np.zeros(frame_count).astype(np.float32)
+
+        # Debug - sine wave
+        #data = (np.sin(2*np.pi*np.arange(frame_count)*440/self.audioSampleRate)).astype(np.float32)
+
+        #print("Sent mic frame: ndim {}, shape {}, size {}, type {}, min {}, max {}".format(data.ndim, data.shape, data.size, data.dtype, np.min(data), np.max(data)))
+
+        # only get samples if there's more than one chunk in the queue
+        if self.micQueue.qsize() > 0:
+            try:
+                data = self.micQueue.get_nowait()
         
-        # Create SDP offer and peer connection objects
-        offer = RTCSessionDescription(sdp=offerObj["sdp"], type=offerObj["type"])
-        self.rtcPeer = RTCPeerConnection()
+            except queue.Empty:
+                # warn and send the zeroes
+                self.logger.logWarn("Radio {} mic queue empty!".format(self.name))
+            
+        return (data, pyaudio.paContinue)
 
-        # Create UUID for peer
-        pcUuid = "Peer({})".format(uuid.uuid4())
-        self.logger.logVerbose("Creating peer connection {}".format(pcUuid))
+    def spkrCallback(self, in_data, frame_count, time_info, status):
+        """
+        Callback for radio spkr -> client device
+        fires whenever new speaker data is available (all the time)
 
-        # Create the input & output devices
-        self.micSink = MediaRecorder("out0", format="alsa")
-        self.spkrSource = MediaPlayer("in0", format="alsa")
+        Args:
+            in_data ([type]): [description]
+            frame_count ([type]): [description]
+            time_info ([type]): [description]
+            status ([type]): [description]
+        """
 
-        # ICE connection state callback
-        @self.rtcPeer.on("iceconnectionstatechange")
-        async def onIceConnectionStateChange():
-            self.logger.logVerbose("Ice connection state is now {}".format(self.rtcPeer.iceConnectionState))
-            if self.rtcPeer.iceConnectionState == "failed":
-                await self.rtcPeer.close()
-                self.logger.logError("WebRTC peer connection {} failed".format(pcUuid))
-        
-        # Audio track callback when we get the mic track from the client
-        @self.rtcPeer.on("track")
-        async def onTrack(track):
+        # log status if we have one
+        if status and status not in [1,2,4,8]:
+            self.logger.logWarn("{} got PyAudio status: {}".format(self.name, self.getPyaudioCallback(status)))
 
-            # make sure it's audio
-            if track.kind == "audio":
-                self.logger.logVerbose("Got audio track from peer {}".format(pcUuid))
-                # Connect the incoming audio track to the mic sink
-                self.micSink.addTrack(track)
-                # Connect the speaker source back to the peer
-                self.rtcPeer.addTrack(self.spkrSource.audio)
-                # Log
-                self.logger.logInfo("Connected RTC streams for radio {}".format(self.name))
-            else:
-                self.logger.logError("Got non-audio track from peer {} for radio {}, type = {}".format(pcUuid, self.name, track.kind))
+        # only send speaker data if we're receiving and not muted
+        if self.state == RadioState.Receiving and not self.muted:
+            # convert pyaudio samples to numpy float32 array and apply volume
+            intArray = np.frombuffer(in_data, dtype=np.int16) * self.volume
+            # add samples to queue
+            self.spkrQueue.put_nowait(intArray)
 
-            # Track ended handler
-            @track.on("ended")
-            async def onEnded():
-                self.logger.logInfo("Mic track from {} for {} ended".format(pcUuid, self.name))
+        return (None, pyaudio.paContinue)
 
-        @self.rtcPeer.on("datachannel")
-        async def onDatachannel(channel):
-            @channel.on("message")
-            async def onMessage(message):
-                if isinstance(message, str):
-                    self.logger.logInfo("Got WebRTC data message for {}".format(self.name))
-                    self.logger.logVerbose(message)
+    def getPyaudioCallback(self, code):
+        if code == 1:
+            return "PyAudio Input Underflow ({})".format(pyaudio.paInputUnderflow)
+        elif code == 2:
+            return "PyAudio Input Underflow ({})".format(pyaudio.paInputOverflow)
+        elif code == 4:
+            return "PyAudio Input Underflow ({})".format(pyaudio.paOutputUnderflow)
+        elif code == 8:
+            return "PyAudio Input Underflow ({})".format(pyaudio.paOutputOverflow)
+        else:
+            return code
 
-        await self.doRtcAnswer(offer)
+    def stopAudio(self):
+        """
+        Stop audio devices for radio
+        """
+        if self.micStream:
+            self.micStream.stop_stream()
+            self.micStream.close()
+        if self.spkrStream:
+            self.spkrStream.stop_stream()
+            self.spkrStream.close()
+        if self.micQueue:
+            self.clearMicQueue()
+        if self.spkrQueue:
+            self.clearSpkrQueue()
 
-        self.logger.logInfo("WebRTC connection complete for radio {} and peer {}".format(self.name, pcUuid))
+    def clearMicQueue(self):
+        """
+        Clear the mic queue cleanly
+        """
+        with self.micQueue.mutex:
+            self.micQueue.queue.clear()
+            self.micQueue.all_tasks_done.notify_all()
+            self.micQueue.unfinished_tasks = 0
 
-    async def doRtcAnswer(self, offer):
-    # Handle the received offer
-        self.logger.logVerbose("Creating remote description from offer for radio {}".format(self.name))
-        await self.rtcPeer.setRemoteDescription(offer)
-
-        # Create answer
-        self.logger.logVerbose("Creating WebRTC answer for radio {}".format(self.name))
-        answer = await self.rtcPeer.createAnswer()
-
-        # Set local description
-        self.logger.logVerbose("setting local SDP for radio {}".format(self.name))
-        await self.rtcPeer.setLocalDescription(answer)
-
-        # Send answer
-        self.logger.logVerbose("sending SDP answer for radio {}".format(self.name))
-        message = '{{ "webRtcAnswer": {{ "type": "{}", "sdp": {} }} }}'.format(self.rtcPeer.localDescription.type, json.dumps(rtcPeer.localDescription.sdp))
-        self.logger.logVerbose(message.replace("\\r\\n", "\r\n"))
-        self.wsQueue.put_nowait(message)
-
-    async def stopRtc(self):
-        # Stop the peer if it's open
-        self.logger.logVerbose("Stopping RTC connection for radio {}".format(self.name))
-        if self.rtcPeer:
-            await self.rtcPeer.close()
+    def clearSpkrQueue(self):
+        """
+        Clear the speaker queue cleanly
+        """
+        with self.spkrQueue.mutex:
+            self.spkrQueue.queue.clear()
+            self.spkrQueue.all_tasks_done.notify_all()
+            self.spkrQueue.unfinished_tasks = 0
