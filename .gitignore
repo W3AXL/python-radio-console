@@ -9,12 +9,16 @@ __pycache__/
 logs/
 startScreen.sh
 
+*.bat
+*.sh
+
 # VENV stuff
 [Ss]cripts/
 Include/
 pyvenv.cfg
 bin/
 lib64
+
 
 # Ignore local PyAV build
 av/

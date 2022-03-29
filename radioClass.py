@@ -8,15 +8,7 @@ from radioState import RadioState
 
 from logger import Logger
 
-from mulaw import MuLaw
-
-import samplerate as sr
-
-import pyaudio
-
 import numpy as np
-
-import threading
 
 class Radio():
     """Radio Class for generic radio control
@@ -32,14 +24,7 @@ class Radio():
                     "Soundcard-CM108",  # CM108 GPIO PTT
                     "Soundcard-VOX"]    # Radio-controlled VOX PTT
 
-    # Valid signalling modes for the radio
-    signallingModes = ["None",
-                       "MDC",
-                       "ANI",
-                       "Singletone",
-                       "QCII"]
-
-    def __init__(self, index, name, desc=None, ctrlMode=None, ctrlPort=None, txDev=None, rxDev=None, signalMode=None, signalId=None, logger=Logger()):
+    def __init__(self, index, name, desc=None, ctrlMode=None, ctrlPort=None, txDev=None, rxDev=None, logger=Logger()):
         """Radio configuration object
 
         Args:
@@ -50,17 +35,11 @@ class Radio():
             ctrlDev (string): Device for radio control (serial, USB, IP, etc)
             txDev (string): Transmit audio device
             rxDev (string): Receieve audio device
-            signalMode (string): Optional signalling mode
-            signalId (any): Optional signalling ID
         """
 
         # Make sure control mode is valid
         if ctrlMode not in self.controlModes:
             raise ValueError("Invalid control mode specified: {}".format(ctrlMode))
-
-        # Make sure signalling mode is valid
-        if signalMode not in self.signallingModes:
-            raise ValueError("Invalid signalling mode specified: {}".format(signalMode))
 
         # Save parameters
         self.index = index
@@ -70,8 +49,6 @@ class Radio():
         self.ctrlPort = ctrlPort
         self.txDev = txDev
         self.rxDev = rxDev
-        self.sigMode = signalMode
-        self.sigId = signalId
 
         # Init client-facing parameters
         self.zone = ""
@@ -286,10 +263,8 @@ class Radio():
             "desc": self.desc,
             "ctrlMode": self.ctrlMode,
             "ctrlPort": self.ctrlPort,
-            "txDeviceIdx": self.txDev,
-            "rxDeviceIdx": self.rxDev,
-            "sigMode": self.sigMode,
-            "sigId": self.sigId
+            "txDev": self.txDev,
+            "rxDev": self.rxDev
         }
         return config
 
@@ -308,168 +283,6 @@ class Radio():
                      radioDict['desc'],
                      radioDict['ctrlMode'],
                      radioDict['ctrlPort'],
-                     radioDict['txDeviceIdx'],
-                     radioDict['rxDeviceIdx'],
-                     radioDict['sigMode'],
-                     radioDict['sigId'],
+                     radioDict['txDev'],
+                     radioDict['rxDev'],
                      logger)
-
-    """-------------------------------------------------------------------------------
-        Sound Device Functions
-    -------------------------------------------------------------------------------"""
-
-    def startAudio(self, pa, micQueue, audioSampleRate, micBufferFrames, spkrBufferFrames):
-        """
-        Start PyAudio devices for radio
-
-        Args:
-            pa (pyaudio): PyAudio instance
-            micQueue (Queue): queue of float32 mic samples at transfer sample rate
-            audioSampleRate (int): desired samplerate (must match what's configured on the client WebRTC connection)
-            micBufferFrames (int): size of mic buffer
-            spkrBufferFrames (int): size of speaker buffer
-        """
-
-        self.audioSampleRate = audioSampleRate
-
-        # Clear buffer
-        self.clearSpkrQueue()
-
-        # Create queue for mic samples
-        self.micQueue = queue.Queue()
-
-        # Create mic stream
-        self.micStream = pa.open(
-            format = pyaudio.paFloat32,
-            channels = 1,
-            rate = audioSampleRate,
-            output = True,
-            output_device_index = self.txDev,
-            stream_callback = self.micCallback,
-            frames_per_buffer = micBufferFrames
-        )
-
-        # Create speaker stream
-        self.spkrStream = pa.open(
-            format = pyaudio.paInt16,
-            channels = 1,
-            rate = audioSampleRate,
-            input = True,
-            input_device_index = self.rxDev,
-            stream_callback = self.spkrCallback,
-            frames_per_buffer = spkrBufferFrames
-        )
-
-        # Start streams
-        self.logger.logInfo("Starting audio streams for {}".format(self.name))
-        self.logger.logVerbose("TX dev: {}, RX dev: {}".format(self.txDev, self.rxDev))
-        self.micStream.start_stream()
-        self.spkrStream.start_stream()
-
-    def micCallback(self, in_data, frame_count, time_info, status):
-        """
-        Callback for client mic -> radio output device
-
-        Args:
-            in_data (array): not used for output device
-            frame_count (int): number of frames to process
-            time_info (time_info): not used
-            status (pyaudio.status): pyaudio status
-
-        Returns:
-            constant: paContinue
-        """
-
-        # Check if we have a status
-        if status:
-            self.logger.logWarn("{} got PyAudio status: {}".format(self.name, self.getPyaudioCallback(status)))
-            self.logger.logWarn("Mic queue size {}".format(self.spkrQueue.qsize(),self.micQueue.qsize()))
-
-        # Start with empty samples
-        data = np.zeros(frame_count).astype(np.float32)
-
-        # Debug - sine wave
-        #data = (np.sin(2*np.pi*np.arange(frame_count)*440/self.audioSampleRate)).astype(np.float32)
-
-        #print("Sent mic frame: ndim {}, shape {}, size {}, type {}, min {}, max {}".format(data.ndim, data.shape, data.size, data.dtype, np.min(data), np.max(data)))
-
-        # only get samples if there's more than one chunk in the queue
-        if self.micQueue.qsize() > 0:
-            try:
-                data = self.micQueue.get_nowait()
-        
-            except queue.Empty:
-                # warn and send the zeroes
-                self.logger.logWarn("Radio {} mic queue empty!".format(self.name))
-            
-        return (data, pyaudio.paContinue)
-
-    def spkrCallback(self, in_data, frame_count, time_info, status):
-        """
-        Callback for radio spkr -> client device
-        fires whenever new speaker data is available (all the time)
-
-        Args:
-            in_data ([type]): [description]
-            frame_count ([type]): [description]
-            time_info ([type]): [description]
-            status ([type]): [description]
-        """
-
-        # log status if we have one
-        if status and status not in [1,2,4,8]:
-            self.logger.logWarn("{} got PyAudio status: {}".format(self.name, self.getPyaudioCallback(status)))
-
-        # only send speaker data if we're receiving and not muted
-        if self.state == RadioState.Receiving and not self.muted:
-            # convert pyaudio samples to numpy float32 array and apply volume
-            intArray = np.frombuffer(in_data, dtype=np.int16) * self.volume
-            # add samples to queue
-            self.spkrQueue.put_nowait(intArray)
-
-        return (None, pyaudio.paContinue)
-
-    def getPyaudioCallback(self, code):
-        if code == 1:
-            return "PyAudio Input Underflow ({})".format(pyaudio.paInputUnderflow)
-        elif code == 2:
-            return "PyAudio Input Underflow ({})".format(pyaudio.paInputOverflow)
-        elif code == 4:
-            return "PyAudio Input Underflow ({})".format(pyaudio.paOutputUnderflow)
-        elif code == 8:
-            return "PyAudio Input Underflow ({})".format(pyaudio.paOutputOverflow)
-        else:
-            return code
-
-    def stopAudio(self):
-        """
-        Stop audio devices for radio
-        """
-        if self.micStream:
-            self.micStream.stop_stream()
-            self.micStream.close()
-        if self.spkrStream:
-            self.spkrStream.stop_stream()
-            self.spkrStream.close()
-        if self.micQueue:
-            self.clearMicQueue()
-        if self.spkrQueue:
-            self.clearSpkrQueue()
-
-    def clearMicQueue(self):
-        """
-        Clear the mic queue cleanly
-        """
-        with self.micQueue.mutex:
-            self.micQueue.queue.clear()
-            self.micQueue.all_tasks_done.notify_all()
-            self.micQueue.unfinished_tasks = 0
-
-    def clearSpkrQueue(self):
-        """
-        Clear the speaker queue cleanly
-        """
-        with self.spkrQueue.mutex:
-            self.spkrQueue.queue.clear()
-            self.spkrQueue.all_tasks_done.notify_all()
-            self.spkrQueue.unfinished_tasks = 0
