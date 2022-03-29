@@ -929,7 +929,8 @@ function createPeerConnection() {
             var newSource = {
                 audioNode: audio.context.createMediaStreamSource(newStream),
                 agcNode: audio.context.createDynamicsCompressor(),
-                gainNode: audio.context.createGain()
+                gainNode: audio.context.createGain(),
+                muteNode: audio.context.createGain()
             }
 
             // Setup AGC node
@@ -941,8 +942,9 @@ function createPeerConnection() {
             // Update radio connections
             newSource.audioNode.connect(newSource.agcNode);
             newSource.agcNode.connect(newSource.gainNode);
-            newSource.gainNode.connect(audio.outputGain);
-            newSource.gainNode.connect(audio.outputAnalyzer);
+            newSource.gainNode.connect(newSource.muteNode);
+            newSource.muteNode.connect(audio.outputGain);
+            newSource.muteNode.connect(audio.outputAnalyzer);
 
             console.debug(`New source ID: ${newSource.audioNode.id}`);
 
@@ -959,33 +961,6 @@ function createPeerConnection() {
 
     // Return the new peer object
     return peer;
-}
-
-/**
- * Updates the audio parameters for each radio audio source based on current config and selected radio
- * NOTE: For whatever reason between the python server and this script the track order gets reversed
- * Therefore, we ascend the source list while descending the radio list
- */
-function updateRadioAudio() {
-    console.debug("Updating radio sound parameters");
-    radioSources.forEach(function(source, idx) {
-        radioListIdx = radioList.length - idx - 1;
-        if (radioListIdx == selectedRadioIdx) {
-            console.debug(`Radio ${idx} is selected. Setting gain to 1`);
-            radioSources[idx].gainNode.gain.setValueAtTime(1, audio.context.currentTime);
-        } else {
-            console.debug(`Radio ${idx} is unselected. Setting gain to ${config.audio.unselectedVol}`);
-            radioSources[idx].gainNode.gain.setValueAtTime(dbToGain(config.audio.unselectedVol), audio.context.currentTime);
-        }
-        // Set AGC based on user setting
-        if (config.audio.rxAgc) {
-            console.log(`Enabling AGC for radio ${idx}`);
-            radioSources[idx].agcNode.threshold.setValueAtTime(-50,audio.context.currentTime);
-        } else {
-            console.log(`Byassing AGC for radio ${idx}`);
-            radioSources[idx].agcNode.threshold.setValueAtTime(0, audio.context.currentTime);
-        }
-    });
 }
 
 /**
@@ -1188,6 +1163,63 @@ function playSound(soundId) {
     document.getElementById(soundId).play();
 }
 
+/**
+ * Updates the audio parameters for each radio audio source based on current config and selected radio
+ * NOTE: For whatever reason between the python server and this script the track order gets reversed
+ * Therefore, we ascend the source list while descending the radio list
+ */
+ function updateRadioAudio() {
+    console.debug("Updating radio sound parameters");
+    radioSources.forEach(function(source, idx) {
+        radioListIdx = radioList.length - idx - 1;
+        if (radioListIdx == selectedRadioIdx) {
+            console.debug(`Radio ${idx} is selected. Setting gain to 1`);
+            radioSources[idx].gainNode.gain.setValueAtTime(1, audio.context.currentTime);
+        } else {
+            console.debug(`Radio ${idx} is unselected. Setting gain to ${config.audio.unselectedVol}`);
+            radioSources[idx].gainNode.gain.setValueAtTime(dbToGain(config.audio.unselectedVol), audio.context.currentTime);
+        }
+        // Set AGC based on user setting
+        if (config.audio.rxAgc) {
+            console.log(`Enabling AGC for radio ${idx}`);
+            radioSources[idx].agcNode.threshold.setValueAtTime(-50,audio.context.currentTime);
+        } else {
+            console.log(`Byassing AGC for radio ${idx}`);
+            radioSources[idx].agcNode.threshold.setValueAtTime(0, audio.context.currentTime);
+        }
+    });
+}
+
+/**
+ * Mutes the radio's audio at the given radio index
+ * @param {int} radioListIdx index of the radio in the radio list (not the source list)
+ * @param {bool} mute whether to mute or not
+ */
+function muteRadio(radioListIdx, mute) {
+    var sourceIdx = radioSources.length - radioListIdx - 1;
+    if (mute) {
+        radioSources[sourceIdx].muteNode.gain.setValueAtTime(0, audio.context.currentTime);
+    } else {
+        radioSources[sourceIdx].muteNode.gain.setValueAtTime(1, audio.context.currentTime);
+    }
+}
+
+/**
+ * Updates the status of the mute for each radio audio source
+ */
+function updateMute() {
+    console.debug("Updating radio source mute statuses");
+    radioSources.forEach(function(source, idx) {
+        radioListIdx = radioList.length - idx - 1;
+        // Mute if we're muted or not receiving
+        if (radioList[radioListIdx].muted || (radioList[radioListIdx].state != 'Receiving')) {
+            radioSources[idx].muteNode.gain.setValueAtTime(0, audio.context.currentTime);
+        } else {
+            radioSources[idx].muteNode.gain.setValueAtTime(1, audio.context.currentTime);
+        }
+    });
+}
+
 /***********************************************************************************
     Websocket Client Functions
 ***********************************************************************************/
@@ -1332,6 +1364,8 @@ function recvSocketMessage(event) {
                 updateRadioCard(idx);
                 // Update bottom controls
                 updateRadioControls();
+                // Update radio mute status
+                updateMute();
                 break;
 
             // WebRTC SDP answer
