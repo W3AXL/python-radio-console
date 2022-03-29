@@ -35,6 +35,11 @@
     src: url("../font/ShareTechMono-Regular.ttf");
 }
 
+@font-face {
+    font-family: "Iosevka Term Extended";
+    src: url("../font/iosevka-term-extended.ttf");
+}
+
 html {
     margin: 0;
     padding: 0;
@@ -197,11 +202,11 @@ ion-icon {
 }
 
 #clock {
-    font-family: "Share Tech Mono";
+    font-family: "Iosevka Term Extended";
     color: var(--color-lcd-light);
-    font-size: 28px;
-    margin-left: 4px;
-    margin-top: 1px;
+    font-size: 24px;
+    margin-left: 8px;
+    margin-top: 2px;
 }
 
 .navbar-item {
@@ -321,13 +326,13 @@ ion-icon {
 }
 
 .radio-card.receiving {
-    -webkit-animation: rxBorderBlink 0.5s ease-out infinite;
-    animation: rxBorderBlink 0.5s ease-out infinite;
+    -webkit-animation: rxBorderBlink 1s ease-out infinite;
+    animation: rxBorderBlink 1s ease-out infinite;
 }
 
 .radio-card.transmitting {
-    -webkit-animation: txBorderBlink 0.2s ease infinite;
-    animation: txBorderBlink 0.2s ease infinite;
+    -webkit-animation: txBorderBlink 0.5s ease infinite;
+    animation: txBorderBlink 0.5s ease infinite;
 }
 
 .radio-card.disconnected {
@@ -426,8 +431,8 @@ ion-icon {
 
 .radio-card .value-frame {
     color: var(--color-lcd-light);
-    font-family: "Share Tech Mono";
-    font-size: 22px;
+    font-family: "Iosevka Term Extended";
+    font-size: 20px;
     margin-top: 4px;
     margin-bottom: 4px;
     width: 100%;
@@ -514,7 +519,7 @@ ion-icon {
 #selected-zone-text,
 #selected-chan-text {
     color: var(--color-lcd-light);
-    font-family: "Share Tech Mono"; 
+    font-family: "Iosevka Term Extended"; 
     margin-left: 2px;
 }
 
@@ -523,7 +528,7 @@ ion-icon {
 }
 
 #selected-chan-text {
-    font-size: 25px;
+    font-size: 24px;
 }
 
 /********************************
