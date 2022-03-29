@@ -413,7 +413,7 @@ async def gotRtcOffer(offerObj):
 
     # Create speaker tracks for each radio
     for radio in config.RadioList:
-        logger.logInfo("Creating RTC speaker track for radio {}".format(radio.name))
+        logger.logInfo("Creating RTC speaker track for radio {}, device {}".format(radio.name, radio.rxDev))
         player = MediaPlayer(radio.rxDev, format='alsa')
         rtcPeer.addTrack(player.audio)
 

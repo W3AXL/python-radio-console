@@ -5,8 +5,12 @@
 // User Config Var
 var config = {
     timeFormat: "Local",
-    rxAudioAgc: false,
 
+    audio: {
+        rxAgc: false,
+        unselectedVol: -3.0    // volume difference in dB for unselected radios
+    },
+    
     serverAddress: "",
     serverPort: 0,
     serverAutoConn: false
@@ -15,8 +19,8 @@ var config = {
 // Radio List (populated from server)
 var radioList = [];
 
-// Radio speaker streams
-var radioStreams = [];
+// Radio speaker sources & gain nodes
+var radioSources = [];
 
 // Websocket connection to server
 var serverSocket = null;
@@ -35,7 +39,6 @@ var audio = {
     output: null,
     outputGain: null,
     outputAnalyzer: null,
-    outputAgc: null,
     outputPcmData: null,
     outputMeter: document.getElementById("meter-spkr"),
     dummyOutputs: []
@@ -216,6 +219,8 @@ function selectRadio(id) {
         // Update the variables
         selectedRadio = null;
         selectedRadioIdx = null;
+        // Update stream volumes
+        updateRadioAudio();
     } else {
         // Deselect all radio cards
         deselectRadios();
@@ -226,6 +231,7 @@ function selectRadio(id) {
         selectedRadioIdx = getRadioIndex(id);
         // Update controls
         updateRadioControls();
+        updateRadioAudio();
     }
 }
 
@@ -716,17 +722,21 @@ function saveServerConfig() {
 function saveClientConfig() {
     // Get values
     var timeFormat = $("#client-timeformat").val();
-    var rxAudioAgc = $("#client-rxagc").is(":checked");
+    var rxAgc = $("#client-rxagc").is(":checked");
+    var unselectedVol = $("#unselected-vol").val();
 
     // Set config
     config.timeFormat = timeFormat;
-    config.rxAudioAgc = rxAudioAgc;
+    config.audio.rxAgc = rxAgc;
+    config.audio.unselectedVol = parseFloat(unselectedVol);
 
     // Save config to cookie
     saveConfig();
 
-    // Update AGC connections
-    updateAgc();
+    // Update radio audio
+    if (audio.context) {
+        updateRadioAudio();
+    }
 }
 
 /**
@@ -753,10 +763,18 @@ function readConfig() {
         $("#server-autoconnect").prop('checked',config.serverAutoConn);
         // Update client popup values
         $("#client-timeformat").val(config.timeFormat);
-        $("#client-rxagc").prop("checked", config.rxAudioAgc);
+        $("#client-rxagc").prop("checked", config.audio.rxAgc);
+        $(`#unselected-vol option[value=${config.audio.unselectedVol}]`).attr('selected', 'selected');
     } else {
         console.warn("No config cookie detected, using defaults");
     }
+}
+
+/**
+ * Clears out config from cookies
+ */
+function clearConfig() {
+    Cookies.remove('config');
 }
 
 /***********************************************************************************
@@ -856,12 +874,12 @@ function stopWebRtc() {
 function createPeerConnection() {
 
     // Create config object
-    var config = {
+    var sdpConfig = {
         sdpSemantics: 'unified-plan'
     };
 
     // Create peer
-    var peer = new RTCPeerConnection(config);
+    var peer = new RTCPeerConnection(sdpConfig);
 
     // Register event listeners for debug
     peer.addEventListener('icegatheringstatechange', function() {
@@ -887,27 +905,52 @@ function createPeerConnection() {
     // Connect audio stream from peer to the web audio objects
     peer.addEventListener('track', function(event) {
         if (event.track.kind == 'audio') {
-            var newIdx = radioStreams.length;
+            var newIdx = radioSources.length;
+            console.debug("New ontrack event:");
+            console.debug(event);
             console.log(`Got new audio track from server, index ${newIdx}`);
 
-            // Create a dummy stream for this stream (needed for Chromium-based browsers I guess)
+            // DEBUG: oscillator test
+            //var newStream = audio.context.createOscillator();
+            //newStream.frequency.setValueAtTime(220 + (360 * newIdx), audio.context.currentTime);
+
+            // Create a new MediaStream from the track we want
+            var newStream = new MediaStream( [event.track ]);
+
+            // Create a dummy stream element (chrome bug means the stream won't play if you don't do this)
             var newDummy = new Audio();
             newDummy.muted = true;
-            newDummy.srcObject = event.streams[0];
+            newDummy.srcObject = newStream;
             newDummy.play();
             audio.dummyOutputs.push(newDummy);
             console.debug(`Started dummy audio element for stream ${newIdx}`);
 
-            // Create audio source from the track
-            var newStream = audio.context.createMediaStreamSource(event.streams[0]);
+            // Create audio source from the track and put it in an object with a local gain node
+            var newSource = {
+                audioNode: audio.context.createMediaStreamSource(newStream),
+                agcNode: audio.context.createDynamicsCompressor(),
+                gainNode: audio.context.createGain()
+            }
 
-            // Connect it to the AGC block
-            //newStream.connect(audio.outputAgc);
-            // Debug - connect straight to destination
-            newStream.connect(audio.context.destination);
+            // Setup AGC node
+            newSource.agcNode.knee.setValueAtTime(40, audio.context.currentTime);
+            newSource.agcNode.ratio.setValueAtTime(6, audio.context.currentTime);
+            newSource.agcNode.attack.setValueAtTime(0, audio.context.currentTime);
+            newSource.agcNode.release.setValueAtTime(0.25, audio.context.currentTime);
+
+            // Update radio connections
+            newSource.audioNode.connect(newSource.agcNode);
+            newSource.agcNode.connect(newSource.gainNode);
+            newSource.gainNode.connect(audio.outputGain);
+            newSource.gainNode.connect(audio.outputAnalyzer);
+
+            console.debug(`New source ID: ${newSource.audioNode.id}`);
 
             // Add to list of radio streams
-            radioStreams.push(newStream);
+            radioSources.push(newSource);
+
+            // Update the radio audio
+            updateRadioAudio();
             
             // If we got a speaker track back, we have both audio streams and can start the meter frame callback
             window.requestAnimationFrame(audioMeterCallback);
@@ -916,6 +959,33 @@ function createPeerConnection() {
 
     // Return the new peer object
     return peer;
+}
+
+/**
+ * Updates the audio parameters for each radio audio source based on current config and selected radio
+ * NOTE: For whatever reason between the python server and this script the track order gets reversed
+ * Therefore, we ascend the source list while descending the radio list
+ */
+function updateRadioAudio() {
+    console.debug("Updating radio sound parameters");
+    radioSources.forEach(function(source, idx) {
+        radioListIdx = radioList.length - idx - 1;
+        if (radioListIdx == selectedRadioIdx) {
+            console.debug(`Radio ${idx} is selected. Setting gain to 1`);
+            radioSources[idx].gainNode.gain.setValueAtTime(1, audio.context.currentTime);
+        } else {
+            console.debug(`Radio ${idx} is unselected. Setting gain to ${config.audio.unselectedVol}`);
+            radioSources[idx].gainNode.gain.setValueAtTime(dbToGain(config.audio.unselectedVol), audio.context.currentTime);
+        }
+        // Set AGC based on user setting
+        if (config.audio.rxAgc) {
+            console.log(`Enabling AGC for radio ${idx}`);
+            radioSources[idx].agcNode.threshold.setValueAtTime(-50,audio.context.currentTime);
+        } else {
+            console.log(`Byassing AGC for radio ${idx}`);
+            radioSources[idx].agcNode.threshold.setValueAtTime(0, audio.context.currentTime);
+        }
+    });
 }
 
 /**
@@ -1066,22 +1136,10 @@ function startAudioDevices() {
     audio.outputAnalyzer = audio.context.createAnalyser();
     audio.outputPcmData = new Float32Array(audio.outputAnalyzer.fftSize);
 
-    // Create AGC node using DynamisCompressor object
-    audio.outputAgc = audio.context.createDynamicsCompressor();
-    audio.outputAgc.threshold.setValueAtTime(-50, audio.context.currentTime);
-    audio.outputAgc.knee.setValueAtTime(40, audio.context.currentTime);
-    audio.outputAgc.ratio.setValueAtTime(6, audio.context.currentTime);
-    audio.outputAgc.attack.setValueAtTime(0, audio.context.currentTime);
-    audio.outputAgc.release.setValueAtTime(0.25, audio.context.currentTime);
-
     // Create gain node for output volume and connect it to the default output device
     audio.outputGain = audio.context.createGain();
     audio.outputGain.gain.value = 0.75;
     audio.outputGain.connect(audio.context.destination);
-
-    // Connect AGC
-    audio.outputAgc.connect(audio.outputGain);
-    audio.outputAgc.connect(audio.outputAnalyzer);
 
     // Enable volume slider
     $("#console-volume").prop('disabled', false);
@@ -1128,21 +1186,6 @@ function changeVolume() {
  */
 function playSound(soundId) {
     document.getElementById(soundId).play();
-}
-
-/**
- * Updates RX AGC connections based on config setting
- */
-function updateAgc() {
-
-    // Set compressor threshold based on AGC on/off
-    if (config.rxAudioAgc) {
-        console.log("Enabling AGC");
-        audio.outputAgc.threshold.setValueAtTime(0,audio.context.currentTime);
-    } else {
-        console.log("Byassing AGC");
-        audio.outputAgc.threshold.setValueAtTime(-50, audio.context.currentTime);
-    }
 }
 
 /***********************************************************************************
@@ -1364,4 +1407,13 @@ function handleSocketError(event) {
  */
 function escapeRegExp(string) {
     return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // $& means the whole matched string
+}
+
+/**
+ * Converts a power gain value to the equivalent constant multiplier
+ * @param {float} db Gain in decibels
+ * @returns gain as a factor relative to 1
+ */
+function dbToGain(db) {
+    return Math.pow(10, db/20).toFixed(3);
 }
