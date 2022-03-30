@@ -5,16 +5,16 @@
             "desc": "VHF XTL5000",
             "ctrlMode": "SB9600-XTL-O",
             "ctrlPort": "COM2",
-            "txDev": 'out0',
-            "rxDev": 'mic1'
+            "txDev": "out0",
+            "rxDev": "mic1"
         },
         {
             "name": "Desk UHF XPR",
             "desc": "UHF XPR5550e",
             "ctrlMode": "XCMP-XPR",
             "ctrlPort": "192.168.10.1",
-            "txDev": 'out1',
-            "rxDev": 'mic2'
+            "txDev": "out1",
+            "rxDev": "mic2"
         }
     ],
     "Certfile": "certs/localhost.crt",
