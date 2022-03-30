@@ -66,6 +66,9 @@ config = Config()
 # List of AIORTC recorders (so we can keep track of and close them during shutdown)
 recorders = []
 
+# FFMPEG device format (alsa for linux, dshow for windows, loaded at runtime)
+ffmpegFormat = None
+
 # Flag that says when we got the first track from the client (which would be the mic track)
 gotMicTrack = False
 
@@ -414,7 +417,7 @@ async def gotRtcOffer(offerObj):
     # Create speaker tracks for each radio
     for radio in config.RadioList:
         logger.logInfo("Creating RTC speaker track for radio {}, device {}".format(radio.name, radio.rxDev))
-        player = MediaPlayer(radio.rxDev, format='alsa')
+        player = MediaPlayer(radio.rxDev, format=ffmpegFormat)
         rtcPeer.addTrack(player.audio)
 
     # DEBUG: just do the first radio in the list
@@ -461,7 +464,7 @@ async def gotRtcOffer(offerObj):
         # Add the mic track to each radio's tx device
         for radio in config.RadioList:
             logger.logInfo("Creating RTC mic track for radio {}".format(radio.name))
-            recorder = MediaRecorder(radio.txDev, format='alsa')
+            recorder = MediaRecorder(radio.txDev, format=ffmpegFormat)
             recorder.addTrack(micRelay.subscribe(track))
             recorders.append(recorder)
             await recorder.start()
@@ -888,8 +891,12 @@ if __name__ == "__main__":
         # parse the arguments
         parseArguments()
 
-        # print OS
-        #logger.logVerbose("Detected operating system: {}".format(osType))
+        # get & print OS
+        if os.name == 'nt':
+            ffmpegFormat = 'dshow'
+        elif os.name == 'posix':
+            ffmpegFormat = 'alsa'
+        logger.logVerbose("Detected operating system: {}, using input mode {}".format(os.name, ffmpegFormat))
 
         # Get sound devices
         getSoundDevices()
