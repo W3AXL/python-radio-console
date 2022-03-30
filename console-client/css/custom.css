@@ -455,6 +455,28 @@ ion-icon {
     border-radius: 0 0 6px 6px;
 }
 
+.panning-dropdown {
+    position: absolute;
+    background-color: var(--color-accent-dark);
+    padding-top: 4px;
+    width: 52px;
+    margin-top: 0;
+    margin-left: -16px;
+    text-align: center;
+    border-radius: 2px;
+    transition: all 0.25s ease;
+}
+
+.panning-dropdown.closed {
+    margin-top: -32px;
+    display: none;
+}
+
+.panning-dropdown #left-spkr-button.disabled ion-icon,
+.panning-dropdown #right-spkr-button.disabled ion-icon {
+    color: var(--color-accent-mid);
+}
+
 /********************************
     Bottom Control Bar Styling
 ********************************/

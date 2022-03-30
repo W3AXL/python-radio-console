@@ -292,6 +292,11 @@ function addRadioCard(id, name) {
                 </div>
                 <h2>${name}</h2>
                 <div class="icon-stack">
+                    <a href="#" onclick="showPanMenu(event, this)" class="enabled"><ion-icon name="headset-sharp" id="icon-panning"></ion-icon></a>
+                        <div class="panning-dropdown closed">
+                            <a id="left-spkr-button" href="#" onclick="toggleSpkr(event, this, 'left')"><ion-icon name="volume-off-sharp" style="transform: scaleX(-1);"></ion-icon></a>
+                            <a id="right-spkr-button" href="#" onclick="toggleSpkr(event, this, 'right')"><ion-icon name="volume-off-sharp"></ion-icon></a>
+                        </div>
                     <a href="#" onclick="toggleMute(event, this)" class="enabled"><ion-icon name="volume-high-sharp" id="icon-mute"></ion-icon></a>
                     <a href="#"><ion-icon name="warning-sharp" id="icon-alert"></ion-icon></a>
                 </div>
@@ -930,7 +935,10 @@ function createPeerConnection() {
                 audioNode: audio.context.createMediaStreamSource(newStream),
                 agcNode: audio.context.createDynamicsCompressor(),
                 gainNode: audio.context.createGain(),
-                muteNode: audio.context.createGain()
+                muteNode: audio.context.createGain(),
+                panNode: audio.context.createStereoPanner(),
+                leftSpkr: true,
+                rightSpkr: true
             }
 
             // Setup AGC node
@@ -943,8 +951,9 @@ function createPeerConnection() {
             newSource.audioNode.connect(newSource.agcNode);
             newSource.agcNode.connect(newSource.gainNode);
             newSource.gainNode.connect(newSource.muteNode);
-            newSource.muteNode.connect(audio.outputGain);
-            newSource.muteNode.connect(audio.outputAnalyzer);
+            newSource.muteNode.connect(newSource.panNode);
+            newSource.panNode.connect(audio.outputGain);
+            newSource.panNode.connect(audio.outputAnalyzer);
 
             console.debug(`New source ID: ${newSource.audioNode.id}`);
 
@@ -1218,6 +1227,70 @@ function updateMute() {
             radioSources[idx].muteNode.gain.setValueAtTime(1, audio.context.currentTime);
         }
     });
+}
+
+/**
+ * Shows or hides the dropdown
+ * @param {event} event 
+ * @param {object} obj 
+ */
+function showPanMenu(event, obj) {
+    $(obj).closest(".radio-card").find(".panning-dropdown").toggleClass("closed");
+    event.stopPropagation();
+}
+
+function closeAllPanMenus() {
+    $(".panning-dropdown").addClass("closed");
+}
+
+/**
+ * Toggles the left or right speaker of a radio on or off
+ * @param {event} event 
+ * @param {element} obj object calling the function
+ * @param {string} channel "left" or "right"
+ */
+function toggleSpkr(event, obj, channel) {
+    // Get calling radio id
+    const radioId = $(obj).closest(".radio-card").attr('id');
+    // Get index of radio in list
+    const idx = getRadioIndex(radioId);
+    // Get index in audio sources (inverse of index in list)
+    const sourceIdx = radioSources.length - idx - 1;
+    // Debug log
+    console.debug(`Toggling ${channel} speaker for radio ${radioId}`);
+    if (channel == 'left') {
+        radioSources[sourceIdx].leftSpkr = !radioSources[sourceIdx].leftSpkr;
+    } else if (channel == 'right') {
+        radioSources[sourceIdx].rightSpkr = !radioSources[sourceIdx].rightSpkr;
+    }
+    updatePan(sourceIdx, radioId);
+    event.stopPropagation();
+}
+
+/**
+ * Updates panning for specified radio source
+ * @param {int} sourceIdx index of source in radioSources list
+ */
+function updatePan(sourceIdx, radioId) {
+    if (radioSources[sourceIdx].leftSpkr && radioSources[sourceIdx].rightSpkr) {
+        // Center pan
+        radioSources[sourceIdx].panNode.pan.setValueAtTime(0, audio.context.currentTime);
+        // Enable both icons
+        $(`#${radioId} #right-spkr-button`).removeClass("disabled");
+        $(`#${radioId} #left-spkr-button`).removeClass("disabled");
+    } else if (radioSources[sourceIdx].leftSpkr) {
+        // Left pan
+        radioSources[sourceIdx].panNode.pan.setValueAtTime(-1, audio.context.currentTime);
+        // Update icons
+        $(`#${radioId} #right-spkr-button`).addClass("disabled");
+        $(`#${radioId} #left-spkr-button`).removeClass("disabled");
+    } else if (radioSources[sourceIdx].rightSpkr) {
+        // Right pan
+        radioSources[sourceIdx].panNode.pan.setValueAtTime(1, audio.context.currentTime);
+        // Update icons
+        $(`#${radioId} #right-spkr-button`).removeClass("disabled");
+        $(`#${radioId} #left-spkr-button`).addClass("disabled");
+    }
 }
 
 /***********************************************************************************

@@ -103,27 +103,34 @@
 
                 <!-- Placeholder radio card for development -->
                 <!--<div class="radio-card" id="${id}">
-                    <div class="header">
-                        <div class="selected-icon">
-                            <ion-icon name="caret-forward-circle-sharp"></ion-icon>
+                    <div class="radio-card" id="${id}">
+                        <div class="header">
+                            <div class="selected-icon">
+                                <ion-icon name="caret-forward-circle-sharp"></ion-icon>
+                            </div>
+                            <h2>${name}</h2>
+                            <div class="icon-stack">
+                                <a href="#" onclick="showPanMenu(event, this)" class="enabled"><ion-icon name="headset-sharp" id="icon-panning"></ion-icon></a>
+                                    <div class="panning-dropdown closed">
+                                        <a id="left-spkr-button" href="#" onclick="toggleSpkr(event, this, 'left')"><ion-icon name="volume-off-sharp" style="transform: scaleX(-1);"></ion-icon></a>
+                                        <a id="right-spkr-button" href="#" onclick="toggleSpkr(event, this, 'right')"><ion-icon name="volume-off-sharp"></ion-icon></a>
+                                    </div>
+                                <a href="#" onclick="toggleMute(event, this)" class="enabled"><ion-icon name="volume-high-sharp" id="icon-mute"></ion-icon></a>
+                                <a href="#"><ion-icon name="warning-sharp" id="icon-alert"></ion-icon></a>
+                            </div>
                         </div>
-                        <h2>Radio Name</h2>
-                        <div class="icon-stack">
-                            <a href="#" onclick="toggleMute(event, this)" class="enabled"><ion-icon name="volume-high-sharp" id="icon-mute"></ion-icon></a>
-                            <a href="#"><ion-icon name="warning-sharp" id="icon-alert"></ion-icon></a>
+                        <div class="content">
+                            <div>
+                                <h3>CHANNEL</h3>
+                                <div id="channel-text" class="value-frame"></div>
+                            </div>
+                            <div>
+                                <h3>LAST ID</h3>
+                                <div id="id-text" class="value-frame"></div>
+                            </div>
                         </div>
+                        <div class="footer"></div>
                     </div>
-                    <div class="content">
-                        <div>
-                            <h3>CHANNEL</h3>
-                            <div id="channel-text" class="value-frame">Radio Channel Text</div>
-                        </div>
-                        <div>
-                            <h3>LAST ID</h3>
-                            <div id="id-text" class="value-frame">Last Radio ID</div>
-                        </div>
-                    </div>
-                    <div class="footer"></div>
                 </div>-->
 
             </div>
