@@ -479,10 +479,14 @@ async def gotRtcOffer(offerObj):
         # Track ended handler
         @track.on("ended")
         async def onEnded():
+            global gotMicTrack
+
             logger.logVerbose("Audio track from {} ended".format(pcUuid))
             logger.logInfo("Shutting down media devices")
             for recorder in recorders:
                 await recorder.stop()
+            # Reset mic track variable
+            gotMicTrack = False
 
     await doRtcAnswer(offer)
 
@@ -490,10 +494,14 @@ async def gotRtcOffer(offerObj):
 
 async def stopRtc():
 
+    global gotMicTrack
+
     # Stop the peer if it's open
-    logger.logVerbose("Stopping RTC connection")
+    logger.logInfo("Stopping RTC connection")
     if rtcPeer:
         await rtcPeer.close()
+    # Reset mic track variable
+    gotMicTrack = False
 
 async def doRtcAnswer(offer):
     # Handle the received offer
@@ -716,7 +724,7 @@ async def consumer_handler(websocket, path):
         except websockets.exceptions.ConnectionClosed:
             logger.logWarn("Client disconnected!")
             # stop sound devices and exit
-            serverLoop.run_until_complete(stopRtc())
+            asyncio.ensure_future(stopRtc(),loop=serverLoop)
             break
 
 
@@ -920,7 +928,7 @@ if __name__ == "__main__":
         #stats.save('callgrind.out', type='callgrind')
 
         # Stop RTC
-        serverLoop.run_until_complete(stopRtc())
+        asyncio.ensure_future(stopRtc(),loop=serverLoop)
 
         # Cleanly disconnect any connected radios
         for radio in config.RadioList:
