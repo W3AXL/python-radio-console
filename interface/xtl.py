@@ -386,8 +386,8 @@ class XTL:
                 return totalLength
             elif subdev == self.O5Address.display_subdevs['text_softkeys']:
                 self.softkeys = data.decode('ascii').rstrip().rstrip('\x00').split('^')[1:6]
-                self.newStatus = True
                 self.updateSoftkeys()
+                self.newStatus = True
                 self.logger.logVerbose("Got new softkeys: {}".format(self.softkeys))
                 return totalLength
 
@@ -661,6 +661,8 @@ class XTL:
         """
         Updates the softkey states based on the currently shown softkeys
         """
+        # Clear all softkey states
+        self.softkeyStates = [False, False, False, False, False]
         # Scan
         idx = self.findSoftkey("SCAN")
         if idx != None:
