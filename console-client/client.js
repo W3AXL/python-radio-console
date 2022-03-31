@@ -49,8 +49,11 @@ var rtc = {
     // Peer connection object
     peer: null,
     // Audio codec
-    //codec: "opus/48000/2"
-    codec: "PCMU/8000"
+    //codec: "opus/48000/2",
+    codec: "PCMU/8000",
+    // Total audio round trip time (in ms) (set as const for now, adds delay before muting RX audio and stopping TX)
+    rxLatency: 200,
+    txLatency: 300
 }
 
 testInput = null,
@@ -460,7 +463,7 @@ function stopPtt() {
         console.log("PTT released");
         pttActive = false;
         if (serverSocket && selectedRadio) {
-            // Wait 250ms and then stop TX (handles mic latency)
+            // Wait and then stop TX (handles mic latency)
             setTimeout( function() {
                 serverSocket.send(
                     `{
@@ -471,7 +474,7 @@ function stopPtt() {
                         }
                     }`
                 )
-            }, 250);
+            }, rtc.txLatency);
         }
     }
 }
@@ -895,6 +898,15 @@ function createPeerConnection() {
         console.log(`new peer iceConnectionState: ${peer.iceConnectionState}`);
         if (peer.iceConnectionState == "connected") {
             connected();
+        } else if (peer.iceConnectionState == "failed") {
+            // Disconnect the client if we had an error (for now, maybe auto-reconnect later?)
+            console.error("WebRTC ICE connection error!");
+            stopWebRtc();
+            serverSocket.close();
+        } else if (peer.iceConnectionState == "disconnected") {
+            console.error("WebRTC ICE connection disconnected");
+            stopWebRtc();
+            serverSocket.close();
         }
     }, false);
 
@@ -1220,9 +1232,9 @@ function updateMute() {
     console.debug("Updating radio source mute statuses");
     radioSources.forEach(function(source, idx) {
         radioListIdx = radioList.length - idx - 1;
-        // Mute if we're muted or not receiving
+        // Mute if we're muted or not receiving, after the specified delay in rtc.rxLatency
         if (radioList[radioListIdx].muted || (radioList[radioListIdx].state != 'Receiving')) {
-            radioSources[idx].muteNode.gain.setValueAtTime(0, audio.context.currentTime);
+            radioSources[idx].muteNode.gain.setValueAtTime(0, audio.context.currentTime + (rtc.rxLatency/1000));
         } else {
             radioSources[idx].muteNode.gain.setValueAtTime(1, audio.context.currentTime);
         }
