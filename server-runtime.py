@@ -1,14 +1,17 @@
 # Base libraries
+#from cmath import asin
+#from datetime import datetime
+#from inspect import trace
 import sys
 import glob
 import os
 import argparse
 import platform
 import threading
-import time
+#import time
 import json
-import queue
-import audioop
+#import queue
+#import audioop
 import ssl
 #from typing_extensions import runtime
 
@@ -18,7 +21,7 @@ import websockets.exceptions
 import asyncio
 
 # HTTP server stuff
-import socketserver
+#import socketserver
 import http.server
 import ssl
 
@@ -31,7 +34,7 @@ import uuid
 from av.audio.frame import AudioFrame
 
 # Numpy (used for sound processing)
-import numpy as np
+#import numpy as np
 
 # Serial stuff
 import serial
@@ -52,6 +55,9 @@ import json
 # CPU profiling
 import yappi
 
+# Memory profiling
+import tracemalloc
+
 # Config class (loaded from JSON)
 class Config():
     # Init
@@ -63,8 +69,9 @@ class Config():
 configFile = ""
 config = Config()
 
-# List of AIORTC recorders (so we can keep track of and close them during shutdown)
+# List of AIORTC recorders (so we can keep track of and close them during shutdown) and blackholes (so we can dump additional incoming tracks)
 recorders = []
+blackholes = []
 
 # FFMPEG device format (alsa for linux, dshow for windows, loaded at runtime)
 ffmpegFormat = None
@@ -225,6 +232,7 @@ def loadConfig(filename):
 
     global certfile
     global keyfile
+    global ffmpegFormat
 
     try:
         # make sure file is valid
@@ -443,7 +451,9 @@ async def gotRtcOffer(offerObj):
         global blackHole
         global rtcPeer
         global recorders
+        global blackholes
         global gotMicTrack
+        global ffmpegFormat
 
         logger.logVerbose("Got {} track from peer {}".format(track.kind, pcUuid))
 
@@ -455,6 +465,11 @@ async def gotRtcOffer(offerObj):
         # if we already got a mic track, ignore this one
         if gotMicTrack:
             logger.logWarn("Ignoring additional track from peer since we already have the mic")
+            blackhole = MediaBlackhole()
+            blackhole.addTrack(track)
+            await blackhole.start()
+            blackholes.append(blackhole)
+            logger.logVerbose("added additional track to blackhole list")
             return
 
         gotMicTrack = True
@@ -463,7 +478,7 @@ async def gotRtcOffer(offerObj):
         micRelay = MediaRelay()
         # Add the mic track to each radio's tx device
         for radio in config.RadioList:
-            logger.logInfo("Creating RTC mic track for radio {}".format(radio.name))
+            logger.logInfo("Creating RTC mic track for radio {} using device {}, format {}".format(radio.name, radio.txDev, ffmpegFormat))
             recorder = MediaRecorder(radio.txDev, format=ffmpegFormat)
             recorder.addTrack(micRelay.subscribe(track))
             recorders.append(recorder)
@@ -480,11 +495,15 @@ async def gotRtcOffer(offerObj):
         @track.on("ended")
         async def onEnded():
             global gotMicTrack
+            global recorders
+            global blackholes
 
             logger.logVerbose("Audio track from {} ended".format(pcUuid))
             logger.logInfo("Shutting down media devices")
             for recorder in recorders:
                 await recorder.stop()
+            for blackhole in blackholes:
+                await blackhole.stop()
             # Reset mic track variable
             gotMicTrack = False
 
@@ -886,18 +905,15 @@ if __name__ == "__main__":
     
     try:
 
-        # Start profiling
+        # Start CPU profiling
         #yappi.set_clock_type('cpu')
         #yappi.start(builtins=True)
 
+        # Start Memory Profiling
+        #tracemalloc.start(5)
+
         # Enable AIORTC debug
         logging.basicConfig(level=logging.ERROR)
-
-        # add cli arguments
-        addArguments()
-
-        # parse the arguments
-        parseArguments()
 
         # get & print OS
         if os.name == 'nt':
@@ -905,6 +921,12 @@ if __name__ == "__main__":
         elif os.name == 'posix':
             ffmpegFormat = 'alsa'
         logger.logVerbose("Detected operating system: {}, using input mode {}".format(os.name, ffmpegFormat))
+
+        # add cli arguments
+        addArguments()
+
+        # parse the arguments
+        parseArguments()
 
         # Get sound devices
         getSoundDevices()
@@ -925,7 +947,15 @@ if __name__ == "__main__":
 
         # Stop profiling
         #stats = yappi.get_func_stats()
-        #stats.save('callgrind.out', type='callgrind')
+        #timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+        #stats.save("callgrind_{}.out".format(timestamp), type='callgrind')
+
+        # Stop memory profiling
+        #snapshot = tracemalloc.take_snapshot()
+        #top_stats = snapshot.statistics('lineno')
+        #print("[ Top 10 Memory Users ")
+        #for stat in top_stats[:10]:
+        #    print(stat)
 
         # Stop RTC
         asyncio.ensure_future(stopRtc(),loop=serverLoop)
@@ -934,11 +964,19 @@ if __name__ == "__main__":
         for radio in config.RadioList:
             if radio.state != RadioState.Disconnected:
                 radio.disconnect()
-        logger.logVerbose("Disconnected from radios")
+                logger.logVerbose("Radio {} disconnected".format(radio.name))
 
-        # Stop Loops
-        serverLoop.stop()
-        logger.logVerbose("Server loop stopped")
+        # Shutdown all asyncio tasks
+        try:
+            loop = asyncio.get_running_loop()
+            pending = asyncio.all_tasks()
+            loop.run_until_complete(asyncio.gather(*pending))
+            loop.stop()
+            logger.logVerbose("Server loop stopped")
+        except RuntimeError:
+            logger.logVerbose("Server loop was not running")
+
+        logger.logInfo("Server shutdown complete")
 
         # Exit without error
         exit(0)

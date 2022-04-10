@@ -215,7 +215,10 @@ class XTL:
                 pass
 
             # give the CPU a break
-            time.sleep(0.05)
+            time.sleep(0.01)
+
+        # Print debug on thread close
+        self.logger.logVerbose("SB9600 listener thread stopped for radio {}".format(self.index))
 
     def process(self):
         """
@@ -224,8 +227,15 @@ class XTL:
 
         while self.doProcess:
 
-            # block until we have a message (this runs in a thread so that's okay)
-            msg = self.rxMsgQueue.get()
+            # Wait until we have a message
+            while (not self.rxMsgQueue.qsize()) and self.doProcess:
+                time.sleep(0.05)
+
+            # Kill the thread on shutdown
+            if not self.doProcess:
+                break
+            
+            msg = self.rxMsgQueue.get_nowait()
 
             #self.logger.logVerbose("Processing {}".format(hexlify(msg," ")))
 
@@ -290,6 +300,8 @@ class XTL:
                 if self.newStatus:
                     self.newStatus = False
                     self.updateStatus()
+
+        self.logger.logVerbose("SB9600 processor thread stopped for radio {}".format(self.index))
         
 
     def updateStatus(self):

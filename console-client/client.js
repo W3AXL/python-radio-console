@@ -49,10 +49,10 @@ var rtc = {
     // Peer connection object
     peer: null,
     // Audio codec
-    //codec: "opus/48000/2",
-    codec: "PCMU/8000",
+    codec: "opus/48000/2",
+    //codec: "PCMU/8000",
     // Total audio round trip time (in ms) (set as const for now, adds delay before muting RX audio and stopping TX)
-    rxLatency: 200,
+    rxLatency: 500,
     txLatency: 300
 }
 
@@ -353,17 +353,25 @@ function updateRadioCard(idx) {
     radioCard.find("#id-text").html(radio.lastid);
 
     // Remove all current classes
-    radioCard.removeClass("transmitting");
-    radioCard.removeClass("receiving");
+    setTimeout(function() {
+        radioCard.removeClass("transmitting");
+    }, rtc.txLatency);
+    setTimeout(function () {
+        radioCard.removeClass("receiving");
+    }, rtc.rxLatency);
     radioCard.removeClass("disconnected");
 
     // Update radio state
     switch (radio.state) {
         case "Transmitting":
-            radioCard.addClass("transmitting");
+            setTimeout(function() {
+                radioCard.addClass("transmitting");
+            }, rtc.txLatency);
             break;
         case "Receiving":
-            radioCard.addClass("receiving");
+            setTimeout(function() {
+                radioCard.addClass("receiving");
+            }, rtc.rxLatency);
             break;
         case "Disconnected":
             radioCard.addClass("disconnected");
@@ -855,6 +863,11 @@ function startWebRtc() {
 
 function stopWebRtc() {
 
+    if (rtc.peer.connectionState == "closed") {
+        console.log("RTC peer connection already closed");
+        return
+    }
+
     // Close any active peer transceivers
     if (rtc.peer.getTransceivers) {
         rtc.peer.getTransceivers().forEach(function(tx) {
@@ -906,7 +919,9 @@ function createPeerConnection() {
         } else if (peer.iceConnectionState == "disconnected") {
             console.error("WebRTC ICE connection disconnected");
             stopWebRtc();
-            serverSocket.close();
+            if (serverSocket) {
+                serverSocket.close();
+            }
         }
     }, false);
 
@@ -1234,9 +1249,15 @@ function updateMute() {
         radioListIdx = radioList.length - idx - 1;
         // Mute if we're muted or not receiving, after the specified delay in rtc.rxLatency
         if (radioList[radioListIdx].muted || (radioList[radioListIdx].state != 'Receiving')) {
-            radioSources[idx].muteNode.gain.setValueAtTime(0, audio.context.currentTime + (rtc.rxLatency/1000));
+            setTimeout(function() {
+                console.debug(`Muting audio for radio ${radioListIdx} (${radioList[radioListIdx].name})`);
+                radioSources[idx].muteNode.gain.setValueAtTime(0, audio.context.currentTime);
+            }, rtc.rxLatency);
         } else {
-            radioSources[idx].muteNode.gain.setValueAtTime(1, audio.context.currentTime);
+            setTimeout(function() {
+                console.debug(`Unmuting audio for radio ${radioListIdx} (${radioList[radioListIdx].name})`);
+                radioSources[idx].muteNode.gain.setValueAtTime(1, audio.context.currentTime);
+            }, rtc.rxLatency);
         }
     });
 }
