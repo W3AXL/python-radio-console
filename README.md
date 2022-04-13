@@ -1,7 +1,7 @@
 # Python Radio Console
 Control Motorola radios with your computer and some basic hardware!
 
-![Console Screenshot](/media/window-screenshot.png)
+![Console Screenshot](/media/screenshot-v1.png)
 
 **Important note: this system is in super-duper early alpha stage. Don't expect anything to work perfectly. Please for the love of god don't use this in any type of mission-critical application.** Submit new issues via Github for anything you manage to break, and I'll do my best to try and fix it. Help would be greatly appreciated, and anyone who's a better programmer than I am please feel free to submit pull requests.
 
