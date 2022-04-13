@@ -49,7 +49,7 @@ var rtc = {
     // Peer connection object
     peer: null,
     // Audio codec
-    codec: "opus/48000/2",
+    codec: "opus/48000/2",  // I've found that OPUS seems to have better latency than PCMU
     //codec: "PCMU/8000",
     // Total audio round trip time (in ms) (set as const for now, adds delay before muting RX audio and stopping TX)
     rxLatency: 500,
