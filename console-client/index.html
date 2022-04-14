@@ -40,7 +40,10 @@
             <div id="navbar-logo" class="navbar-item">RadioConsole</div>
 
             <!-- Version -->
-            <div id="navbar-version" class="navbar-item">v0.1 - </div>
+            <div id="navbar-version" class="navbar-item">VERSION</div>
+
+            <!-- Separator -->
+            <div id="navbar-separator" class="navbar-item"> - </div>
 
             <!-- Server Status -->
             <div id="navbar-status" class="navbar-item">Disconnected</div>
@@ -187,6 +190,12 @@
                             <span class="softkey"></span>
                         </button>
                     </div>
+                    <!-- Softkey 6 -->
+                    <div class="topcoat-button-bar__item">
+                        <button id="softkey6" class="topcoat-button-bar__button--large" onclick="softkey(6)" disabled>
+                            <span class="softkey"></span>
+                        </button>
+                    </div>
                     <!-- Right Arrow -->
                     <div class="topcoat-button-bar__item">
                         <button id="rightarrow" class="topcoat-button-bar__button--large" onclick="button_right()" disabled style="width:48px">
@@ -205,13 +214,13 @@
                 <div class="topcoat-button-bar">
                     <!-- Channel Down -->
                     <div class="topcoat-button-bar__item">
-                        <button id="control-chanup" title="Channel Down" class="topcoat-button-bar__button--large" onclick="changeChannel(true)" disabled>
+                        <button id="control-chanup" title="Channel Down" class="topcoat-button-bar__button--large" style="width:48px" onclick="changeChannel(true)" disabled>
                             <ion-icon name="caret-down-sharp"></ion-icon>
                         </button>
                     </div>
                     <!-- Channel Up -->
                     <div class="topcoat-button-bar__item">
-                        <button id="control-chandn" title="Channel Up" class="topcoat-button-bar__button--large" onclick="changeChannel(false)" disabled>
+                        <button id="control-chandn" title="Channel Up" class="topcoat-button-bar__button--large" style="width:48px" onclick="changeChannel(false)" disabled>
                             <ion-icon name="caret-up-sharp"></ion-icon>
                         </button>
                     </div>

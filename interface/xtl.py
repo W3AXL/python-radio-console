@@ -44,6 +44,7 @@ class XTL:
         display_icons = {
             'monitor': 0x01,
             'scan': 0x04,
+            'scan_pri': 0x05,
             'direct': 0x07,
             'led_amber': 0x0f,
             'led_red': 0x10,
@@ -108,8 +109,8 @@ class XTL:
         self.state = RadioState.Disconnected
         self.zoneText = ""
         self.chanText = ""
-        self.softkeys = ["","","","",""]
-        self.softkeyStates = [False, False, False, False, False]
+        self.softkeys = ["","","","","","HOME"]
+        self.softkeyStates = [False, False, False, False, False, False]
         
         # Internal status flags for tracking softkeys
         self.scanning = False
@@ -338,10 +339,15 @@ class XTL:
         """
         Press softkey button
 
+        Softkey 6 is hardcoded as HOME
+
         Args:
             idx (int): 1-5, softkey number
         """
-        self.pressButton(self.O5Address.button_map["btn_key_{}".format(idx)], 0.05)
+        if idx == 6:
+            self.pressButton(self.O5Address.button_map["btn_home"], 0.05)
+        else:
+            self.pressButton(self.O5Address.button_map["btn_key_{}".format(idx)], 0.05)
 
     def leftArrow(self):
         """
@@ -397,7 +403,10 @@ class XTL:
                     self.logger.logVerbose("Got new channel text: {}".format(newText))
                 return totalLength
             elif subdev == self.O5Address.display_subdevs['text_softkeys']:
+                # Get five softkey texts
                 self.softkeys = data.decode('ascii').rstrip().rstrip('\x00').split('^')[1:6]
+                # Add home as the permanent sixth
+                self.softkeys.append("HOME")
                 self.updateSoftkeys()
                 self.newStatus = True
                 self.logger.logVerbose("Got new softkeys: {}".format(self.softkeys))
@@ -414,7 +423,7 @@ class XTL:
             else:
                 state = opcode
             # Update proper state
-            # TODO: detect proper softkey for each status icon and update its status
+            # Scan Icon
             if iconAddr == self.O5Address.display_icons['scan']:
                 self.logger.logVerbose("Got new scanning state: {}".format(state))
                 if state != self.scanning:
@@ -422,6 +431,17 @@ class XTL:
                     self.updateSoftkeys()
                     self.newStatus = True
                 return totalLength
+            # Scan Priority Dot
+            elif iconAddr == self.O5Address.display_icons['scan_pri']:
+                self.logger.logVerbose("Got new scan priority state: {}".format(state))
+                if state == 0x01:
+                    self.logger.logVerbose("Channel priority 1 marker")
+                elif state == 0x02:
+                    self.logger.logVerbose("Channel priority 2 marker")
+                elif state == 0x00:
+                    self.logger.logVerbose("Channel priortiy marker cleared")
+                return totalLength
+            # Low power L icon
             elif iconAddr == self.O5Address.display_icons['low_power']:
                 self.logger.logVerbose("Got new lowpower state: {}".format(state))
                 if state != self.lowpower:
@@ -429,6 +449,7 @@ class XTL:
                     self.updateSoftkeys()
                     self.newStatus = True
                 return totalLength
+            # Monitor icon
             elif iconAddr == self.O5Address.display_icons['monitor']:
                 self.logger.logVerbose("Got new monitor state: {}".format(state))
                 if state != self.monitor:
@@ -436,6 +457,7 @@ class XTL:
                     self.updateSoftkeys()
                     self.newStatus = True
                 return totalLength
+            # Talkaround/direct icon
             elif iconAddr == self.O5Address.display_icons['direct']:
                 self.logger.logVerbose("Got new direct state: {}".format(state))
                 if state != self.direct:
@@ -445,13 +467,15 @@ class XTL:
                 return totalLength
 
             # Use amber LED as a redundant RX state indicator
-            elif iconAddr == self.O5Address.display_icons['led_amber']:
-                if state and self.state != RadioState.Receiving:
-                    self.state = RadioState.Receiving
-                    self.newStatus = True
+            #elif iconAddr == self.O5Address.display_icons['led_amber']:
+            #    if state and self.state != RadioState.Receiving:
+            #        self.state = RadioState.Receiving
+            #        self.newStatus = True
 
             # print if we don't actually know what the icon is
-            #self.printMsg("SBEP Icon","{} ({}) icon {}".format(icon, hex(msg[3]), state))
+            else:
+                self.logger.logVerbose("Unknown SBEP icon {} with state {}".format(hex(msg[3]), state))
+
             return totalLength
 
         # Fallback to printing raw message
@@ -673,8 +697,8 @@ class XTL:
         """
         Updates the softkey states based on the currently shown softkeys
         """
-        # Clear all softkey states
-        self.softkeyStates = [False, False, False, False, False]
+        # Clear all softkey states (softkey 6 is always false, HOME)
+        self.softkeyStates = [False, False, False, False, False, False]
         # Scan
         idx = self.findSoftkey("SCAN")
         if idx != None:
