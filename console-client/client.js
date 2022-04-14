@@ -2,6 +2,8 @@
     Global Variables
 ***********************************************************************************/
 
+var version = "1.0.0"
+
 // User Config Var
 var config = {
     timeFormat: "Local",
@@ -41,7 +43,14 @@ var audio = {
     outputAnalyzer: null,
     outputPcmData: null,
     outputMeter: document.getElementById("meter-spkr"),
-    dummyOutputs: []
+    dummyOutputs: [],
+    // AGC parameters
+    agcThreshold: -50.0,
+    agcKnee: 40.0,
+    agcRatio: 8.0,
+    agcAttack: 0.0,
+    agcRelease: 0.3,
+    agcMakeup: 2.0,     // 3.0dB
 }
 
 // WebRTC Variables
@@ -82,6 +91,9 @@ var disconnecting = false;
  * Page load function. Starts timers, etc.
  */
 function pageLoad() {
+    // Populate version
+    $("#navbar-version").html(version);
+
     console.log("Starting client-side runtime");
     // Read config
     readConfig();
@@ -424,7 +436,7 @@ function updateRadioControls() {
         // Clear text
         $("#selected-zone-text").html("");
         $("#selected-chan-text").html("");
-        for (i=0; i<5; i++) {
+        for (i=0; i<6; i++) {
             $(`#softkey${i+1} .softkey`).html("");
         }
         // Disable softkeys
@@ -961,6 +973,7 @@ function createPeerConnection() {
             var newSource = {
                 audioNode: audio.context.createMediaStreamSource(newStream),
                 agcNode: audio.context.createDynamicsCompressor(),
+                makeupNode: audio.context.createGain(),
                 gainNode: audio.context.createGain(),
                 muteNode: audio.context.createGain(),
                 panNode: audio.context.createStereoPanner(),
@@ -969,14 +982,15 @@ function createPeerConnection() {
             }
 
             // Setup AGC node
-            newSource.agcNode.knee.setValueAtTime(40, audio.context.currentTime);
-            newSource.agcNode.ratio.setValueAtTime(6, audio.context.currentTime);
-            newSource.agcNode.attack.setValueAtTime(0, audio.context.currentTime);
-            newSource.agcNode.release.setValueAtTime(0.25, audio.context.currentTime);
+            newSource.agcNode.knee.setValueAtTime(audio.agcKnee, audio.context.currentTime);
+            newSource.agcNode.ratio.setValueAtTime(audio.agcRatio, audio.context.currentTime);
+            newSource.agcNode.attack.setValueAtTime(audio.agcAttack, audio.context.currentTime);
+            newSource.agcNode.release.setValueAtTime(audio.agcRelease, audio.context.currentTime);
 
             // Update radio connections
             newSource.audioNode.connect(newSource.agcNode);
-            newSource.agcNode.connect(newSource.gainNode);
+            newSource.agcNode.connect(newSource.makeupNode);
+            newSource.makeupNode.connect(newSource.gainNode);
             newSource.gainNode.connect(newSource.muteNode);
             newSource.muteNode.connect(newSource.panNode);
             newSource.panNode.connect(audio.outputGain);
@@ -1218,10 +1232,12 @@ function playSound(soundId) {
         // Set AGC based on user setting
         if (config.audio.rxAgc) {
             console.log(`Enabling AGC for radio ${idx}`);
-            radioSources[idx].agcNode.threshold.setValueAtTime(-50,audio.context.currentTime);
+            radioSources[idx].agcNode.threshold.setValueAtTime(audio.agcThreshold, audio.context.currentTime);
+            radioSources[idx].makeupNode.gain.setValueAtTime(audio.agcMakeup, audio.context.currentTime);
         } else {
             console.log(`Byassing AGC for radio ${idx}`);
             radioSources[idx].agcNode.threshold.setValueAtTime(0, audio.context.currentTime);
+            radioSources[idx].makeupNode.gain.setValueAtTime(1.0, audio.context.currentTime);
         }
     });
 }

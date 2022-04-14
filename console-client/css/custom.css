@@ -105,6 +105,12 @@ ion-icon {
     margin-top: 20px;
 }
 
+#navbar-separator {
+    color: var(--color-txt-mid);
+    font-size: 12px;
+    margin-top: 20px;
+}
+
 #navbar-status {
     color: var(--color-alert-red-mid);
     font-size: 12px;
@@ -499,11 +505,12 @@ ion-icon {
 }
 
 #radio-controls button {
-    height: 48px;
-    width: 72px;
+    height: 36px;
+    width: 64px;
     padding: 8px;
     box-sizing: border-box;
-    font-size: 22px;
+    font-size: 18px;
+    border: 0;
 }
 
 #radio-controls button span {
@@ -511,7 +518,7 @@ ion-icon {
     padding: 0;
     line-height: normal;
     font-weight: bolder;
-    font-size: 18px;
+    font-size: 14px;
 }
 
 #radio-controls .button-active {

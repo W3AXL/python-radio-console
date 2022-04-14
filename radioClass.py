@@ -57,8 +57,8 @@ class Radio():
         self.error = False
         self.selected = False
         self.muted = False
-        self.softkeys = ["","","","",""]
-        self.softkeyStates = [False, False, False, False, False]
+        self.softkeys = ["","","","","",""]
+        self.softkeyStates = [False, False, False, False, False, False]
 
         # Radio interface class
         self.interface = None
@@ -148,7 +148,7 @@ class Radio():
         Toggles specified softkey
 
         Args:
-            idx (int): 1-5, index of softkey
+            idx (int): 1-6, index of softkey
         """
         self.interface.toggleSoftkey(idx)
 
