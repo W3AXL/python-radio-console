@@ -50,7 +50,7 @@ var audio = {
     agcRatio: 8.0,
     agcAttack: 0.0,
     agcRelease: 0.3,
-    agcMakeup: 2.0,     // 3.0dB
+    agcMakeup: 1.5,     // ~1.7 dB
 }
 
 // WebRTC Variables
