@@ -88,7 +88,8 @@ address = None
 serverport = None
 webguiport = None
 noreset = False
-profiling = False
+cpuProfiling = False
+memProfiling = False
 
 # SSL globals
 certfile = 'certs/localhost.crt'
@@ -148,6 +149,7 @@ def addArguments():
     parser.add_argument("-wc","--webguicert", help="Web GUI certificate for TLS")
     parser.add_argument("-wp","--webguiport", help="Web GUI port")
     parser.add_argument("-cp", "--cpu-profiling", help="Enable yappi CPU profiling", action="store_true")
+    parser.add_argument("-mp","--memory-profiling", help="Enable memory profiling", action="store_true")
 
 def parseArguments():
     
@@ -156,7 +158,8 @@ def parseArguments():
     global serverport
     global webguiport
     global noreset
-    global profiling
+    global cpuProfiling
+    global memProfiling
 
     # Parse the args
     args = parser.parse_args()
@@ -207,7 +210,10 @@ def parseArguments():
         noreset = True
 
     if args.cpu_profiling:
-        profiling = True
+        cpuProfiling = True
+
+    if args.memory_profiling:
+        memProfiling = True
 
     # Make sure a config file was specified
     if not args.config:
@@ -910,7 +916,9 @@ if __name__ == "__main__":
         #yappi.start(builtins=True)
 
         # Start Memory Profiling
-        #tracemalloc.start(5)
+        if memProfiling:
+            logger.logInfo("Memory profiling enabled")
+            tracemalloc.start(10)
 
         # Enable AIORTC debug
         logging.basicConfig(level=logging.ERROR)
@@ -951,11 +959,12 @@ if __name__ == "__main__":
         #stats.save("callgrind_{}.out".format(timestamp), type='callgrind')
 
         # Stop memory profiling
-        #snapshot = tracemalloc.take_snapshot()
-        #top_stats = snapshot.statistics('lineno')
-        #print("[ Top 10 Memory Users ")
-        #for stat in top_stats[:10]:
-        #    print(stat)
+        if memProfiling:
+            snapshot = tracemalloc.take_snapshot()
+            top_stats = snapshot.statistics('lineno')
+            logger.logInfo("[ Top 10 Memory Users ")
+            for stat in top_stats[:10]:
+                logger.logInfo(stat)
 
         # Stop RTC
         asyncio.ensure_future(stopRtc(),loop=serverLoop)
