@@ -911,15 +911,6 @@ if __name__ == "__main__":
     
     try:
 
-        # Start CPU profiling
-        #yappi.set_clock_type('cpu')
-        #yappi.start(builtins=True)
-
-        # Start Memory Profiling
-        if memProfiling:
-            logger.logInfo("Memory profiling enabled")
-            tracemalloc.start(10)
-
         # Enable AIORTC debug
         logging.basicConfig(level=logging.ERROR)
 
@@ -935,6 +926,15 @@ if __name__ == "__main__":
 
         # parse the arguments
         parseArguments()
+
+        # Start CPU profiling
+        #yappi.set_clock_type('cpu')
+        #yappi.start(builtins=True)
+
+        # Start Memory Profiling
+        if memProfiling:
+            logger.logInfo("Memory profiling enabled")
+            tracemalloc.start(10)
 
         # Get sound devices
         getSoundDevices()

@@ -389,14 +389,14 @@ class XTL:
             subdev = msg[6]
             # Handle based on display subdevice
             if subdev == self.O5Address.display_subdevs['text_zone']:
-                newText = data.rstrip().decode('ascii')
+                newText = data.rstrip().decode('ascii', 'ignore')
                 if newText != self.zoneText and not any(s in newText for s in self.O5Address.ignored_strings):
                     self.zoneText = newText
                     self.newStatus = True
                     self.logger.logVerbose("Got new zone text: {}".format(newText))
                 return totalLength
             elif subdev == self.O5Address.display_subdevs['text_channel']:
-                newText = data.rstrip().decode('ascii')
+                newText = data.rstrip().decode('ascii', 'ignore')
                 if newText != self.chanText and not any(s in newText for s in self.O5Address.ignored_strings):
                     self.chanText = newText
                     self.newStatus = True
@@ -404,7 +404,7 @@ class XTL:
                 return totalLength
             elif subdev == self.O5Address.display_subdevs['text_softkeys']:
                 # Get five softkey texts
-                self.softkeys = data.decode('ascii').rstrip().rstrip('\x00').split('^')[1:6]
+                self.softkeys = data.decode('ascii', 'ignore').rstrip().rstrip('\x00').split('^')[1:6]
                 # Add home as the permanent sixth
                 self.softkeys.append("HOME")
                 self.updateSoftkeys()
