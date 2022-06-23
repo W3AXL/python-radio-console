@@ -81,13 +81,13 @@
             <div class="sidebar sidebar-closed" id="sidebar-mainmenu">
                 <ul>
                     <li>
-                        <a href="#" onclick="showPopup('#server-config-popup');toggleMainMenu();">
+                        <a href="#" onclick="showConfigPopup('#server-config-popup');toggleMainMenu();">
                             <span class="sidebar-icon"><ion-icon name="server-sharp"></ion-icon></span>
                             <span class="sidebar-item">Server Config</span>
                         </a>
                     </li>
                     <li>
-                        <a href="#" onclick="showPopup('#client-config-popup');toggleMainMenu();">
+                        <a href="#" onclick="showConfigPopup('#client-config-popup');toggleMainMenu();">
                             <span class="sidebar-icon"><ion-icon name="settings-sharp"></ion-icon></span>
                             <span class="sidebar-item">Client Config</span>
                         </a>
@@ -299,10 +299,10 @@
                 <table class="popup-table">
                     <!-- Time Format -->
                     <tr>
-                        <td width="33%">
+                        <td width="50%">
                             <h3>Time Format</h3>
                         </td>
-                        <td width="67%">
+                        <td width="50%">
                             <select id="client-timeformat">
                                 <option value="Local">Local</option>
                                 <option value="UTC">UTC</option>
@@ -311,10 +311,10 @@
                     </tr>
                     <!-- RX AGC Toggle -->
                     <tr>
-                        <td width="33%">
+                        <td width="50%">
                             <h3>RX Audio AGC</h3>
                         </td>
-                        <td width="67%">
+                        <td width="50%">
                             <label class="topcoat-checkbox">
                                 <input type="checkbox" id="client-rxagc">
                                 <div class="topcoat-checkbox__checkmark"></div>
@@ -323,16 +323,36 @@
                     </tr>
                     <!-- Unselected Radio Volume -->
                     <tr>
-                        <td width="33%">
+                        <td width="50%">
                             <h3>Unselected Radio Volume</h3>
                         </td>
-                        <td width="67%">
+                        <td width="50%">
                             <select id="unselected-vol">
                                 <option value=0 selected="selected">0 dB</option>
                                 <option value=-3>-3 dB</option>
                                 <option value=-9>-9 dB</option>
                                 <option value=-12>-12 dB</option>
                                 <option value=-100>Muted</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <!-- Audio Input Device -->
+                    <tr>
+                        <td width="50%">
+                            <h3>Audio Input</h3>
+                        </td>
+                        <td width="50%">
+                            <select id="audio-input" disabled>
+                            </select>
+                        </td>
+                    </tr>
+                    <!-- Audio Output Device -->
+                    <tr>
+                        <td width="50%">
+                            <h3>Audio Output</h3>
+                        </td>
+                        <td width="50%">
+                            <select id="audio-output" disabled>
                             </select>
                         </td>
                     </tr>

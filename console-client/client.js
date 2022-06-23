@@ -10,7 +10,9 @@ var config = {
 
     audio: {
         rxAgc: false,
-        unselectedVol: -3.0    // volume difference in dB for unselected radios
+        unselectedVol: -3.0,
+        input: "default",
+        output: "default"
     },
     
     serverAddress: "",
@@ -50,7 +52,7 @@ var audio = {
     agcRatio: 8.0,
     agcAttack: 0.0,
     agcRelease: 0.3,
-    agcMakeup: 1.3,     // ~1.1 dB
+    agcMakeup: 1.0,     // right now any makeup gain causes clipping
 }
 
 // WebRTC Variables
@@ -62,7 +64,7 @@ var rtc = {
     //codec: "PCMU/8000",
     // Total audio round trip time (in ms) (set as const for now, adds delay before muting RX audio and stopping TX)
     rxLatency: 500,
-    txLatency: 300
+    txLatency: 400
 }
 
 testInput = null,
@@ -93,6 +95,9 @@ var disconnecting = false;
 function pageLoad() {
     // Populate version
     $("#navbar-version").html(version);
+
+    // Query media devices
+    getAudioDevices();
 
     console.log("Starting client-side runtime");
     // Read config
@@ -340,6 +345,7 @@ function bindRadioCardButtons() {
     // Bind clicking of the card to selection of a radio
     $(".radio-card").on('click', function (event) {
         // Prevent continual propagation
+        console.debug("Stopping further execution of radio card click");
         event.stopPropagation();
         event.stopImmediatePropagation();
         // Get the ID of the selecting item
@@ -383,7 +389,7 @@ function updateRadioCard(idx) {
         case "Receiving":
             setTimeout(function() {
                 radioCard.addClass("receiving");
-            }, rtc.rxLatency);
+            }, rtc.rxLatency); // used to unmute after latency delay but this makes sure we don't miss anything
             break;
         case "Disconnected":
             radioCard.addClass("disconnected");
@@ -608,6 +614,7 @@ function toggleMute(event, obj) {
         // Update card
         //updateRadioCard(idx);
         // Stop propagation so we don't also select the muted radio
+        console.debug("Stopping further execution of mute click");
         event.stopPropagation();
     }
 }
@@ -635,7 +642,8 @@ function toggleMainMenu() {
  * Shows the specified popup and dims the main screen behind it
  * @param {string} id element ID of the popup to show
  */
-function showPopup(id) {
+function showConfigPopup(id) {
+    console.debug(`Showing popup ${id}`);
     $("#body-dimmer").show();
     $(id).show();
 }
@@ -749,14 +757,18 @@ function saveServerConfig() {
  */
 function saveClientConfig() {
     // Get values
-    var timeFormat = $("#client-timeformat").val();
-    var rxAgc = $("#client-rxagc").is(":checked");
-    var unselectedVol = $("#unselected-vol").val();
+    const timeFormat = $("#client-timeformat").val();
+    const rxAgc = $("#client-rxagc").is(":checked");
+    const unselectedVol = $("#unselected-vol").val();
+    const audioInput = $("#audio-input").val();
+    const audioOutput = $("#audio-output").val();
 
     // Set config
     config.timeFormat = timeFormat;
     config.audio.rxAgc = rxAgc;
     config.audio.unselectedVol = parseFloat(unselectedVol);
+    config.audio.input = audioInput;
+    config.audio.output = audioOutput;
 
     // Save config to cookie
     saveConfig();
@@ -793,6 +805,8 @@ function readConfig() {
         $("#client-timeformat").val(config.timeFormat);
         $("#client-rxagc").prop("checked", config.audio.rxAgc);
         $(`#unselected-vol option[value=${config.audio.unselectedVol}]`).attr('selected', 'selected');
+        $(`#audio-input option[value=${config.audio.input}]`).attr('selected', 'selected');
+        $(`#audio-output option[value=${config.audio.output}]`).attr('selected', 'selected');
     } else {
         console.warn("No config cookie detected, using defaults");
     }
@@ -1148,6 +1162,48 @@ function sdpFilterCodec(kind, codec, realSdp) {
     Audio Handling Functions
 ***********************************************************************************/
 
+/**
+ * Queries the specified type of media device
+ * @param {string} type type of device to find ('audioinput', 'audiooutput', or 'videoinput')
+ * @param {function} callback callback to pass the filtered list of devices once retreived
+ */
+async function queryDeviceType(type) {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    return devices.filter(device => device.kind === type)
+}
+
+/**
+ * Populate the audio device lists
+ */
+async function getAudioDevices() {
+    const audioInputs = await queryDeviceType('audioinput');
+    const audioOutputs = await queryDeviceType('audiooutput');
+    
+    audioInputs.forEach(input => {
+        var name = input.label;
+        /*if (name.length > 30) {
+            name = name.substring(0,30) + "...";
+        }*/
+        const device = input.deviceId;
+        $("#audio-input").append($('<option>', {
+            value: device,
+            text: name
+        }));
+    })
+
+    audioOutputs.forEach(output => {
+        var name = output.label;
+        /*if (name.length > 30) {
+            name = name.substring(0,30) + "...";
+        }*/
+        const device = output.deviceId;
+        $("#audio-output").append($('<option>', {
+            value: device,
+            text: name
+        }));
+    })
+}
+
 /** 
 * Checks for browser compatibility and sets up audio devices
 * @return {bool} True on success
@@ -1285,6 +1341,7 @@ function updateMute() {
  */
 function showPanMenu(event, obj) {
     $(obj).closest(".radio-card").find(".panning-dropdown").toggleClass("closed");
+    console.debug("Stopping further propagation of pan menu click");
     event.stopPropagation();
 }
 
@@ -1313,6 +1370,7 @@ function toggleSpkr(event, obj, channel) {
         radioSources[sourceIdx].rightSpkr = !radioSources[sourceIdx].rightSpkr;
     }
     updatePan(sourceIdx, radioId);
+    console.debug("Stopping further propagation of click");
     event.stopPropagation();
 }
 

@@ -577,7 +577,7 @@ ion-icon {
 
 .popup {
     position: fixed;
-    width: 480px;
+    width: 512px;
     top: -16px;
     left: 0;
     right: 0;
@@ -631,6 +631,8 @@ ion-icon {
     box-sizing: border-box;
     background-color: var(--color-bg-mid);
     border-radius: 0 0 6px 6px;
+    overflow-y: scroll;
+    height: 75vh;
 }
 
 .popup-table {
@@ -653,6 +655,11 @@ ion-icon {
     width: 100%;
 }
 
+.popup-table select {
+    overflow: hidden !important;
+    width: 100%;
+}
+
 .popup-table input.invalid {
     border: 1px solid #ec514e;
 }
@@ -664,6 +671,46 @@ ion-icon {
     font-weight: normal;
     text-align: right;
 }
+
+/* Topcoat checkbox size overrides */
+.popup .topcoat-checkbox__checkmark,
+.popup .topcoat-checkbox__checkmark:before,
+.popup input[type='checkbox'] {
+    width: 1rem;
+    height: 1rem;
+}
+
+.popup .topcoat-checkbox__checkmark:after {
+    width: 14px;
+    height: 6px;
+    border-width: 3px;
+}
+
+/********************************
+    Scrollbar Styling
+********************************/
+
+/* ===== Scrollbar CSS ===== */
+  /* Firefox */
+  * {
+    scrollbar-width: auto;
+    scrollbar-color: var(--color-accent-dark);
+  }
+
+  /* Chrome, Edge, and Safari */
+  *::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: var(--color-bg-mid);
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background-color: var(--color-accent-dark);
+    border-radius: 5px;
+    border: none;
+  }
 
 /********************************
     Animations
