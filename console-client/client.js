@@ -23,9 +23,6 @@ var config = {
 // Radio List (read from radio config initially and populated with audio sources/sinks and rtc connections)
 var radios = [];
 
-// Websocket connection to server
-var serverSocket = null;
-
 // Audio variables
 var audio = {
     // Audio context
@@ -498,11 +495,10 @@ function startPtt() {
         pttActive = true;
         playSound("sound-tx-granted");
         // Only send the TX command if we have a valid socket
-        if (serverSocket) {
-            serverSocket.send(
+        if (radios[selectedRadioIdx].wsConn) {
+            radios[selectedRadioIdx].wsConn.send(
                 `{
                     "radioControl": {
-                        "index": ${selectedRadioIdx},
                         "command": "startTx",
                         "options": null
                     }
@@ -522,13 +518,12 @@ function stopPtt() {
     if (pttActive) {
         console.log("PTT released");
         pttActive = false;
-        if (serverSocket && selectedRadio) {
+        if (radios[selectedRadioIdx].wsConn && selectedRadio) {
             // Wait and then stop TX (handles mic latency)
             setTimeout( function() {
-                serverSocket.send(
+                radios[selectedRadioIdx].wsConn.send(
                     `{
                         "radioControl": {
-                            "index": ${selectedRadioIdx},
                             "command": "stopTx",
                             "options": null
                         }
@@ -544,13 +539,12 @@ function stopPtt() {
  * @param {bool} down Whether to go down or not (heh)
  */
 function changeChannel(down) {
-    if (!pttActive && selectedRadio && serverSocket) {
+    if (!pttActive && selectedRadio && radios[selectedRadioIdx].wsConn) {
         if (down) {
             console.log("Changing channel down on " + selectedRadio);
-            serverSocket.send(
+            radios[selectedRadioIdx].wsConn.send(
                 `{
                     "radioControl": {
-                        "index": ${selectedRadioIdx},
                         "command": "chanDn",
                         "options": null
                     }
@@ -558,10 +552,9 @@ function changeChannel(down) {
             );
         } else {
             console.log("Changing channel up on " + selectedRadio);
-            serverSocket.send(
+            radios[selectedRadioIdx].wsConn.send(
                 `{
                     "radioControl": {
-                        "index": ${selectedRadioIdx},
                         "command": "chanUp",
                         "options": null
                     }
@@ -598,12 +591,11 @@ function button_right() {
  * @param {string} buttonName name of button
  */
 function sendButton(buttonName) {
-    if (!pttActive && selectedRadio && serverSocket) {
+    if (!pttActive && selectedRadio && radios[selectedRadioIdx].wsConn) {
         console.log(`Sending button: ${buttonName}`);
-        serverSocket.send(
+        radios[selectedRadioIdx].wsConn.send(
             `{
                 "radioControl": {
-                    "index": ${selectedRadioIdx},
                     "command": "button",
                     "options": "${buttonName}"
                 }
@@ -617,30 +609,28 @@ function sendButton(buttonName) {
  * @param {string} obj element whose parent radio to toggle mute on
  */
 function toggleMute(event, obj) {
+    // Get ID of radio to mute
+    const radioId = $(obj).closest(".radio-card").attr('id');
+    // Get index of radio in list
+    const idx = getRadioIndex(radioId);
     // Only do stuff if we have a socket connection
-    if (serverSocket != null) {
-        // Get ID of radio to mute
-        const radioId = $(obj).closest(".radio-card").attr('id');
-        // Get index of radio in list
-        const idx = getRadioIndex(radioId);
+    if (radios[idx].wsConn != null) {
         // Change mute status
         if (radios[idx].muted) {
             console.log("Unmuting " + radioId);
-            serverSocket.send(
+            radios[idx].wsConn.send(
                 `{
                     "audioControl": {
                         "command": "unmute",
-                        "index": ${idx}
                     }
                 }`
             )
         } else {
             console.log("Muting " + radioId);
-            serverSocket.send(
+            radios[idx].wsConn.send(
                 `{
                     "audioControl": {
                         "command": "mute",
-                        "index": ${idx}
                     }
                 }`
             )
@@ -1424,6 +1414,8 @@ function closeAllPanMenus() {
  * @param {object} obj the calling html object
  */
 function changePan(event, obj) {
+    // Prevent from selecting the card
+    event.stopPropagation();
     // Get new value
     const newPan = $(obj).val();
     // Get radio ID and index
