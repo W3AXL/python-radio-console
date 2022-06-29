@@ -63,7 +63,7 @@ class Config():
     # Init
     def __init__(self):
         # List of radio configs
-        self.RadioList = []
+        self.Radio = None
 
 # Create new config
 configFile = ""
@@ -146,8 +146,6 @@ def addArguments():
     parser.add_argument("-sp","--serverport", help="Websocket server port")
     parser.add_argument("-v","--verbose", help="Enable verbose logging", action="store_true")
     parser.add_argument("-vv","--verbose2", help="Debug verbosity in logging", action="store_true")
-    parser.add_argument("-wc","--webguicert", help="Web GUI certificate for TLS")
-    parser.add_argument("-wp","--webguiport", help="Web GUI port")
     parser.add_argument("-cp", "--cpu-profiling", help="Enable yappi CPU profiling", action="store_true")
     parser.add_argument("-mp","--memory-profiling", help="Enable memory profiling", action="store_true")
 
@@ -200,12 +198,6 @@ def parseArguments():
         else:
             address = args.address
 
-    if not args.webguiport:
-        logger.logError("No web GUI port specified!")
-        exit(1)
-    else:
-        webguiport = int(args.webguiport)
-
     if args.no_reset:
         noreset = True
 
@@ -250,9 +242,8 @@ def loadConfig(filename):
             # Load JSON into dict
             configDict = json.load(inp)
 
-            # Iterate through radios in idct
-            for index, radioDict in enumerate(configDict["RadioList"]):
-                config.RadioList.append(Radio.decodeConfig(index, radioDict, logger))
+            # Get and parse radio config
+            config.Radio = Radio.decodeConfig(configDict["Radio"], logger)
 
             # Get globals
             if "Certfile" in configDict.keys() and "Keyfile" in configDict.keys():
@@ -263,6 +254,7 @@ def loadConfig(filename):
 
             # Print on success
             logger.logInfo("Sucessfully loaded config file {}".format(filename))
+            logger.logVerbose(config)
 
             # Return true
             return True
@@ -271,133 +263,94 @@ def loadConfig(filename):
         return False
 
 def printRadios():
-    logger.logInfo("Loaded radios:")
-    for idx, radio in enumerate(config.RadioList):
-        print("      - radio{}: {}".format(idx, radio.name))
-        print("                {} control ({})".format(radio.ctrlMode, radio.ctrlPort))
-        print("                Tx Audio dev: {}".format(radio.txDev))
-        print("                Rx Audio dev: {}".format(radio.rxDev))
+    logger.logInfo("Loaded radio:")
+    print("        {} control ({})".format(config.Radio.ctrlMode, config.Radio.ctrlPort))
+    print("        Tx Audio dev: {}".format(config.Radio.txDev))
+    print("        Rx Audio dev: {}".format(config.Radio.rxDev))
 
 """-------------------------------------------------------------------------------
     Radio Functions
 -------------------------------------------------------------------------------"""
 
-def connectRadios():
+def connectRadio():
     """
-    Connect to each radio in the master RadioList
+    Connect to the configured radio
     """
-    for idx, radio in enumerate(config.RadioList):
-        # Log
-        logger.logInfo("Connecting to radio {}".format(radio.name))
-        # Connect
-        radio.connect(radioStatusUpdate, reset = not noreset)
+    # Log
+    logger.logInfo("Connecting to radio {}".format(config.Radio.name))
+    # Connect
+    config.Radio.connect(radioStatusUpdate, reset = not noreset)
 
-def radioStatusUpdate(index):
+def radioStatusUpdate():
     """
     Status callback the radio interface calls when it has a new status
-        simply puts the index of the radio with a new status into the status update queue
-
-    Args:
-        index (int): index of the radio in the master RadioList with a new status
     """
 
-    # Add the index to the queue
-    serverLoop.call_soon_threadsafe(messageQueue.put_nowait,"status:{}".format(index))
+    # Add the message to the queue
+    serverLoop.call_soon_threadsafe(messageQueue.put_nowait,"status")
 
 
-def setTransmit(index, transmit):
+def setTransmit(transmit):
     """
-    Set transmit state of radio at index
+    Set transmit state of the radio
 
     Args:
-        index (int): index of the radio
         transmit (bool): state of transmit
     """
-    config.RadioList[index].transmit(transmit)
+    config.Radio.transmit(transmit)
 
 
-def changeChannel(index, down):
+def changeChannel(down):
     """
     Changes the channel up or down on the radio
 
     Args:
-        index (int): index of radio
         down ([type]): whether to go down or not
     """
-    config.RadioList[index].changeChannel(down)
+    config.Radio.changeChannel(down)
 
-def toggleSoftkey(index, softkeyidx):
+def toggleSoftkey(softkeyidx):
     """
     Toggles softkey on radio
 
     Args:
-        index (int): Index of radio in RadioList
         softkeyidx (int): Index of softkey (1-5)
     """
-    config.RadioList[index].toggleSoftkey(softkeyidx)
+    config.Radio.toggleSoftkey(softkeyidx)
 
-def leftArrow(index):
+def leftArrow():
     """
     Presses left arrow button (for softkey scrolling)
-
-    Args:
-        index (int): Index of radio in RadioList
     """
-    config.RadioList[index].leftArrow()
+    config.Radio.leftArrow()
 
-def rightArrow(index):
+def rightArrow():
     """
     Presses right arrow button (for softkey scrolling)
+    """
+    config.Radio.rightArrow()
+
+def toggleMute(state):
+    """
+    Set state of mute for radio
 
     Args:
-        index (int): Index of radio in RadioList
-    """
-    config.RadioList[index].rightArrow()
-
-def toggleMute(index, state):
-    """
-    Set state of mute for radio at index
-
-    Args:
-        index (int): Radio index
         state (bool): state of mute
     """
-    config.RadioList[index].setMute(state)
+    config.Radio.setMute(state)
 
-def getRadioStatusJson(index):
+def getRadioStatusJson():
     """
-    Gets status of specified radio index in the RadioList and returns a json string
-
-    Args:
-        index (int): index of radio in RadioList
+    Gets status of radio and returns a json string
 
     Returns:
         string: JSON of radio status
     """
     
     # Get the status of the specified radio
-    status = config.RadioList[index].encodeClientStatus()
+    status = config.Radio.encodeClientStatus()
 
     return json.dumps(status)
-
-
-def getAllRadiosStatusJson():
-    """
-    Gets status of all radios and returns a JSON string
-
-    Returns:
-        string: JSON string of all radio statuses
-    """    
-
-    # Create an empty status list
-    statusList = []
-
-    # Get the status of each radio
-    for radio in config.RadioList:
-        statusList.append(radio.encodeClientStatus())
-
-    # Convert into a json string
-    return json.dumps(statusList)
     
 """-------------------------------------------------------------------------------
     WebRTC Functions
@@ -428,17 +381,10 @@ async def gotRtcOffer(offerObj):
     pcUuid = "Peer({})".format(uuid.uuid4())
     logger.logVerbose("Creating peer connection {}".format(pcUuid))
 
-    # Create speaker tracks for each radio
-    for radio in config.RadioList:
-        logger.logInfo("Creating RTC speaker track for radio {}, device {}".format(radio.name, radio.rxDev))
-        player = MediaPlayer(radio.rxDev, format=ffmpegFormat)
-        rtcPeer.addTrack(player.audio)
-
-    # DEBUG: just do the first radio in the list
-    #radio = config.RadioList[0]
-    #logger.logInfo("Creating RTC speaker track for radio {}".format(radio.name))
-    #player = MediaPlayer(radio.rxDev, format='alsa')
-    #rtcPeer.addTrack(player.audio)
+    # Create speaker track
+    logger.logInfo("Creating RTC speaker track for radio {}, device {}".format(config.Radio.name, config.Radio.rxDev))
+    player = MediaPlayer(config.Radio.rxDev, format=ffmpegFormat)
+    rtcPeer.addTrack(player.audio)
 
     # ICE connection state callback
     @rtcPeer.on("iceconnectionstatechange")
@@ -483,12 +429,11 @@ async def gotRtcOffer(offerObj):
         # Create a relay for the incoming mic track
         micRelay = MediaRelay()
         # Add the mic track to each radio's tx device
-        for radio in config.RadioList:
-            logger.logInfo("Creating RTC mic track for radio {} using device {}, format {}".format(radio.name, radio.txDev, ffmpegFormat))
-            recorder = MediaRecorder(radio.txDev, format=ffmpegFormat)
-            recorder.addTrack(micRelay.subscribe(track))
-            recorders.append(recorder)
-            await recorder.start()
+        logger.logInfo("Creating RTC mic track for radio {} using device {}, format {}".format(config.Radio.name, config.Radio.txDev, ffmpegFormat))
+        recorder = MediaRecorder(config.Radio.txDev, format=ffmpegFormat)
+        recorder.addTrack(micRelay.subscribe(track))
+        recorders.append(recorder)
+        await recorder.start()
 
         # DEBUG: just do the first radio in the list
         #radio = config.RadioList[0]
@@ -657,8 +602,8 @@ async def consumer_handler(websocket, path):
                 # Radio Query Command
                 #
 
-                if key == "radios" and cmdObject[key]["command"] == "query":
-                    await messageQueue.put("allradios")
+                if key == "radio" and cmdObject[key]["command"] == "query":
+                    await messageQueue.put("status")
 
                 #
                 # Radio Control Commands
@@ -668,26 +613,25 @@ async def consumer_handler(websocket, path):
                     # Get object inside
                     params = cmdObject[key]
                     command = params["command"]
-                    index = params["index"]
                     options = params["options"]
 
                     # Start PTT
                     if command == "startTx":
-                        logger.logVerbose("Starting TX on radio index {}".format(index))
-                        setTransmit(index, True)
+                        logger.logVerbose("Starting TX on radio")
+                        setTransmit(True)
 
                     # Stop PTT
                     elif command == "stopTx":
-                        logger.logVerbose("Stopping TX on radio index {}".format(index))
-                        setTransmit(index, False)
+                        logger.logVerbose("Stopping TX on radio")
+                        setTransmit(False)
 
                     # Channel Up
                     elif command == "chanUp":
-                        changeChannel(index, False)
+                        changeChannel(False)
 
                     # Channel Down
                     elif command == "chanDn":
-                        changeChannel(index, True)
+                        changeChannel(True)
 
                     # Buttons
                     elif command == "button":
@@ -697,13 +641,13 @@ async def consumer_handler(websocket, path):
                         # Toggle a softkey
                         if "softkey" in button:
                             softkeyidx = int(button[7])
-                            toggleSoftkey(index, softkeyidx)
+                            toggleSoftkey(softkeyidx)
 
                         # Left/right arrow keys
                         elif button == "left":
-                            leftArrow(index)
+                            leftArrow()
                         elif button == "right":
-                            rightArrow(index)
+                            rightArrow()
 
                 #
                 #   Audio Control Messages
@@ -713,7 +657,6 @@ async def consumer_handler(websocket, path):
                     # Get params
                     params = cmdObject[key]
                     command = params["command"]
-                    index = params["index"]
 
                     # Start audio command
                     if command == "startAudio":
@@ -721,10 +664,10 @@ async def consumer_handler(websocket, path):
 
                     # Mute commands
                     elif command == "mute":
-                        toggleMute(index, True)
+                        toggleMute(True)
 
                     elif command == "unmute":
-                        toggleMute(index, False)
+                        toggleMute(False)
 
                 #
                 #   WebRTC Messages
@@ -766,25 +709,15 @@ async def producer_hander(websocket, path):
             # Wait for new data in queue
             message = await messageQueue.get()
 
-            # send all radios
-            if message == "allradios":
-                logger.logInfo("sending radio list to {}".format(websocket.remote_address[0]))
-                # Generate response JSON
-                response = '{{ "radios": {{ "command": "list", "radioList": {} }} }}'.format(getAllRadiosStatusJson())
-                # Send
-                await websocket.send(response)
-
             # Send WebRTC SDP answer
-            elif "webRtcAnswer" in message:
+            if "webRtcAnswer" in message:
                 logger.logInfo("sending WebRTC answer to {}".format(websocket.remote_address[0]))
                 await websocket.send(message)
             
             # send status update for specific radio
-            elif "status:" in message:
-                # Get index
-                index = int(message[7:])
+            elif "status" in message:
                 # Format JSON response
-                response = '{{ "radio": {{ "index": {}, "status": {} }} }}'.format(index,getRadioStatusJson(index))
+                response = '{{ "status": {} }}'.format(getRadioStatusJson())
                 # Send
                 await websocket.send(response)
             
@@ -945,8 +878,8 @@ if __name__ == "__main__":
         # Start server
         startServer()
 
-        # Connect to radios
-        connectRadios()
+        # Connect to radio
+        connectRadio()
 
         serverLoop.run_forever()
 
@@ -969,11 +902,10 @@ if __name__ == "__main__":
         # Stop RTC
         asyncio.ensure_future(stopRtc(),loop=serverLoop)
 
-        # Cleanly disconnect any connected radios
-        for radio in config.RadioList:
-            if radio.state != RadioState.Disconnected:
-                radio.disconnect()
-                logger.logVerbose("Radio {} disconnected".format(radio.name))
+        # Disconnect radio if connected
+        if config.Radio.state != RadioState.Disconnected:
+            config.Radio.disconnect()
+            logger.logVerbose("Radio {} disconnected".format(config.Radio.name))
 
         # Shutdown all asyncio tasks
         try:

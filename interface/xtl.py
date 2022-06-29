@@ -84,7 +84,7 @@ class XTL:
             'vol_up': 0x531
         }
 
-    def __init__(self, index, comPort, headType, statusCallback, logger=Logger()):
+    def __init__(self, name, comPort, headType, statusCallback, logger=Logger()):
         """Init Function
 
         Args:
@@ -105,7 +105,7 @@ class XTL:
         These variables are common to all radio interface classes and are 
         queried by the base RadioClass whenever statusCallback() is called
         """
-        self.index = index
+        self.name = name
         self.state = RadioState.Disconnected
         self.zoneText = ""
         self.chanText = ""
@@ -219,7 +219,7 @@ class XTL:
             time.sleep(0.01)
 
         # Print debug on thread close
-        self.logger.logVerbose("SB9600 listener thread stopped for radio {}".format(self.index))
+        self.logger.logVerbose("SB9600 listener thread stopped for radio {}".format(self.name))
 
     def process(self):
         """
@@ -302,14 +302,14 @@ class XTL:
                     self.newStatus = False
                     self.updateStatus()
 
-        self.logger.logVerbose("SB9600 processor thread stopped for radio {}".format(self.index))
+        self.logger.logVerbose("SB9600 processor thread stopped for radio {}".format(self.name))
         
 
     def updateStatus(self):
         """
-        Call the status callback with the index of the radio
+        Call the status callback
         """
-        self.statusCallback(self.index)
+        self.statusCallback()
 
     def transmit(self, transmit):
         """

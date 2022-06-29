@@ -341,7 +341,7 @@ ion-icon {
     animation: txBorderBlink 0.5s ease infinite;
 }
 
-.radio-card.disconnected {
+.radio-card.disconnected .content{
     opacity: 50%;
 }
 
@@ -407,8 +407,16 @@ ion-icon {
     color: var(--color-alert-red-light);
 }
 
-.icon-stack #icon-connect.disconnected {
-    color: var(--color-bg-light);
+.icon-stack .icon-connect.disconnected {
+    color: var(--color-alert-red-light);
+}
+
+.icon-stack .icon-connect.connecting {
+    color: var(--color-alert-light);
+}
+
+.icon-stack .icon-connect.connected {
+    color: var(--color-alert-green-mid);
 }
 
 .icon-stack ion-icon.alerting {

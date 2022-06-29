@@ -1,0 +1,14 @@
+{
+    "RadioList": [
+        {
+            "name": "Rack VHF XTL",
+            "address": "radioconsole.w3axl.com",
+            "port": 9501
+        },
+        {
+            "name": "Rack UHF XTL",
+            "address": "radioconsole.w3axl.com",
+            "port": 9502
+        }
+    ]
+}
