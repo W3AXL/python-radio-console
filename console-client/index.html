@@ -43,10 +43,10 @@
             <div id="navbar-version" class="navbar-item">VERSION</div>
 
             <!-- Separator -->
-            <div id="navbar-separator" class="navbar-item"> - </div>
+            <!--<div id="navbar-separator" class="navbar-item"> - </div>-->
 
             <!-- Server Status -->
-            <div id="navbar-status" class="navbar-item">Disconnected</div>
+            <!--<div id="navbar-status" class="navbar-item">Disconnected</div>-->
 
             <!-- Clock -->
             <div id="navbar-clock">
@@ -81,13 +81,13 @@
             <div class="sidebar sidebar-closed" id="sidebar-mainmenu">
                 <ul>
                     <li>
-                        <a href="#" onclick="showPopup('#server-config-popup');toggleMainMenu();">
+                        <a href="#" onclick="showConfigPopup('#server-config-popup');toggleMainMenu();">
                             <span class="sidebar-icon"><ion-icon name="server-sharp"></ion-icon></span>
                             <span class="sidebar-item">Server Config</span>
                         </a>
                     </li>
                     <li>
-                        <a href="#" onclick="showPopup('#client-config-popup');toggleMainMenu();">
+                        <a href="#" onclick="showConfigPopup('#client-config-popup');toggleMainMenu();">
                             <span class="sidebar-icon"><ion-icon name="settings-sharp"></ion-icon></span>
                             <span class="sidebar-item">Client Config</span>
                         </a>
@@ -105,35 +105,36 @@
             <div id="main-layout">
 
                 <!-- Placeholder radio card for development -->
-                <!--<div class="radio-card" id="${id}">
-                    <div class="radio-card" id="${id}">
-                        <div class="header">
-                            <div class="selected-icon">
-                                <ion-icon name="caret-forward-circle-sharp"></ion-icon>
-                            </div>
-                            <h2>${name}</h2>
-                            <div class="icon-stack">
-                                <a href="#" onclick="showPanMenu(event, this)" class="enabled"><ion-icon name="headset-sharp" id="icon-panning"></ion-icon></a>
-                                    <div class="panning-dropdown closed">
-                                        <a id="left-spkr-button" href="#" onclick="toggleSpkr(event, this, 'left')"><ion-icon name="volume-off-sharp" style="transform: scaleX(-1);"></ion-icon></a>
-                                        <a id="right-spkr-button" href="#" onclick="toggleSpkr(event, this, 'right')"><ion-icon name="volume-off-sharp"></ion-icon></a>
-                                    </div>
-                                <a href="#" onclick="toggleMute(event, this)" class="enabled"><ion-icon name="volume-high-sharp" id="icon-mute"></ion-icon></a>
-                                <a href="#"><ion-icon name="warning-sharp" id="icon-alert"></ion-icon></a>
-                            </div>
+                <!--<div class="radio-card">
+                    <div class="header">
+                        <div class="selected-icon">
+                            <ion-icon name="caret-forward-circle-sharp"></ion-icon>
                         </div>
-                        <div class="content">
-                            <div>
-                                <h3>CHANNEL</h3>
-                                <div id="channel-text" class="value-frame"></div>
-                            </div>
-                            <div>
-                                <h3>LAST ID</h3>
-                                <div id="id-text" class="value-frame"></div>
-                            </div>
+                        <h2>PLACEHOLDER NAME</h2>
+                        <div class="icon-stack">
+                            <!- - Pan Dropdown - ->
+                            <a href="#" onclick="showPanMenu(event, this)" class="enabled"><ion-icon name="headset-sharp" id="icon-panning"></ion-icon></a>
+                                <div class="panning-dropdown">
+                                    <!- - Slider - ->
+                                    <input type="range" class="topcoat-range" class="radio-pan" min="-1" max="1" value="0" step="0.1" oninput="changePan(event, this)" ondblclick="centerPan(event, this)">
+                                </div>
+                            <!- - Mute Button - ->
+                            <a href="#" onclick="toggleMute(event, this)" class="enabled"><ion-icon name="volume-high-sharp" id="icon-mute"></ion-icon></a>
+                            <!- - Connection Icon - ->
+                            <a href="#"><ion-icon name="wifi-sharp" id="icon-connect" class="disconnected"></ion-icon></a>
                         </div>
-                        <div class="footer"></div>
                     </div>
+                    <div class="content">
+                        <div>
+                            <h3>CHANNEL</h3>
+                            <div id="channel-text" class="value-frame">PLACEHOLDER CHAN</div>
+                        </div>
+                        <div>
+                            <h3>LAST ID</h3>
+                            <div id="id-text" class="value-frame">PLACEHOLDER ID</div>
+                        </div>
+                    </div>
+                    <div class="footer"></div>
                 </div>-->
 
             </div>

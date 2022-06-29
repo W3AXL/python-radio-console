@@ -2,7 +2,7 @@
     Global Variables
 ***********************************************************************************/
 
-var version = "1.0.0"
+var version = "2.0.0"
 
 // User Config Var
 var config = {
@@ -10,7 +10,9 @@ var config = {
 
     audio: {
         rxAgc: false,
-        unselectedVol: -3.0    // volume difference in dB for unselected radios
+        unselectedVol: -3.0,
+        input: "default",
+        output: "default"
     },
     
     serverAddress: "",
@@ -18,7 +20,7 @@ var config = {
     serverAutoConn: false
 }
 
-// Radio List (populated from server)
+// Radio List (read from config initially and populated with audio sources/sinks and rtc connections)
 var radioList = [];
 
 // Radio speaker sources & gain nodes
@@ -37,7 +39,7 @@ var audio = {
     inputAnalyzer: null,
     inputPcmData: null,
     inputMeter: document.getElementById("meter-mic"),
-    // Output device, analyzer, and gain (for volume)
+    // Output device, analyzer, and gain (for volume control and visualization)
     output: null,
     outputGain: null,
     outputAnalyzer: null,
@@ -50,7 +52,7 @@ var audio = {
     agcRatio: 8.0,
     agcAttack: 0.0,
     agcRelease: 0.3,
-    agcMakeup: 1.3,     // ~1.1 dB
+    agcMakeup: 1.0,     // right now any makeup gain causes clipping
 }
 
 // WebRTC Variables
@@ -62,7 +64,7 @@ var rtc = {
     //codec: "PCMU/8000",
     // Total audio round trip time (in ms) (set as const for now, adds delay before muting RX audio and stopping TX)
     rxLatency: 500,
-    txLatency: 300
+    txLatency: 400
 }
 
 testInput = null,
@@ -93,6 +95,9 @@ var disconnecting = false;
 function pageLoad() {
     // Populate version
     $("#navbar-version").html(version);
+
+    // Query media devices
+    getAudioDevices();
 
     console.log("Starting client-side runtime");
     // Read config
@@ -307,13 +312,16 @@ function addRadioCard(id, name) {
                 </div>
                 <h2>${name}</h2>
                 <div class="icon-stack">
+                    <!-- Pan Dropdown -->
                     <a href="#" onclick="showPanMenu(event, this)" class="enabled"><ion-icon name="headset-sharp" id="icon-panning"></ion-icon></a>
                         <div class="panning-dropdown closed">
-                            <a id="left-spkr-button" href="#" onclick="toggleSpkr(event, this, 'left')"><ion-icon name="volume-off-sharp" style="transform: scaleX(-1);"></ion-icon></a>
-                            <a id="right-spkr-button" href="#" onclick="toggleSpkr(event, this, 'right')"><ion-icon name="volume-off-sharp"></ion-icon></a>
+                            <!-- Slider -->
+                            <input type="range" class="topcoat-range" class="radio-pan" min="-1" max="1" value="0" step="0.1" oninput="changePan(event, this)" ondblclick="centerPan(event, this)">
                         </div>
+                    <!-- Mute Button -->
                     <a href="#" onclick="toggleMute(event, this)" class="enabled"><ion-icon name="volume-high-sharp" id="icon-mute"></ion-icon></a>
-                    <a href="#"><ion-icon name="warning-sharp" id="icon-alert"></ion-icon></a>
+                    <!-- Connection Icon -->
+                    <a href="#"><ion-icon name="wifi-sharp" id="icon-connect" class="disconnected"></ion-icon></a>
                 </div>
             </div>
             <div class="content">
@@ -383,7 +391,7 @@ function updateRadioCard(idx) {
         case "Receiving":
             setTimeout(function() {
                 radioCard.addClass("receiving");
-            }, rtc.rxLatency);
+            }, rtc.rxLatency); // used to unmute after latency delay but this makes sure we don't miss anything
             break;
         case "Disconnected":
             radioCard.addClass("disconnected");
@@ -635,7 +643,8 @@ function toggleMainMenu() {
  * Shows the specified popup and dims the main screen behind it
  * @param {string} id element ID of the popup to show
  */
-function showPopup(id) {
+function showConfigPopup(id) {
+    console.debug(`Showing popup ${id}`);
     $("#body-dimmer").show();
     $(id).show();
 }
@@ -749,14 +758,18 @@ function saveServerConfig() {
  */
 function saveClientConfig() {
     // Get values
-    var timeFormat = $("#client-timeformat").val();
-    var rxAgc = $("#client-rxagc").is(":checked");
-    var unselectedVol = $("#unselected-vol").val();
+    const timeFormat = $("#client-timeformat").val();
+    const rxAgc = $("#client-rxagc").is(":checked");
+    const unselectedVol = $("#unselected-vol").val();
+    const audioInput = $("#audio-input").val();
+    const audioOutput = $("#audio-output").val();
 
     // Set config
     config.timeFormat = timeFormat;
     config.audio.rxAgc = rxAgc;
     config.audio.unselectedVol = parseFloat(unselectedVol);
+    config.audio.input = audioInput;
+    config.audio.output = audioOutput;
 
     // Save config to cookie
     saveConfig();
@@ -793,6 +806,8 @@ function readConfig() {
         $("#client-timeformat").val(config.timeFormat);
         $("#client-rxagc").prop("checked", config.audio.rxAgc);
         $(`#unselected-vol option[value=${config.audio.unselectedVol}]`).attr('selected', 'selected');
+        $(`#audio-input option[value=${config.audio.input}]`).attr('selected', 'selected');
+        $(`#audio-output option[value=${config.audio.output}]`).attr('selected', 'selected');
     } else {
         console.warn("No config cookie detected, using defaults");
     }
@@ -1148,6 +1163,48 @@ function sdpFilterCodec(kind, codec, realSdp) {
     Audio Handling Functions
 ***********************************************************************************/
 
+/**
+ * Queries the specified type of media device
+ * @param {string} type type of device to find ('audioinput', 'audiooutput', or 'videoinput')
+ * @param {function} callback callback to pass the filtered list of devices once retreived
+ */
+async function queryDeviceType(type) {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    return devices.filter(device => device.kind === type)
+}
+
+/**
+ * Populate the audio device lists
+ */
+async function getAudioDevices() {
+    const audioInputs = await queryDeviceType('audioinput');
+    const audioOutputs = await queryDeviceType('audiooutput');
+    
+    audioInputs.forEach(input => {
+        var name = input.label;
+        /*if (name.length > 30) {
+            name = name.substring(0,30) + "...";
+        }*/
+        const device = input.deviceId;
+        $("#audio-input").append($('<option>', {
+            value: device,
+            text: name
+        }));
+    })
+
+    audioOutputs.forEach(output => {
+        var name = output.label;
+        /*if (name.length > 30) {
+            name = name.substring(0,30) + "...";
+        }*/
+        const device = output.deviceId;
+        $("#audio-output").append($('<option>', {
+            value: device,
+            text: name
+        }));
+    })
+}
+
 /** 
 * Checks for browser compatibility and sets up audio devices
 * @return {bool} True on success
@@ -1293,53 +1350,41 @@ function closeAllPanMenus() {
 }
 
 /**
- * Toggles the left or right speaker of a radio on or off
- * @param {event} event 
- * @param {element} obj object calling the function
- * @param {string} channel "left" or "right"
+ * Update the speaker pan for a radio (called by the slider value change)
+ * @param {event} event the calling event
+ * @param {object} obj the calling html object
  */
-function toggleSpkr(event, obj, channel) {
-    // Get calling radio id
+function changePan(event, obj) {
+    // Get new value
+    const newPan = $(obj).val();
+    // Get radio ID and index
     const radioId = $(obj).closest(".radio-card").attr('id');
-    // Get index of radio in list
     const idx = getRadioIndex(radioId);
-    // Get index in audio sources (inverse of index in list)
+    // Get radio source
     const sourceIdx = radioSources.length - idx - 1;
     // Debug log
-    console.debug(`Toggling ${channel} speaker for radio ${radioId}`);
-    if (channel == 'left') {
-        radioSources[sourceIdx].leftSpkr = !radioSources[sourceIdx].leftSpkr;
-    } else if (channel == 'right') {
-        radioSources[sourceIdx].rightSpkr = !radioSources[sourceIdx].rightSpkr;
-    }
-    updatePan(sourceIdx, radioId);
-    event.stopPropagation();
+    console.debug(`Setting new pan for radio to ${newPan}`);
+    // Set pan
+    radioSources[sourceIdx].panNode.pan.setValueAtTime(newPan, audio.context.currentTime);
 }
 
 /**
- * Updates panning for specified radio source
- * @param {int} sourceIdx index of source in radioSources list
+ * Center the pan for a radio (fired by slider doubleclick)
+ * @param {event} event the calling button event 
+ * @param {object} obj the calling html object
  */
-function updatePan(sourceIdx, radioId) {
-    if (radioSources[sourceIdx].leftSpkr && radioSources[sourceIdx].rightSpkr) {
-        // Center pan
-        radioSources[sourceIdx].panNode.pan.setValueAtTime(0, audio.context.currentTime);
-        // Enable both icons
-        $(`#${radioId} #right-spkr-button`).removeClass("disabled");
-        $(`#${radioId} #left-spkr-button`).removeClass("disabled");
-    } else if (radioSources[sourceIdx].leftSpkr) {
-        // Left pan
-        radioSources[sourceIdx].panNode.pan.setValueAtTime(-1, audio.context.currentTime);
-        // Update icons
-        $(`#${radioId} #right-spkr-button`).addClass("disabled");
-        $(`#${radioId} #left-spkr-button`).removeClass("disabled");
-    } else if (radioSources[sourceIdx].rightSpkr) {
-        // Right pan
-        radioSources[sourceIdx].panNode.pan.setValueAtTime(1, audio.context.currentTime);
-        // Update icons
-        $(`#${radioId} #right-spkr-button`).removeClass("disabled");
-        $(`#${radioId} #left-spkr-button`).addClass("disabled");
-    }
+function centerPan(event, obj) {
+    // Update slider value
+    $(obj).val(0);
+    // Get radio index
+    const radioId = $(obj).closest(".radio-card").attr('id');
+    const idx = getRadioIndex(radioId);
+    // Get radio source
+    const sourceIdx = radioSources.length - idx - 1;
+    // Update pan
+    console.debug(`Resetting pan for radio`);
+    // Set pan
+    radioSources[sourceIdx].panNode.pan.setValueAtTime(0, audio.context.currentTime);
 }
 
 /***********************************************************************************

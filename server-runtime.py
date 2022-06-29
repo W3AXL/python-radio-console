@@ -832,7 +832,7 @@ def startServer():
     serverLoop.run_until_complete(server)
 
     # create TLS-secured HTTPServer
-    logger.logInfo("Starting web GUI server on address {}, port {}".format(address, webguiport))
+    """logger.logInfo("Starting web GUI server on address {}, port {}".format(address, webguiport))
     httpServer = http.server.HTTPServer((address, webguiport), httpServerHandler)
     httpServer.socket = ssl.wrap_socket(httpServer.socket,
                                  server_side=True,
@@ -841,7 +841,7 @@ def startServer():
                                  ssl_version=ssl.PROTOCOL_TLS)
     # start thread for HTTPS server
     httpThread = threading.Thread(target=httpServer.serve_forever, daemon=True)
-    httpThread.start()
+    httpThread.start()"""
 
 """-------------------------------------------------------------------------------
     Utility Functions

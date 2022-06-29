@@ -321,7 +321,7 @@ ion-icon {
     display: inline-block;
     margin-left: 16px;
     margin-top: 20px;
-    width: 256px;
+    width: 280px;
     border-radius: 6px;
     border: 2px solid transparent;
 }
@@ -391,6 +391,10 @@ ion-icon {
     font-size: 20px;
 }
 
+.radio-card .icon-stack a {
+    margin-left: 4px;
+}
+
 .icon-stack ion-icon {
     color: var(--color-txt-light);
 }
@@ -403,10 +407,53 @@ ion-icon {
     color: var(--color-alert-red-light);
 }
 
+.icon-stack #icon-connect.disconnected {
+    color: var(--color-bg-light);
+}
+
 .icon-stack ion-icon.alerting {
     -webkit-animation: iconAlertRed 0.7s ease infinite;
     animation: iconAlertRed 0.7s ease infinite;
 }
+
+/* Pan Dropdown */
+
+.panning-dropdown {
+    position: absolute;
+    background-color: var(--color-accent-dark);
+    padding-top: 4px;
+    width: 96px;
+    height: 24px;
+    margin-top: 0;
+    margin-left: -34px;
+    text-align: center;
+    border-radius: 2px;
+    transition: all 0.25s ease;
+}
+
+.panning-dropdown.closed {
+    margin-top: -32px;
+    display: none;
+}
+
+.panning-dropdown .topcoat-range {
+    width: 75%;
+    height: 6px;
+    margin-top: 8px;
+    border-radius: 2px;
+}
+
+.panning-dropdown .topcoat-range::-webkit-slider-thumb {
+    height: 16px;
+    width: 8px;
+    border-radius: 2px;
+}
+
+.panning-dropdown #left-spkr-button.disabled ion-icon,
+.panning-dropdown #right-spkr-button.disabled ion-icon {
+    color: var(--color-accent-mid);
+}
+
 
 .radio-card a {
     text-decoration: none;
@@ -459,28 +506,6 @@ ion-icon {
     margin-bottom: 0;
     background-color: var(--color-accent-mid);
     border-radius: 0 0 6px 6px;
-}
-
-.panning-dropdown {
-    position: absolute;
-    background-color: var(--color-accent-dark);
-    padding-top: 4px;
-    width: 52px;
-    margin-top: 0;
-    margin-left: -16px;
-    text-align: center;
-    border-radius: 2px;
-    transition: all 0.25s ease;
-}
-
-.panning-dropdown.closed {
-    margin-top: -32px;
-    display: none;
-}
-
-.panning-dropdown #left-spkr-button.disabled ion-icon,
-.panning-dropdown #right-spkr-button.disabled ion-icon {
-    color: var(--color-accent-mid);
 }
 
 /********************************
