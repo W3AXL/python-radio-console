@@ -2,7 +2,7 @@
     Global Variables
 ***********************************************************************************/
 
-var version = "2.0.0"
+var version = "2.0.0";
 
 // Local user config variables (saved to cookie)
 var config = {
@@ -87,6 +87,9 @@ var disconnecting = false;
 function pageLoad() {
     console.log("Starting client runtime");
 
+    // Enable JQuery Tooltips
+    //$( document ).tooltip();
+
     // Populate version
     $("#navbar-version").html(version);
 
@@ -153,6 +156,7 @@ function radioConnected(idx) {
     $(`#radio${idx} .icon-connect`).removeClass('disconnected');
     $(`#radio${idx} .icon-connect`).removeClass('connecting');
     $(`#radio${idx} .icon-connect`).addClass('connected');
+    $(`#radio${idx} .icon-connect`).parent().prop('title','Connected, OK');
 }
 
 /**
@@ -325,12 +329,12 @@ function addRadioCard(id, name) {
                     <a href="#" onclick="showPanMenu(event, this)" class="enabled"><ion-icon name="headset-sharp" id="icon-panning"></ion-icon></a>
                         <div class="panning-dropdown closed">
                             <!-- Slider -->
-                            <input type="range" class="topcoat-range" class="radio-pan" min="-1" max="1" value="0" step="0.1" oninput="changePan(event, this)" ondblclick="centerPan(event, this)">
+                            <input type="range" class="topcoat-range" class="radio-pan" min="-1" max="1" value="0" step="0.1" onclick="stopClick(event, this)" oninput="changePan(event, this)" ondblclick="centerPan(event, this)">
                         </div>
                     <!-- Mute Button -->
                     <a href="#" onclick="toggleMute(event, this)" class="enabled"><ion-icon name="volume-high-sharp" id="icon-mute"></ion-icon></a>
                     <!-- Connection Icon -->
-                    <a href="#" onclick="connectButton(event, this)"><ion-icon name="wifi-sharp" class="icon-connect disconnected"></ion-icon></a>
+                    <a href="#" onclick="connectButton(event, this)" title="Disconnected"><ion-icon name="wifi-sharp" class="icon-connect disconnected"></ion-icon></a>
                 </div>
             </div>
             <div class="content">
@@ -348,6 +352,11 @@ function addRadioCard(id, name) {
     `;
 
     $("#main-layout").append(newCardHtml);
+}
+
+function stopClick(event, obj) {
+    event.stopPropagation();
+    event.preventDefault();
 }
 
 /**
@@ -616,12 +625,12 @@ function toggleMute(event, obj) {
     // Only do stuff if we have a socket connection
     if (radios[idx].wsConn != null) {
         // Change mute status
-        if (radios[idx].muted) {
+        if (radios[idx].status.muted) {
             console.log("Unmuting " + radioId);
             radios[idx].wsConn.send(
                 `{
                     "audioControl": {
-                        "command": "unmute",
+                        "command": "unmute"
                     }
                 }`
             )
@@ -630,7 +639,7 @@ function toggleMute(event, obj) {
             radios[idx].wsConn.send(
                 `{
                     "audioControl": {
-                        "command": "mute",
+                        "command": "mute"
                     }
                 }`
             )
@@ -1380,7 +1389,7 @@ function updateMute() {
             return;
         }
         // Mute if we're muted or not receiving, after the specified delay in rtc.rxLatency
-        if (radios[idx].muted || (radios[idx].status.state != 'Receiving')) {
+        if (radios[idx].status.muted || (radios[idx].status.state != 'Receiving')) {
             setTimeout(function() {
                 console.debug(`Muting audio for radio ${radios[idx].name}`);
                 radios[idx].audioSrc.muteNode.gain.setValueAtTime(0, audio.context.currentTime);
@@ -1415,7 +1424,9 @@ function closeAllPanMenus() {
  */
 function changePan(event, obj) {
     // Prevent from selecting the card
+    event.preventDefault();
     event.stopPropagation();
+    event.stopImmediatePropagation();
     // Get new value
     const newPan = $(obj).val();
     // Get radio ID and index
@@ -1458,6 +1469,7 @@ function centerPan(event, obj) {
     // Update radio connection icon
     $(`#radio${idx} .icon-connect`).removeClass('disconnected');
     $(`#radio${idx} .icon-connect`).addClass('connecting');
+    $(`#radio${idx} .icon-connect`).parent().prop('title','Connecting to daemon');
     // Create audio context if we haven't already
     if (audio.context == null) {
         startAudioDevices();
@@ -1632,6 +1644,7 @@ function handleSocketClose(event, idx) {
     $(`#radio${idx} .icon-connect`).removeClass('connected');
     $(`#radio${idx} .icon-connect`).removeClass('connecting');
     $(`#radio${idx} .icon-connect`).addClass('disconnected');
+    $(`#radio${idx} .icon-connect`).parent().prop('title','Disconnected');
     updateRadioCard(idx);
 }
 

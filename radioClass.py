@@ -167,6 +167,7 @@ class Radio():
         Set status of radio mute and update
         """
         self.muted = state
+        self.logger.logInfo("Muted radio {}".format(self.name))
         self.statusCallback()
 
     """-------------------------------------------------------------------------------
