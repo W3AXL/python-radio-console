@@ -8,6 +8,7 @@ import os
 import argparse
 import platform
 import threading
+import time
 #import time
 import json
 #import queue
@@ -57,6 +58,8 @@ import yappi
 
 # Memory profiling
 import tracemalloc
+import gc
+from pympler import summary, muppy
 
 # Config class (loaded from JSON)
 class Config():
@@ -90,6 +93,12 @@ webguiport = None
 noreset = False
 cpuProfiling = False
 memProfiling = False
+gcProfiling = False
+
+# Muppy tracker
+sumThread = None
+sumStop = False
+sumInterval = 300 # seconds
 
 # SSL globals
 certfile = 'certs/localhost.crt'
@@ -148,6 +157,9 @@ def addArguments():
     parser.add_argument("-vv","--verbose2", help="Debug verbosity in logging", action="store_true")
     parser.add_argument("-cp", "--cpu-profiling", help="Enable yappi CPU profiling", action="store_true")
     parser.add_argument("-mp","--memory-profiling", help="Enable memory profiling", action="store_true")
+    parser.add_argument("-gp","--garbage-profiling", help="Enable garbage collector debug", action="store_true")
+
+    return
 
 def parseArguments():
     
@@ -158,6 +170,7 @@ def parseArguments():
     global noreset
     global cpuProfiling
     global memProfiling
+    global gcProfiling
 
     # Parse the args
     args = parser.parse_args()
@@ -207,12 +220,17 @@ def parseArguments():
     if args.memory_profiling:
         memProfiling = True
 
+    if args.garbage_profiling:
+        gcProfiling = True
+
     # Make sure a config file was specified
     if not args.config:
         Logger.logWarn("No config file specified, exiting")
         exit(0)
     else:
         loadConfig(args.config)
+
+    return
 
 """-------------------------------------------------------------------------------
     Config Parsing Functions
@@ -268,6 +286,8 @@ def printRadios():
     print("        Tx Audio dev: {}".format(config.Radio.txDev))
     print("        Rx Audio dev: {}".format(config.Radio.rxDev))
 
+    return
+
 """-------------------------------------------------------------------------------
     Radio Functions
 -------------------------------------------------------------------------------"""
@@ -281,6 +301,8 @@ def connectRadio():
     # Connect
     config.Radio.connect(radioStatusUpdate, reset = not noreset)
 
+    return
+
 def radioStatusUpdate():
     """
     Status callback the radio interface calls when it has a new status
@@ -288,6 +310,8 @@ def radioStatusUpdate():
 
     # Add the message to the queue
     serverLoop.call_soon_threadsafe(messageQueue.put_nowait,"status")
+
+    return
 
 
 def setTransmit(transmit):
@@ -299,6 +323,8 @@ def setTransmit(transmit):
     """
     config.Radio.transmit(transmit)
 
+    return
+
 
 def changeChannel(down):
     """
@@ -309,6 +335,8 @@ def changeChannel(down):
     """
     config.Radio.changeChannel(down)
 
+    return
+
 def toggleSoftkey(softkeyidx):
     """
     Toggles softkey on radio
@@ -318,17 +346,23 @@ def toggleSoftkey(softkeyidx):
     """
     config.Radio.toggleSoftkey(softkeyidx)
 
+    return
+
 def leftArrow():
     """
     Presses left arrow button (for softkey scrolling)
     """
     config.Radio.leftArrow()
 
+    return
+
 def rightArrow():
     """
     Presses right arrow button (for softkey scrolling)
     """
     config.Radio.rightArrow()
+    
+    return
 
 def toggleMute(state):
     """
@@ -338,6 +372,8 @@ def toggleMute(state):
         state (bool): state of mute
     """
     config.Radio.setMute(state)
+
+    return
 
 def getRadioStatusJson():
     """
@@ -462,6 +498,8 @@ async def gotRtcOffer(offerObj):
 
     logger.logVerbose("done")
 
+    return
+
 async def stopRtc():
 
     global gotMicTrack
@@ -472,6 +510,8 @@ async def stopRtc():
         await rtcPeer.close()
     # Reset mic track variable
     gotMicTrack = False
+
+    return
 
 async def doRtcAnswer(offer):
     # Handle the received offer
@@ -492,6 +532,8 @@ async def doRtcAnswer(offer):
     logger.logVerbose(message.replace("\\r\\n", "\r\n"))
     messageQueue.put_nowait(message)
 
+    return
+
 """-------------------------------------------------------------------------------
     Sound Device Functions
 -------------------------------------------------------------------------------"""
@@ -505,6 +547,8 @@ def getSoundDevices():
     global outputs
     global hostapis
 
+    return
+
 def printSoundDevices():
     """
     Print queried sound devices
@@ -514,6 +558,8 @@ def printSoundDevices():
     logger.logInfo("Available input devices:")
     
     print()
+
+    return
 
 """-------------------------------------------------------------------------------
     Serial Port Functions
@@ -551,6 +597,8 @@ def getSerialDevices():
     for port in results:
         logger.logInfo("Port {}".format(port))
 
+    return
+
 
 """-------------------------------------------------------------------------------
     Websocket Server Functions
@@ -571,6 +619,8 @@ async def websocketHandler(websocket, path):
     )
     for task in pending:
         task.cancel()
+
+    return
     
 
 async def consumer_handler(websocket, path):
@@ -695,6 +745,8 @@ async def consumer_handler(websocket, path):
             asyncio.ensure_future(stopRtc(),loop=serverLoop)
             break
 
+    return
+
 
 async def producer_hander(websocket, path):
     """
@@ -730,20 +782,7 @@ async def producer_hander(websocket, path):
             # The consumer handler will already cover this
             break
 
-
-class httpServerHandler(http.server.SimpleHTTPRequestHandler):
-    """
-    Main handler for https server hosting the web gui
-    """
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, directory="console-client", **kwargs)
-
-    def log_message(self, format, *args):
-        """
-        Surpress log messages for GET/POST requests
-        """
-        return
+    return
 
 def startServer():
     """
@@ -836,6 +875,35 @@ def twosCompliment(int_numb):
     mask ^= ( 1<<msb )-1
     return int_numb^mask
 
+def dump_garbage():
+    """
+    Show garbage collector statistics (for memory leak debugging)
+    """
+    # Force collection
+    logger.logInfo("\nGARBAGE:")
+    gc.collect()
+
+    logger.logInfo("\nGARBAGE OBJECTS:")
+    for x in gc.garbage:
+        s = str(x)
+        if len(s) > 80: s = s[:77]+'...'
+        logger.logInfo("{}: {}".format(type(x),s))
+
+    return
+
+def getSummary():
+    """
+    Periodic pympler memory summary thread
+    """
+    global sumTracker
+    global sumStop
+
+    while not sumStop:
+        logger.logInfo("Periodic memory summary")
+        sum = summary.summarize(muppy.get_objects())
+        summary.print_(sum)
+        time.sleep(sumInterval)
+
 """-------------------------------------------------------------------------------
     Main Runtime
 -------------------------------------------------------------------------------"""
@@ -843,6 +911,8 @@ def twosCompliment(int_numb):
 if __name__ == "__main__":
     
     try:
+        # Enable garbage collector
+        gc.enable()
 
         # Enable AIORTC debug
         logging.basicConfig(level=logging.ERROR)
@@ -868,6 +938,15 @@ if __name__ == "__main__":
         if memProfiling:
             logger.logInfo("Memory profiling enabled")
             tracemalloc.start(10)
+            # Start tracking with muppy
+            #logger.logInfo("Starting memory summary thread")
+            #sumThread = threading.Thread(target=getSummary)
+            #sumThread.start()
+
+        # Start Garbage Collector Debug
+        if gcProfiling:
+            logger.logInfo("Garbage collector profiling enabled")
+            gc.set_debug(gc.DEBUG_LEAK)
 
         # Get sound devices
         getSoundDevices()
@@ -898,6 +977,16 @@ if __name__ == "__main__":
             logger.logInfo("[ Top 10 Memory Users ")
             for stat in top_stats[:10]:
                 logger.logInfo(stat)
+            # Print final diff
+            #sumStop = True
+            logger.logInfo("Final memory summary")
+            sum = summary.summarize(muppy.get_objects())
+            summary.print_(sum)
+
+        # Print Garbage Statistics
+        if gcProfiling:
+            logger.logInfo("Garbage collector statistics:")
+            dump_garbage()
 
         # Stop RTC
         asyncio.ensure_future(stopRtc(),loop=serverLoop)
