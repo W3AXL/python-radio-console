@@ -104,9 +104,9 @@ sumInterval = 300 # seconds
 certfile = 'certs/localhost.crt'
 keyfile = 'certs/localhost.key'
 
-# Websocket server and event loop
-server = None
-serverLoop = None
+# Asyncio routines and event loop
+wsServer = None
+eventLoop = None
 
 # WebRTC variables
 rtcPeer = None
@@ -309,7 +309,7 @@ def radioStatusUpdate():
     """
 
     # Add the message to the queue
-    serverLoop.call_soon_threadsafe(messageQueue.put_nowait,"status")
+    eventLoop.call_soon_threadsafe(messageQueue.put_nowait,"status")
 
     return
 
@@ -632,16 +632,19 @@ async def consumer_handler(websocket, path):
         path (path): not sure what this does, we don't use it
     """
 
-    while True:
-        try:
-            # Wait for data
-            data = await websocket.recv()
+    
+    try:
+        # Old way - just a while True infinite loop
+        #while True:
+
+        # New way - proper asyncio consumer per documentation
+        async for msg in websocket:
 
             # Try and convert the recieved data to JSON and warn on fail
             try:
-                cmdObject = json.loads(data)
+                cmdObject = json.loads(msg)
             except ValueError as e:
-                logger.logWarn("Invalid data recieved from client, {}\nData: {}".format(e.args[0], data))
+                logger.logWarn("Invalid data recieved from client, {}\nData: {}".format(e.args[0], msg))
                 continue
 
             # Iterate through the received command keys (there should only ever be one, but it's possible to recieve multiple)
@@ -738,14 +741,12 @@ async def consumer_handler(websocket, path):
                     # Send NACK
                     await messageQueue.put('NACK')
 
-        # Handle connection closing event (stop audio devices)
-        except websockets.exceptions.ConnectionClosed:
-            logger.logWarn("Client disconnected!")
-            # stop sound devices and exit
-            asyncio.ensure_future(stopRtc(),loop=serverLoop)
-            break
-
-    return
+    # Handle connection closing event (stop audio devices)
+    except websockets.exceptions.ConnectionClosed:
+        logger.logWarn("Client disconnected!")
+        # stop sound devices and exit
+        asyncio.ensure_future(stopRtc(),loop=eventLoop)
+        return
 
 
 async def producer_hander(websocket, path):
@@ -756,8 +757,9 @@ async def producer_hander(websocket, path):
         websocket (websocket): socket object
         path (path): still not sure what this does
     """
-    while True:
-        try:
+    
+    try:
+        while True:
             # Wait for new data in queue
             message = await messageQueue.get()
 
@@ -778,19 +780,17 @@ async def producer_hander(websocket, path):
                 logger.logWarn("invalid command received from {}".format(websocket.remote_address[0]))
                 await websocket.send('{{"nack": {{ }} }}')
         
-        except websockets.exceptions.ConnectionClosed:
-            # The consumer handler will already cover this
-            break
+    except websockets.exceptions.ConnectionClosed:
+        # The consumer handler should already cover this
+        return
 
-    return
-
-def startServer():
+def startWsServer():
     """
-    Start the websocket server and the http web gui server
+    Start the websocket server
     """
 
-    global server
-    global serverLoop
+    global wsServer
+    global eventLoop
     global config
 
     logger.logInfo("Starting websocket server on address {}, port {}".format(address, serverport))
@@ -798,22 +798,10 @@ def startServer():
     ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     ssl_context.load_cert_chain(certfile, keyfile)
     # create server object
-    server = websockets.serve(websocketHandler, address, serverport, ssl=ssl_context)
-    # start server async loop
-    serverLoop = asyncio.get_event_loop()
-    serverLoop.run_until_complete(server)
-
-    # create TLS-secured HTTPServer
-    """logger.logInfo("Starting web GUI server on address {}, port {}".format(address, webguiport))
-    httpServer = http.server.HTTPServer((address, webguiport), httpServerHandler)
-    httpServer.socket = ssl.wrap_socket(httpServer.socket,
-                                 server_side=True,
-                                 certfile=certfile,
-                                 keyfile=keyfile,
-                                 ssl_version=ssl.PROTOCOL_TLS)
-    # start thread for HTTPS server
-    httpThread = threading.Thread(target=httpServer.serve_forever, daemon=True)
-    httpThread.start()"""
+    wsServer = websockets.serve(websocketHandler, address, serverport, ssl=ssl_context)
+    # add websocket server to event loop
+    eventLoop.run_until_complete(wsServer)
+    #asyncio.run(wsServer)
 
 """-------------------------------------------------------------------------------
     Utility Functions
@@ -917,6 +905,9 @@ if __name__ == "__main__":
         # Enable AIORTC debug
         logging.basicConfig(level=logging.ERROR)
 
+        # Get asyncio event loop
+        eventLoop = asyncio.get_event_loop()
+
         # get & print OS
         if os.name == 'nt':
             ffmpegFormat = 'dshow'
@@ -955,12 +946,14 @@ if __name__ == "__main__":
         printRadios()
 
         # Start server
-        startServer()
+        startWsServer()
 
         # Connect to radio
         connectRadio()
 
-        serverLoop.run_forever()
+        # Start asyncio event loop
+        logger.logInfo("Starting main event loop")
+        eventLoop.run_forever()
 
     except KeyboardInterrupt:
         logger.logWarn("Caught KeyboardInterrupt, shutting down")
@@ -989,22 +982,15 @@ if __name__ == "__main__":
             dump_garbage()
 
         # Stop RTC
-        asyncio.ensure_future(stopRtc(),loop=serverLoop)
+        asyncio.ensure_future(stopRtc(),loop=eventLoop)
 
         # Disconnect radio if connected
         if config.Radio.state != RadioState.Disconnected:
             config.Radio.disconnect()
             logger.logVerbose("Radio {} disconnected".format(config.Radio.name))
 
-        # Shutdown all asyncio tasks
-        try:
-            loop = asyncio.get_running_loop()
-            pending = asyncio.all_tasks()
-            loop.run_until_complete(asyncio.gather(*pending))
-            loop.stop()
-            logger.logVerbose("Server loop stopped")
-        except RuntimeError:
-            logger.logVerbose("Server loop was not running")
+        eventLoop.stop()
+        logger.logVerbose("Event loop stopped")
 
         logger.logInfo("Server shutdown complete")
 

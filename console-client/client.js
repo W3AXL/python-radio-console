@@ -30,6 +30,7 @@ var audio = {
     // Input device, stream, meter, etc
     input: null,
     inputStream: null,
+    inputTrack: null,
     inputAnalyzer: null,
     inputPcmData: null,
     inputMeter: document.getElementById("meter-mic"),
@@ -502,7 +503,12 @@ function startPtt() {
     if (!pttActive && selectedRadio) {
         console.log("Starting PTT on " + selectedRadio);
         pttActive = true;
-        playSound("sound-tx-granted");
+        // Play selected TPT
+        if (config.tpt == "kw") {
+            playSound("sound-tpt-kw");
+        } else {
+            playSound("sound-tpt-mot");
+        }
         // Only send the TX command if we have a valid socket
         if (radios[selectedRadioIdx].wsConn) {
             radios[selectedRadioIdx].wsConn.send(
@@ -537,7 +543,8 @@ function stopPtt() {
                             "options": null
                         }
                     }`
-                )
+                );
+                playSound("sound-tx-end");
             }, rtcConf.txLatency);
         }
     }
@@ -790,11 +797,13 @@ function saveClientConfig() {
     const timeFormat = $("#client-timeformat").val();
     const rxAgc = $("#client-rxagc").is(":checked");
     const unselectedVol = $("#unselected-vol").val();
+    const talkPermitTone = $("#tpt-tone").val();
     const audioInput = $("#audio-input").val();
     const audioOutput = $("#audio-output").val();
 
     // Set config
     config.timeFormat = timeFormat;
+    config.tpt = talkPermitTone;
     config.audio.rxAgc = rxAgc;
     config.audio.unselectedVol = parseFloat(unselectedVol);
     config.audio.input = audioInput;
@@ -837,6 +846,7 @@ function readUserConfig() {
         // Update client popup values
         $("#client-timeformat").val(config.timeFormat);
         $("#client-rxagc").prop("checked", config.audio.rxAgc);
+        $(`#tpt-tone option[value=${config.tpt}]`).attr('selected', 'selected');
         $(`#unselected-vol option[value=${config.audio.unselectedVol}]`).attr('selected', 'selected');
         $(`#audio-input option[value=${config.audio.input}]`).attr('selected', 'selected');
         $(`#audio-output option[value=${config.audio.output}]`).attr('selected', 'selected');
@@ -921,7 +931,12 @@ function startWebRtc(idx) {
     // Open the microphone
     if (navigator.getUserMedia) {
         // Get the microphone
-        navigator.getUserMedia({audio:true},
+
+        // Old, deprecated way
+        //navigator.getUserMedia({audio:true},
+
+        // New, better (?) way
+        navigator.mediaDevices.getUserMedia({audio:true}).then(
             // Add tracks to peer connection and negotiate if successful
             function(stream) {
                 // Set up mic meter dependecies
@@ -929,6 +944,13 @@ function startWebRtc(idx) {
                 audio.inputAnalyzer = audio.context.createAnalyser();
                 audio.inputPcmData = new Float32Array(audio.inputAnalyzer.fftSize);
                 audio.inputStream.connect(audio.inputAnalyzer);
+                // Get the first available track for the mic
+                audio.inputTrack = stream.getTracks()[0];
+                // Add a listener for when the mic track ends (happens occasionally, not sure why)
+                audio.inputTrack.addEventListener("ended", () => {
+                    alert('Mic track ended, please reconnect');
+                    stopWebRtc();
+                })
                 // Add the first available mic track to the peer connection
                 radios[idx].rtc.peer.addTrack(stream.getTracks()[0]);
                 // Create and send the WebRTC offer
@@ -952,6 +974,12 @@ function startWebRtc(idx) {
  * @returns 
  */
 function stopWebRtc(idx) {
+    // Return if there was never a peer connection to begin with
+    if (!radios[idx].rtc.hasOwnProperty('peer')) {
+        console.log("No peer connection created");
+        return
+    }
+
     // Return if stuff is already closed
     if (radios[idx].rtc.peer.connectionState == "closed") {
         console.log("RTC peer connection already closed");
@@ -1631,6 +1659,7 @@ function recvSocketMessage(event, idx) {
 function handleSocketClose(event, idx) {
     // Console warning
     console.warn(`Websocket connection closed to ${radios[idx].name}`);
+    console.debug(event);
     if (event.data) {console.warn(event.data);}
 
     // Cleanup
@@ -1653,7 +1682,8 @@ function handleSocketClose(event, idx) {
  * @param {event} event 
  */
 function handleSocketError(event, idx) {
-    console.error(`Websocket connection error for radio ${radios[idx].name}: ` + event.data);
+    console.error(`Websocket connection error for radio ${radios[idx].name}`);
+    console.debug(event);
     //window.alert("Server connection errror: " + event.data);
 }
 

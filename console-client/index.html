@@ -313,9 +313,22 @@
                             <select id="unselected-vol">
                                 <option value=0 selected="selected">0 dB</option>
                                 <option value=-3>-3 dB</option>
+                                <option value=-6>-6 dB</option>
                                 <option value=-9>-9 dB</option>
                                 <option value=-12>-12 dB</option>
                                 <option value=-100>Muted</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <!-- TPT Tone Selection -->
+                    <tr>
+                        <td width="33%">
+                            <h3>Talk Permit Tone</h3>
+                        </td>
+                        <td width="67%">
+                            <select id="tpt-tone">
+                                <option value="mot" selected="selected">Motorola</option>
+                                <option value="kw">Kenwood</option>
                             </select>
                         </td>
                     </tr>
@@ -331,7 +344,9 @@
         </div>
 
         <!-- Sound Files -->
-        <audio src="sound/tx_granted.wav" id="sound-tx-granted" autostart="false" autostart="0"></audio>
+        <audio src="sound/tx_tpt_mot.wav" id="sound-tpt-mot" autostart="false" autostart="0"></audio>
+        <audio src="sound/tx_tpt_kw.wav" id="sound-tpt-kw" autostart="false" autostart="0"></audio>
+        <audio src="sound/tx_end.wav" id="sound-tx-end" autostart="false" autostart="0"></audio>
 
         <!-- Icon Script -->
         <script type="module" src="https://unpkg.com/ionicons@5.5.2/dist/ionicons/ionicons.esm.js"></script>
