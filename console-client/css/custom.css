@@ -85,6 +85,8 @@ body {
 /* Disable ion icon tooltips */
 ion-icon {
     pointer-events :none;
+    fill: currentColor;
+    stroke: currentColor;
 }
 
 /********************************
@@ -384,7 +386,7 @@ ion-icon {
 }
 
 .radio-card.selected .selected-tab {
-    background-color: var(--color-alert-light);
+    background-color: var(--color-alert-light2);
     opacity: 1;
 }
 
@@ -433,8 +435,8 @@ ion-icon {
 }
 
 /* Hover highlight */
-.radio-card:hover .header,
-.radio-card:hover .content {
+.radio-card:hover:not(.disconnected) .header,
+.radio-card:hover:not(.disconnected) .content {
     box-shadow: inset 0 0 100px 100px rgba(255,255,255,0.03);
 }
 
@@ -460,12 +462,14 @@ ion-icon {
 .radio-card .icon-stack {
     height: 100%;
     margin-left: auto;
-    margin-right: 4px;
-    font-size: 20px;
+    font-size: 18px;
+    display: flex;
+    align-items: center;
 }
 
 .radio-card .icon-stack a {
-    margin-left: 4px;
+    width: 24px;
+    display: inline-flex;
 }
 
 .icon-stack ion-icon {
@@ -501,20 +505,37 @@ ion-icon {
 
 .panning-dropdown {
     position: absolute;
-    background-color: var(--color-accent-dark);
     padding-top: 4px;
     width: 96px;
     height: 24px;
-    margin-top: 0;
-    margin-left: -34px;
+    margin-top: 58px;
+    margin-left: -38px;
     text-align: center;
     border-radius: 2px;
     transition: all 0.25s ease;
+    opacity: 1;
+    z-index: 1;
+}
+
+/* Dynamic dropdown color */
+.radio-card.red .panning-dropdown {
+    background-color: var(--color-card-midred);
+}
+.radio-card.amber .panning-dropdown {
+    background-color: var(--color-card-midamber);
+}
+.radio-card.green .panning-dropdown {
+    background-color: var(--color-card-midgreen);
+}
+.radio-card.blue .panning-dropdown {
+    background-color: var(--color-card-midblue);
+}
+.radio-card.purple .panning-dropdown {
+    background-color: var(--color-card-midpurple);
 }
 
 .panning-dropdown.closed {
-    margin-top: -32px;
-    display: none;
+    opacity: 0;
 }
 
 .panning-dropdown .topcoat-range {
@@ -550,7 +571,7 @@ ion-icon {
     top: 32px;
     left: 2px;
     box-sizing: border-box;
-    padding-top: 8px;
+    padding-top: 4px;
     padding-left: 8px;
     clip-path: polygon(0 0, 100% 0, 100% 77%, 93% 100%, 0 100%);
 }
@@ -598,28 +619,54 @@ ion-icon {
     font-family: "Iosevka Bold";
     font-size: 32px;
     color: #FFF;
+    margin-top: -4px;
 }
 
 /* Bottom EQ Bars */
 
 .radio-card .audio-bar {
     height: 12px;
-    position: absolute;
-    top: 72px;
+    margin-top: 4px;
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.radio-card .audio-bar .audio-eq {
+    display: flex;
+    align-items: center;
+    margin-right: 8px;
 }
 
 .radio-card .audio-bar .eq-frame {
-    position: absolute;
-    top: 4px;
+    display: inline-flex;
+    margin-left: 4px;
     height: 4px;
-    width: 90px;
+    width: 100px;
     background-color: var(--color-bg-dark);
 }
 
 .radio-card .audio-bar .eq-frame .eq-bar {
+    width: 0;
     height: 100%;
-    width: 50%;
     background-color: var(--color-alert-green-light);
+}
+
+/* Dynamic Icon Color */
+.radio-card.red .audio-bar {
+    color: var(--color-card-midred);
+}
+.radio-card.amber .audio-bar {
+    color: var(--color-card-midamber);
+}
+.radio-card.green .audio-bar {
+    color: var(--color-card-midgreen);
+}
+.radio-card.blue .audio-bar {
+    color: var(--color-card-midblue);
+}
+.radio-card.purple .audio-bar {
+    color: var(--color-card-midpurple);
 }
 
 /********************************
@@ -645,12 +692,13 @@ ion-icon {
 
 #radio-controls .btn-bar {
     font-size: 0;
+    display: flex;
 }
 
 #radio-controls .btn {
     display: inline-flex;
-    width: 80px;
     height: 40px;
+    color: var(--color-txt-mid);
     background-color: var(--color-btn-normal);
     font-family: "Iosevka Extended Bold";
     font-size: 22px;
@@ -660,24 +708,39 @@ ion-icon {
     user-select: none;
 }
 
-#radio-controls .btn.pressed {
+#radio-controls .softkey {
+    width: 80px;
+}
+
+#radio-controls #leftarrow,
+#radio-controls #rightarrow {
+    width: 40px;
+}
+
+#radio-controls .btn.pressed,
+#leftarrow.pressed,
+#rightarrow.pressed {
+    color: var(--color-txt-light);
     background-color: var(--color-btn-pressed);
 }
 
-#radio-controls .btn:disabled {
-    opacity: 0.75;
+#radio-controls .btn.disabled {
+    opacity: 0.5;
 }
 
-#radio-controls .btn:hover {
+#radio-controls .btn:hover:not(.disabled),
+#leftarrow:hover:not(.disabled),
+#rightarrow:hover:not(.disabled) {
     box-shadow: inset 0 0 100px 100px rgba(255,255,255,0.05);
 }
 
-#radio-controls .softkey-text {
-    color: var(--color-txt-mid);
+#leftarrow {
+    clip-path: polygon(25% 0, 100% 0, 100% 100%, 0 100%, 0 25%);
+    margin-right: -1px;
 }
 
-#radio-controls .btn.pressed {
-    color: var(--color-txt-light);
+#rightarrow {
+    clip-path: polygon(0 0, 100% 0, 100% 75%, 75% 100%, 0 100%);
 }
 
 #chan-btns {
@@ -686,10 +749,12 @@ ion-icon {
 
 #chan-up {
     clip-path: polygon(15% 0, 100% 0, 100% 100%, 0 100%, 0 30%);
+    width: 80px;
 }
 
 #chan-down {
     clip-path: polygon(0 0, 100% 0, 100% 70%, 85% 100%, 0 100%);
+    width: 80px;
 }
 
 #ptt-btn {
@@ -700,6 +765,7 @@ ion-icon {
     background-color: var(--color-card-midred) !important;
     color: var(--color-card-lightred);
     clip-path: polygon(15% 0, 100% 0, 100% 70%, 85% 100%, 0 100%, 0 30%);
+    width: 80px;
 }
 
 #ptt.pressed {

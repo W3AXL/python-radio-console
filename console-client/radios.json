@@ -3,12 +3,14 @@
         {
             "name": "Rack VHF XTL",
             "address": "radioconsole.w3axl.com",
-            "port": 9501
+            "port": 9501,
+            "color": "blue"
         },
         {
             "name": "Rack UHF XTL",
             "address": "radioconsole.w3axl.com",
-            "port": 9502
+            "port": 9502,
+            "color": "green"
         }
     ]
 }

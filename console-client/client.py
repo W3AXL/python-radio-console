@@ -81,7 +81,9 @@ class httpServerHandler(http.server.SimpleHTTPRequestHandler):
         """
         Surpress log messages for GET/POST requests
         """
-    #    return
+    def end_headers(self):
+        self.send_header('Access-Control-Allow-Origin', '*')
+        http.server.SimpleHTTPRequestHandler.end_headers(self)
 
 if __name__ == "__main__":
     """

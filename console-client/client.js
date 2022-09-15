@@ -60,7 +60,13 @@ var rtcConf = {
     txLatency: 400
 }
 
-testInput = null,
+testInput = null;
+
+// Radio Card Tempalte
+const radioCardTemplate = document.querySelector('#card-template');
+
+// Radio JSON validation
+const validColors = ["red","amber","green","blue","purple"];
 
 /***********************************************************************************
     State variables
@@ -110,18 +116,6 @@ function pageLoad() {
     // Setup clock timer
     setInterval(updateClock, 100);
 
-    // Populate radio cards
-    populateRadios();
-
-    // Connect and load if autoconnect is true
-    if (config.serverAutoConn) {
-        //connect()
-    }
-
-    // Bind body click to deselecting radios
-    //$("#body").click(function () {
-    //    deselectRadios();
-    //});
 }
 
 /**
@@ -292,7 +286,7 @@ function populateRadios() {
     radios.forEach((radio, index) => {
         console.log("Adding radio " + radio.name);
         // Add the radio card
-        addRadioCard("radio" + String(index), radio.name);
+        addRadioCard("radio" + String(index), radio.name, radio.color);
         // Populate its text
         updateRadioCard(index);
     });
@@ -317,8 +311,8 @@ function clearRadios() {
  * @param {string} id ID of the card element
  * @param {string} name Name to display in header
  */
-function addRadioCard(id, name) {
-    var newCardHtml = `
+function addRadioCard(id, name, color) {
+    /*var newCardHtml = `
         <div class="radio-card disconnected" id="${id}">
             <div class="header">
                 <div class="selected-icon">
@@ -350,9 +344,15 @@ function addRadioCard(id, name) {
             </div>
             <div class="footer"></div>
         </div>
-    `;
+    `;*/
 
-    $("#main-layout").append(newCardHtml);
+    // New, much easier way to add new cards
+    var newCard = radioCardTemplate.content.cloneNode(true);
+    newCard.querySelector(".radio-card").classList.add(color);
+    newCard.querySelector(".radio-card").id = id;
+    newCard.querySelector(".radio-card .header h2").textContent = name;
+
+    $("#main-layout").append(newCard);
 }
 
 function stopClick(event, obj) {
@@ -389,7 +389,7 @@ function updateRadioCard(idx) {
 
     // Update text boxes
     radioCard.find("#channel-text").html(radio.status.chan);
-    radioCard.find("#id-text").html(radio.status.lastid);
+    radioCard.find("#zone-text").html(radio.status.zone);
 
     // Remove all current classes
     setTimeout(function() {
@@ -444,31 +444,25 @@ function updateRadioControls() {
         var radio = radios[selectedRadioIdx];
         // If the radio is disconnected, don't enable the controls
         if (radio.status.state == "Disconnected") { return }
-        // Populate text
-        $("#selected-zone-text").html(radio.status.zone);
-        $("#selected-chan-text").html(radio.status.chan);
         // Enable softkeys
-        $("#radio-controls button").prop("disabled", false);
+        $("#radio-controls .btn").removeClass("disabled");
         // Get softkey text
         radio.status.softkeys.forEach(function(keytext, index) {
-            $(`#softkey${index+1} .softkey`).html(keytext);
+            $(`#softkey${index+1} .btn-text`).html(keytext);
         });
         // Set softkeys on/off
         radio.status.softkeyStates.forEach(function(state, index) {
-            if (state) { $(`#softkey${index+1}`).addClass("button-active") } else { $(`#softkey${index+1}`).removeClass("button-active") }
+            if (state) { $(`#softkey${index+1}`).addClass("pressed") } else { $(`#softkey${index+1}`).removeClass("pressed") }
         });
     
         // Clear if we don't
     } else {
-        // Clear text
-        $("#selected-zone-text").html("");
-        $("#selected-chan-text").html("");
         for (i=0; i<6; i++) {
-            $(`#softkey${i+1} .softkey`).html("");
+            $(`#softkey${i+1} .btn-text`).html("");
         }
         // Disable softkeys
-        $("#radio-controls button").prop('disabled', true);
-        $("#radio-controls button").removeClass("button-active");
+        $("#radio-controls .btn").addClass("disabled");
+        $("#radio-controls .btn").removeClass("pressed");
     }
 }
 
@@ -873,11 +867,16 @@ function readRadioConfig() {
         type: 'GET',
         url: './radios.json',
         dataType: 'json',
-        success: function(data) {radioJson = data;},
-        async: false
+        success: gotRadioConfig,
+        error: function(obj, status, error) {alert(`Failed to read radios.json: ${error}`);console.error(`${status}: ${error}`);},
+        async: true,
+        timeout: 100
     });
-    // Parse to the main radio list
-    console.debug('Got radios from radios.json');
+}
+
+function gotRadioConfig(data, status, obj) {
+    console.debug(`Successfully read radios.json, status: ${status}`);
+    radioJson = data;
     console.debug(radioJson['RadioList']);
     radios = radioJson['RadioList'];
     // Populate default values (this map function adds the key,value pairs to every item in the list)
@@ -890,6 +889,23 @@ function readRadioConfig() {
         wsConn: null,
         audioSrc: null,
     }));
+
+    // Validate Input
+    radios.forEach((radio, idx) => {
+        // Validate Color
+        if (!validColors.includes(radios[idx].color)) {
+            console.warn(`Color ${radios[idx].color} not valid, defaulting to blue`);
+            radios[idx].color = "blue";
+        }
+    });
+
+    // Populate radio cards
+    populateRadios();
+
+    // Connect and load if autoconnect is true
+    if (config.serverAutoConn) {
+        //connect()
+    }
 }
 
 /***********************************************************************************
@@ -988,7 +1004,8 @@ function stopWebRtc(idx) {
 
     // Close any active peer transceivers
     if (radios[idx].rtc.peer.getTransceivers) {
-        radios[idx].rtc.peer.getTransceivers().forEach(function(tx) {
+        radios[idx].rtc.peer.getTransceivers().forEach(function(tx, idx) {
+            console.debug(`Stopping RTC txcvr ${idx}`);
             if (tx.stop) {
                 tx.stop();
             }
@@ -996,13 +1013,16 @@ function stopWebRtc(idx) {
     }
 
     // Close any local audio
-    radios[idx].rtc.peer.getSenders().forEach(function(sender) {
+    radios[idx].rtc.peer.getSenders().forEach(function(sender, idx) {
+        console.debug(`Stopping RTC sender ${idx}`);
         sender.track.stop();
     });
 
     // Close peer connection
     setTimeout(function() {
+        console.debug("Closing peer connection");
         radios[idx].rtc.peer.close();
+        radios[idx].audioSrc = null;
     }, 500);
 }
 
@@ -1079,9 +1099,14 @@ function createPeerConnection(idx) {
                 gainNode: audio.context.createGain(),
                 muteNode: audio.context.createGain(),
                 panNode: audio.context.createStereoPanner(),
+                analyzerNode: audio.context.createAnalyser(),
                 leftSpkr: true,
                 rightSpkr: true
             }
+            // Create this afterwards because we need the value from the above node
+            newSource.analyzerData = new Float32Array(newSource.analyzerNode.fftSize);
+
+            // Create analyzer for RX meter
 
             // Setup AGC node
             newSource.agcNode.knee.setValueAtTime(audio.agcKnee, audio.context.currentTime);
@@ -1093,10 +1118,10 @@ function createPeerConnection(idx) {
             newSource.audioNode.connect(newSource.agcNode);
             newSource.agcNode.connect(newSource.makeupNode);
             newSource.makeupNode.connect(newSource.gainNode);
+            newSource.makeupNode.connect(newSource.analyzerNode);
             newSource.gainNode.connect(newSource.muteNode);
             newSource.muteNode.connect(newSource.panNode);
             newSource.panNode.connect(audio.outputGain);
-            newSource.panNode.connect(audio.outputAnalyzer);
 
             console.debug(`New source ID: ${newSource.audioNode.id}`);
 
@@ -1320,22 +1345,34 @@ function startAudioDevices() {
  * Updates audio meters based on current data. Only called after both mic & speaker are set up and running (otherwise errors)
  */
 function audioMeterCallback() {
-    // Get data from speaker & mic
-    audio.outputAnalyzer.getFloatTimeDomainData(audio.outputPcmData);
-    audio.inputAnalyzer.getFloatTimeDomainData(audio.inputPcmData);
+    // Per-Radio RX Level Bar
+    radios.forEach((radio, idx) => {
+        // Ignore radios with no connected audio
+        if (radios[idx].audioSrc == null) {
+            return
+        }
+        // Get data
+        radios[idx].audioSrc.analyzerNode.getFloatTimeDomainData(radios[idx].audioSrc.analyzerData);
+        // Process into average amplitude
+        var sumSquares = 0.0;
+        for (const amplitude of radios[idx].audioSrc.analyzerData) { sumSquares += amplitude * amplitude; }
+        // We calculate the geometric mean of these samples, and then multiply by an experimentally-found value to get approximately 0-100% scaling
+        const newPct = String(Math.sqrt(sumSquares / radios[idx].audioSrc.analyzerData.length).toFixed(2) * 300);
+        $(`.radio-card#radio${idx} #rx-bar`).width(newPct);
+    });
 
-    // Output meter
-    let sumSquares = 0.0;
-    for (const amplitude of audio.outputPcmData) { sumSquares += amplitude * amplitude; }
-    audio.outputMeter.value = Math.sqrt(sumSquares / audio.outputPcmData.length);
+    // Get data from mic
+    audio.inputAnalyzer.getFloatTimeDomainData(audio.inputPcmData);
 
     // Input meter (only show when PTT)
     if (pttActive) {
         sumSquares = 0.0;
         for (const amplitude of audio.inputPcmData) { sumSquares += amplitude * amplitude; }
-        audio.inputMeter.value = Math.sqrt(sumSquares / audio.outputPcmData.length);
+        const newPct = String(Math.sqrt(sumSquares / audio.outputPcmData.length).toFixed(2) * 300);
+        // Apply to selected radio only
+        $(`.radio-card#radio${selectedRadioIdx} #tx-bar`).width(newPct);
     } else {
-        audio.inputMeter.value = 0.0;
+        $(`.radio-card#radio${selectedRadioIdx} #tx-bar`).width('0');
     }
 
     window.requestAnimationFrame(audioMeterCallback);
@@ -1437,7 +1474,12 @@ function updateMute() {
  * @param {object} obj 
  */
 function showPanMenu(event, obj) {
-    $(obj).closest(".radio-card").find(".panning-dropdown").toggleClass("closed");
+    const radioCard = $(obj).closest(".radio-card");
+    if (radioCard.hasClass("disconnected")) {
+        console.debug("Radio disconnected, not showing pan menu");
+    } else {
+        $(obj).closest(".radio-card").find(".panning-dropdown").toggleClass("closed");
+    }
     event.stopPropagation();
 }
 

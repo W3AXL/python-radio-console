@@ -59,8 +59,8 @@
                 <input type="range" class="topcoat-range" id="console-volume" value="75" oninput="changeVolume()" disabled>
             </div>
 
-            <!-- Mic & Speaker Volume Meters -->
-            <div id="navbar-meters" class="navbar-item">
+            <!-- Mic & Speaker Volume Meters (deprecated in version 2) -->
+            <!--<div id="navbar-meters" class="navbar-item">
                 <div class="meter-container">
                     <ion-icon name="mic-sharp"></ion-icon>
                     <meter id="meter-mic" min="0" max="0.4" high="0.3"></meter>
@@ -69,7 +69,7 @@
                     <ion-icon name="volume-off-sharp"></ion-icon>
                     <meter id="meter-spkr" min="0" max="0.4" high="0.3"></meter>
                 </div>
-            </div>
+            </div>-->
 
             <!-- Clear Float -->
             <br class="navbar-clear" />
@@ -104,110 +104,50 @@
             <!-- Main Layout for Radio Entries -->
             <div id="main-layout">
 
-                <!-- Placeholder radio card for development -->
-                <div class="radio-card blue">
-                    <div class="card">
-                        <div class="selected-tab"></div>
-                        <!-- Header -->
-                        <div class="header">
-                            <h2>Placeholder Name</h2>
-                            <div class="icon-stack">
-                                <!-- Pan Dropdown -->
-                                <a href="#" onclick="showPanMenu(event, this)" class="enabled"><ion-icon name="headset-sharp" id="icon-panning"></ion-icon></a>
-                                    <div class="panning-dropdown closed">
-                                        <!- - Slider - ->
-                                        <input type="range" class="topcoat-range" class="radio-pan" min="-1" max="1" value="0" step="0.1" onclick="stopClick(event, this)" oninput="changePan(event, this)" ondblclick="centerPan(event, this)">
-                                    </div>
-                                <!-- Mute Button -->
-                                <a href="#" onclick="toggleMute(event, this)" class="enabled"><ion-icon name="volume-high-sharp" id="icon-mute"></ion-icon></a>
-                                <!-- Connection Icon -->
-                                <a href="#" onclick="connectButton(event, this)" title="Disconnected"><ion-icon name="wifi-sharp" class="icon-connect disconnected"></ion-icon></a>
+                <!-- Placeholder radio card for development  -->
+                <template id="card-template">
+                    <div class="radio-card disconnected">
+                        <div class="card">
+                            <div class="selected-tab"></div>
+                            <!-- Header -->
+                            <div class="header">
+                                <h2>Placeholder Name</h2>
+                                <div class="icon-stack">
+                                    <!-- Pan Dropdown -->
+                                    <a href="#" onclick="showPanMenu(event, this)" class="enabled"><ion-icon name="headset-sharp" id="icon-panning"></ion-icon></a>
+                                        <div class="panning-dropdown closed">
+                                            <!-- Slider -->
+                                            <input type="range" class="topcoat-range" class="radio-pan" min="-1" max="1" value="0" step="0.1" onclick="stopClick(event, this)" oninput="changePan(event, this)" ondblclick="centerPan(event, this)">
+                                        </div>
+                                    <!-- Mute Button -->
+                                    <a href="#" onclick="toggleMute(event, this)" class="enabled"><ion-icon name="volume-high-sharp" id="icon-mute"></ion-icon></a>
+                                    <!-- Connection Icon -->
+                                    <a href="#" onclick="connectButton(event, this)" title="Disconnected"><ion-icon name="wifi-sharp" class="icon-connect disconnected"></ion-icon></a>
+                                </div>
                             </div>
-                        </div>
-                        <!-- Content -->
-                        <div class="content">
-                            <div id="zone-text">Zone Text</div>
-                            <div id="channel-text">Channel Text</div>
-                            <!-- RX Audio Bar -->
-                            <div class="audio-bar">
-                                <ion-icon name="volume-off-sharp"></ion-icon>
-                                <div class="eq-frame">
-                                    <div class="eq-bar"></div>
+                            <!-- Content -->
+                            <div class="content">
+                                <div id="zone-text">Zone Text</div>
+                                <div id="channel-text">Channel Text</div>
+                                <!-- RX Audio Bar -->
+                                <div class="audio-bar">
+                                    <div class="audio-eq">
+                                        <ion-icon name="volume-off-sharp"></ion-icon>
+                                        <div class="eq-frame">
+                                            <div class="eq-bar" id="rx-bar"></div>
+                                        </div>
+                                    </div>
+                                    <div class="audio-eq">
+                                        <ion-icon name="mic-sharp"></ion-icon>
+                                        <div class="eq-frame">
+                                            <div class="eq-bar" id="tx-bar"></div>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
                     </div>
-                </div>
-
-                <!-- Placeholder radio card for development -->
-                <div class="radio-card green">
-                    <div class="card">
-                        <div class="selected-tab"></div>
-                        <!-- Header -->
-                        <div class="header">
-                            <h2>Placeholder Name</h2>
-                            <div class="icon-stack">
-                                <!-- Pan Dropdown -->
-                                <a href="#" onclick="showPanMenu(event, this)" class="enabled"><ion-icon name="headset-sharp" id="icon-panning"></ion-icon></a>
-                                    <div class="panning-dropdown closed">
-                                        <!- - Slider - ->
-                                        <input type="range" class="topcoat-range" class="radio-pan" min="-1" max="1" value="0" step="0.1" onclick="stopClick(event, this)" oninput="changePan(event, this)" ondblclick="centerPan(event, this)">
-                                    </div>
-                                <!-- Mute Button -->
-                                <a href="#" onclick="toggleMute(event, this)" class="enabled"><ion-icon name="volume-high-sharp" id="icon-mute"></ion-icon></a>
-                                <!-- Connection Icon -->
-                                <a href="#" onclick="connectButton(event, this)" title="Disconnected"><ion-icon name="wifi-sharp" class="icon-connect disconnected"></ion-icon></a>
-                            </div>
-                        </div>
-                        <!-- Content -->
-                        <div class="content">
-                            <div id="zone-text">Zone Text</div>
-                            <div id="channel-text">Channel Text</div>
-                            <!-- RX Audio Bar -->
-                            <div class="audio-bar">
-                                <ion-icon name="volume-off-sharp"></ion-icon>
-                                <div class="eq-frame">
-                                    <div class="eq-bar"></div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Placeholder radio card for development -->
-                <div class="radio-card purple">
-                    <div class="card">
-                        <div class="selected-tab"></div>
-                        <!-- Header -->
-                        <div class="header">
-                            <h2>Placeholder Name</h2>
-                            <div class="icon-stack">
-                                <!-- Pan Dropdown -->
-                                <a href="#" onclick="showPanMenu(event, this)" class="enabled"><ion-icon name="headset-sharp" id="icon-panning"></ion-icon></a>
-                                    <div class="panning-dropdown closed">
-                                        <!- - Slider - ->
-                                        <input type="range" class="topcoat-range" class="radio-pan" min="-1" max="1" value="0" step="0.1" onclick="stopClick(event, this)" oninput="changePan(event, this)" ondblclick="centerPan(event, this)">
-                                    </div>
-                                <!-- Mute Button -->
-                                <a href="#" onclick="toggleMute(event, this)" class="enabled"><ion-icon name="volume-high-sharp" id="icon-mute"></ion-icon></a>
-                                <!-- Connection Icon -->
-                                <a href="#" onclick="connectButton(event, this)" title="Disconnected"><ion-icon name="wifi-sharp" class="icon-connect disconnected"></ion-icon></a>
-                            </div>
-                        </div>
-                        <!-- Content -->
-                        <div class="content">
-                            <div id="zone-text">Zone Text</div>
-                            <div id="channel-text">Channel Text</div>
-                            <!-- RX Audio Bar -->
-                            <div class="audio-bar">
-                                <ion-icon name="volume-off-sharp"></ion-icon>
-                                <div class="eq-frame">
-                                    <div class="eq-bar"></div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+                </template>
 
             </div>
 
@@ -229,52 +169,54 @@
                 <!-- Softkey Bar -->
                 <div class="btn-bar">
                     <!-- Left Arrow -->
-                    <div id="leftarrow" onclick="button_left()">
-                        <ion-icon name="caret-back-sharp"></ion-icon>
+                    <div id="leftarrow" class="btn disabled" onclick="button_left()" class="disabled">
+                        <span class="btn-text"><ion-icon name="caret-back-sharp"></ion-icon></span>
                     </div>
                     <!-- Softkey 1 -->
-                    <div id="softkey1" class="btn" onclick="softkey(1)">
-                        <span class="softkey-text">BTN1</span>
+                    <div id="softkey1" class="btn softkey disabled" onclick="softkey(1)">
+                        <span class="btn-text"></span>
                     </div>
                     <!-- Softkey 2 -->
-                    <div id="softkey2" class="btn" onclick="softkey(2)">
-                        <span class="softkey-text">BTN2</span>
+                    <div id="softkey2" class="btn softkey disabled" onclick="softkey(2)">
+                        <span class="btn-text"></span>
                     </div>
                     <!-- Softkey 3 -->
-                    <div id="softkey3" class="btn" onclick="softkey(3)">
-                        <span class="softkey-text">BTN3</span>
+                    <div id="softkey3" class="btn softkey disabled" onclick="softkey(3)">
+                        <span class="btn-text"></span>
                     </div>
                     <!-- Softkey 4 -->
-                    <div id="softkey4" class="btn" onclick="softkey(4)">
-                        <span class="softkey-text">BTN4</span>
+                    <div id="softkey4" class="btn softkey disabled" onclick="softkey(4)">
+                        <span class="btn-text"></span>
                     </div>
                     <!-- Softkey 5 -->
-                    <div id="softkey5" class="btn" onclick="softkey(5)">
-                        <span class="softkey-text">BTN5</span>
+                    <div id="softkey5" class="btn softkey disabled" onclick="softkey(5)">
+                        <span class="btn-text"></span>
                     </div>
                     <!-- Softkey 6 -->
-                    <div id="softkey6" class="btn" onclick="softkey(6)">
-                        <span class="softkey-text">BTN6</span>
+                    <div id="softkey6" class="btn softkey disabled" onclick="softkey(6)">
+                        <span class="btn-text"></span>
                     </div>
                     <!-- Right Arrow -->
-                    <div id="rightarrow" onclick="button_right()">
-                        <ion-icon name="caret-forward-sharp"></ion-icon>
+                    <div id="rightarrow" class="btn disabled" onclick="button_right()">
+                        <span class="btn-text"><ion-icon name="caret-forward-sharp"></ion-icon></span>
                     </div>
                 </div>
 
                 <!-- Channel Up/Down Buttons -->
                 <div class="btn-bar" id="chan-btns">
-                    <div id="chan-up" class="btn" onclick="changeChannel(false)">
-                        <ion-icon name="caret-up-sharp"></ion-icon>
+                    <div id="chan-up" class="btn disabled" onclick="changeChannel(false)">
+                        <span class="btn-text"><ion-icon name="caret-up-sharp"></ion-icon></span>
                     </div>
-                    <div id="chan-down" class="btn" onclick="changeChannel(true)">
-                        <ion-icon name="caret-down-sharp"></ion-icon>
+                    <div id="chan-down" class="btn disabled" onclick="changeChannel(true)">
+                        <span class="btn-text"><ion-icon name="caret-down-sharp"></ion-icon></span>
                     </div>
                 </div>
 
                 <!-- PTT Button -->
                 <div class="btn-bar" id="ptt-btn">
-                    <div id="ptt" class="btn" onmousedown="startPtt()" onmouseup="stopPtt()"></div>
+                    <div id="ptt" class="btn disabled" onmousedown="startPtt()" onmouseup="stopPtt()">
+                        <span class="btn-text"><ion-icon name="flash-sharp"></ion-icon></span>
+                    </div>
                 </div>
 
             </div>
@@ -333,10 +275,10 @@
                 <table class="popup-table">
                     <!-- Time Format -->
                     <tr>
-                        <td width="33%">
+                        <td width="60%">
                             <h3>Time Format</h3>
                         </td>
-                        <td width="67%">
+                        <td width="40%">
                             <select id="client-timeformat">
                                 <option value="Local">Local</option>
                                 <option value="UTC">UTC</option>
@@ -345,10 +287,10 @@
                     </tr>
                     <!-- RX AGC Toggle -->
                     <tr>
-                        <td width="33%">
+                        <td>
                             <h3>RX Audio AGC</h3>
                         </td>
-                        <td width="67%">
+                        <td>
                             <label class="topcoat-checkbox">
                                 <input type="checkbox" id="client-rxagc">
                                 <div class="topcoat-checkbox__checkmark"></div>
@@ -357,10 +299,10 @@
                     </tr>
                     <!-- Unselected Radio Volume -->
                     <tr>
-                        <td width="33%">
+                        <td>
                             <h3>Unselected Radio Volume</h3>
                         </td>
-                        <td width="67%">
+                        <td>
                             <select id="unselected-vol">
                                 <option value=0 selected="selected">0 dB</option>
                                 <option value=-3>-3 dB</option>
@@ -373,10 +315,10 @@
                     </tr>
                     <!-- TPT Tone Selection -->
                     <tr>
-                        <td width="33%">
+                        <td>
                             <h3>Talk Permit Tone</h3>
                         </td>
-                        <td width="67%">
+                        <td>
                             <select id="tpt-tone">
                                 <option value="mot" selected="selected">Motorola</option>
                                 <option value="kw">Kenwood</option>
@@ -400,7 +342,7 @@
         <audio src="sound/tx_end.wav" id="sound-tx-end" autostart="false" autostart="0"></audio>
 
         <!-- Icon Script -->
-        <script type="module" src="ionicons/index.esm.js"></script>
+        <script type="module" src="ionicons/ionicons.esm.js"></script>
         <script nomodule src="ionicons/ionicons.js"></script>
         <!-- Runtime Script -->
         <script type="text/javascript" src="client.js"></script>

@@ -390,7 +390,10 @@ class XTL:
             # Handle based on display subdevice
             if subdev == self.O5Address.display_subdevs['text_zone']:
                 newText = data.rstrip().decode('ascii', 'ignore')
-                if newText != self.zoneText and not any(s in newText for s in self.O5Address.ignored_strings):
+                # Remove random 0x00 from strings
+                newText = newText.replace('\x00','')
+                # Ignore zone text if it's the same as current, if it's in the ignored strings list, or if it's whitespace only
+                if newText != self.zoneText and not any(s in newText for s in self.O5Address.ignored_strings) and not newText.isspace():
                     self.zoneText = newText
                     self.newStatus = True
                     self.logger.logVerbose("Got new zone text: {}".format(newText))
