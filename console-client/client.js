@@ -8,6 +8,9 @@ var version = "2.0.0";
 var config = {
     timeFormat: "Local",
 
+    tpt: "mot",
+    btnSounds: true,
+
     audio: {
         rxAgc: false,
         unselectedVol: -3.0,
@@ -551,6 +554,9 @@ function stopPtt() {
 function changeChannel(down) {
     if (!pttActive && selectedRadio && radios[selectedRadioIdx].wsConn) {
         if (down) {
+            if (config.btnSounds) {
+                playSound("sound-btn-press");
+            }
             console.log("Changing channel down on " + selectedRadio);
             radios[selectedRadioIdx].wsConn.send(
                 `{
@@ -561,6 +567,9 @@ function changeChannel(down) {
                 }`
             );
         } else {
+            if (config.btnSounds) {
+                playSound("sound-btn-press");
+            }
             console.log("Changing channel up on " + selectedRadio);
             radios[selectedRadioIdx].wsConn.send(
                 `{
@@ -579,6 +588,9 @@ function changeChannel(down) {
  * @param {int} idx softkey index
  */
 function softkey(idx) {
+    if (config.btnSounds) {
+        playSound("sound-btn-press");
+    }
     sendButton(`softkey${idx}`);
 }
 
@@ -586,6 +598,9 @@ function softkey(idx) {
  * Left arrow button
  */
 function button_left() {
+    if (config.btnSounds) {
+        playSound("sound-btn-press");
+    }
     sendButton("left");
 }
 
@@ -593,6 +608,9 @@ function button_left() {
  * Right arrow button
  */
 function button_right() {
+    if (config.btnSounds) {
+        playSound("sound-btn-press");
+    }
     sendButton("right");
 }
 
@@ -792,12 +810,14 @@ function saveClientConfig() {
     const rxAgc = $("#client-rxagc").is(":checked");
     const unselectedVol = $("#unselected-vol").val();
     const talkPermitTone = $("#tpt-tone").val();
+    const buttonSounds = $("#btn-sounds").is(":checked");
     const audioInput = $("#audio-input").val();
     const audioOutput = $("#audio-output").val();
 
     // Set config
     config.timeFormat = timeFormat;
     config.tpt = talkPermitTone;
+    config.btnSounds = buttonSounds;
     config.audio.rxAgc = rxAgc;
     config.audio.unselectedVol = parseFloat(unselectedVol);
     config.audio.input = audioInput;
@@ -841,6 +861,7 @@ function readUserConfig() {
         $("#client-timeformat").val(config.timeFormat);
         $("#client-rxagc").prop("checked", config.audio.rxAgc);
         $(`#tpt-tone option[value=${config.tpt}]`).attr('selected', 'selected');
+        $("#btn-sounds").prop("checked", config.btnSounds);
         $(`#unselected-vol option[value=${config.audio.unselectedVol}]`).attr('selected', 'selected');
         $(`#audio-input option[value=${config.audio.input}]`).attr('selected', 'selected');
         $(`#audio-output option[value=${config.audio.output}]`).attr('selected', 'selected');

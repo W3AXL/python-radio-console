@@ -701,7 +701,7 @@ ion-icon {
     color: var(--color-txt-mid);
     background-color: var(--color-btn-normal);
     font-family: "Iosevka Extended Bold";
-    font-size: 22px;
+    font-size: 18px;
     text-align: center;
     justify-content: center;
     align-items: center;
@@ -718,8 +718,7 @@ ion-icon {
 }
 
 #radio-controls .btn.pressed,
-#leftarrow.pressed,
-#rightarrow.pressed {
+#radio-controls .btn:active:hover {
     color: var(--color-txt-light);
     background-color: var(--color-btn-pressed);
 }
@@ -768,7 +767,8 @@ ion-icon {
     width: 80px;
 }
 
-#ptt.pressed {
+#ptt.pressed,
+#ptt:active:hover {
     background-color: var(--color-card-darkred) !important;
     color: var(--color-txt-light);
 }
