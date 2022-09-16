@@ -410,7 +410,6 @@ ion-icon {
     position: absolute;
     top: 2px;
     left: 2px;
-    color: var(--color-txt-mid);
     padding: 4px;
     box-sizing: border-box;
     display: inline-flex;
@@ -443,6 +442,23 @@ ion-icon {
 /* Disconnected Fade */
 .radio-card.disconnected {
     opacity: 0.75;
+}
+
+/* Dynamic Header Text Color */
+.radio-card.red .header h2 {
+    color: var(--color-card-lightred);
+}
+.radio-card.amber .header h2 {
+    color: var(--color-card-lightamber);
+}
+.radio-card.green .header h2 {
+    color: var(--color-card-lightgreen);
+}
+.radio-card.blue .header h2 {
+    color: var(--color-card-lightblue);
+}
+.radio-card.purple .header h2 {
+    color: var(--color-card-lightpurple);
 }
 
 .radio-card.selected .header h2 {
@@ -649,9 +665,14 @@ ion-icon {
 .radio-card #channel-text {
     font-family: "Iosevka Bold";
     font-size: 32px;
-    color: #FFF;
+    color: var(--color-txt-light);
     margin-top: -4px;
 }
+
+.radio-card.selected #channel-text {
+    color: #FFF;
+}
+
 
 /* Bottom EQ Bars */
 

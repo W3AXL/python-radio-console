@@ -230,7 +230,7 @@ class XTL:
                     pass
 
             # give the CPU a break
-            time.sleep(0.005)
+            time.sleep(0.01)
 
         # Print debug on thread close
         self.logger.logVerbose("SB9600 listener thread stopped for radio {}".format(self.name))
@@ -244,7 +244,7 @@ class XTL:
 
             # Wait until we have a message
             while (not self.rxMsgQueue.qsize()) and self.doProcess:
-                time.sleep(0.05)
+                time.sleep(0.01)
 
             # Kill the thread on shutdown
             if not self.doProcess:
