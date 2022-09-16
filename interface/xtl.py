@@ -186,6 +186,9 @@ class XTL:
         Main listener for SB9600 and SBEP messages
         """
 
+        waiting = False
+        waitTime = 0
+
         while self.doListen:
             # get a message if there is one
             if self.bus.ser.in_waiting > 0:
@@ -197,27 +200,37 @@ class XTL:
                 self.rxMsgQueue.put_nowait(rxMsg)
                 #self.logger.logVerbose("Got msg {}".format(hexlify(rxMsg," ")))
 
-            # check for outgoing messages
-            try:
-                # get the message
-                txMsg = self.txMsgQueue.get_nowait()
-                # figure out what to do with it
-                if txMsg['type'] == 'SB9600':
-                    sent = False
-                    tries = 0
-                    while (not sent) and (tries <= self.retries):
-                        try:
-                            tries += 1
-                            self.bus.sb9600_send(txMsg['addr'], txMsg['prm1'], txMsg['prm2'], txMsg['func'])
-                            sent = True
-                        except RuntimeError as ex:
-                            self.logger.logWarn("Message send failed, attempt {}/{}".format(tries, self.retries+1))
-            # Do nothing if queue empty
-            except queue.Empty:
+            # Check if we're waiting to send another TX message
+            if waiting and time.time_ns() < waitTime:
                 pass
+            else:
+                # Reset waiting flag
+                waiting = False
+                # check for outgoing messages
+                try:
+                    # get the message
+                    txMsg = self.txMsgQueue.get_nowait()
+                    # Send SB9600
+                    if txMsg['type'] == 'SB9600':
+                        sent = False
+                        tries = 0
+                        while (not sent) and (tries <= self.retries):
+                            try:
+                                tries += 1
+                                self.bus.sb9600_send(txMsg['addr'], txMsg['prm1'], txMsg['prm2'], txMsg['func'])
+                                sent = True
+                            except RuntimeError as ex:
+                                self.logger.logWarn("Message send failed, attempt {}/{}".format(tries, self.retries+1))
+                    # Wait
+                    elif txMsg['type'] == 'wait':
+                        waiting = True
+                        waitTime = time.time_ns() + (1000 * txMsg['time'])
+                # Do nothing if queue empty
+                except queue.Empty:
+                    pass
 
             # give the CPU a break
-            time.sleep(0.01)
+            time.sleep(0.005)
 
         # Print debug on thread close
         self.logger.logVerbose("SB9600 listener thread stopped for radio {}".format(self.name))
@@ -773,8 +786,21 @@ class XTL:
             duration (float): duration to press in seconds
         """
         self.sendButton(code, 0x01)
-        time.sleep(duration)
+        self.txWait(50)
         self.sendButton(code, 0x00)
+
+    def txWait(self, time_ms):
+        """
+        Waits the specified number of ms before sending the next message in the tx queue
+
+        Args:
+            time_ms (int): time to wait in ms
+        """
+        msg = {
+            "type": "wait",
+            "time": time_ms
+        }
+        self.txMsgQueue.put_nowait(msg)
 
     def getDisplaySubDev(self, code):
         """Lookup display subdevice by hex code
