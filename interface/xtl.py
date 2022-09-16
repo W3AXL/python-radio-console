@@ -109,11 +109,12 @@ class XTL:
         self.state = RadioState.Disconnected
         self.zoneText = ""
         self.chanText = ""
+        self.scanning = False
+        self.priority = 0
         self.softkeys = ["","","","","","HOME"]
         self.softkeyStates = [False, False, False, False, False, False]
         
         # Internal status flags for tracking softkeys
-        self.scanning = False
         self.monitor = False
         self.direct = False
         self.lowpower = False
@@ -439,10 +440,16 @@ class XTL:
                 self.logger.logVerbose("Got new scan priority state: {}".format(state))
                 if state == 0x01:
                     self.logger.logVerbose("Channel priority 1 marker")
+                    self.priority = 1
+                    self.newStatus = True
                 elif state == 0x02:
                     self.logger.logVerbose("Channel priority 2 marker")
+                    self.priority = 2
+                    self.newStatus = True
                 elif state == 0x00:
-                    self.logger.logVerbose("Channel priortiy marker cleared")
+                    self.logger.logVerbose("Channel priority marker cleared")
+                    self.priority = 0
+                    self.newStatus = True
                 return totalLength
             # Low power L icon
             elif iconAddr == self.O5Address.display_icons['low_power']:

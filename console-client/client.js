@@ -435,6 +435,25 @@ function updateRadioCard(idx) {
     } else {
         radioCard.find("#icon-alert").removeClass("alerting");
     }
+
+    // Update Scan Icon
+    radioCard.find('.scan-icons').removeClass("scanning");
+    radioCard.find('.scan-icons').removeClass("priority");
+    radioCard.find('.scan-icons').removeClass("priority2");
+    if (radio.status.scanning) {
+        if (radio.status.priority == 2) {
+            console.debug("Got priority 2 status");
+            radioCard.find('.scan-icons').addClass("priority2");
+        } else if (radio.status.priority == 1) {
+            console.debug("Got priority 1 status");
+            radioCard.find('.scan-icons').addClass("priority");
+        } else {
+            console.debug("Got scanning status");
+            radioCard.find('.scan-icons').addClass("scanning");
+        }
+    } else {
+        console.debug("Radio not scanning");
+    }
 }
 
 /**
@@ -1372,13 +1391,19 @@ function audioMeterCallback() {
         if (radios[idx].audioSrc == null) {
             return
         }
+        // Ignore if not receiving
+        if (radios[idx].status.state != 'Receiving') {
+            // If bar is not zero, set it
+            if ($(`.radio-card#radio${idx} #rx-bar`).width() != '0') {$(`.radio-card#radio${idx} #rx-bar`).width('0')}
+            return
+        }
         // Get data
         radios[idx].audioSrc.analyzerNode.getFloatTimeDomainData(radios[idx].audioSrc.analyzerData);
         // Process into average amplitude
         var sumSquares = 0.0;
         for (const amplitude of radios[idx].audioSrc.analyzerData) { sumSquares += amplitude * amplitude; }
         // We calculate the geometric mean of these samples, and then multiply by an experimentally-found value to get approximately 0-100% scaling
-        const newPct = String(Math.sqrt(sumSquares / radios[idx].audioSrc.analyzerData.length).toFixed(2) * 300);
+        const newPct = String(Math.sqrt(sumSquares / radios[idx].audioSrc.analyzerData.length).toFixed(3) * 300);
         $(`.radio-card#radio${idx} #rx-bar`).width(newPct);
     });
 
@@ -1389,7 +1414,7 @@ function audioMeterCallback() {
     if (pttActive) {
         sumSquares = 0.0;
         for (const amplitude of audio.inputPcmData) { sumSquares += amplitude * amplitude; }
-        const newPct = String(Math.sqrt(sumSquares / audio.outputPcmData.length).toFixed(2) * 300);
+        const newPct = String(Math.sqrt(sumSquares / audio.outputPcmData.length).toFixed(3) * 300);
         // Apply to selected radio only
         $(`.radio-card#radio${selectedRadioIdx} #tx-bar`).width(newPct);
     } else {

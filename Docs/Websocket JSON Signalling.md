@@ -15,6 +15,8 @@ Used to inform the client on the status of the radio. **(server-to-client only)*
         "lastid": "",
         "state": "Disconnected",
         "muted": false,
+        "scanning": false,
+        "priority": 0,
         "error": false,
         "errorText": "",
         "softkeys": [],

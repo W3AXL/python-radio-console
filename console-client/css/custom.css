@@ -467,7 +467,8 @@ ion-icon {
     align-items: center;
 }
 
-.radio-card .icon-stack a {
+.radio-card .icon-stack a,
+.radio-card .icon-stack .scan-icons {
     width: 24px;
     display: inline-flex;
 }
@@ -499,6 +500,36 @@ ion-icon {
 .icon-stack ion-icon.alerting {
     -webkit-animation: iconAlertRed 0.7s ease infinite;
     animation: iconAlertRed 0.7s ease infinite;
+}
+
+.icon-stack .scan-icons ion-icon {
+    position: absolute;
+    bottom: 5px;
+}
+
+/* No Scan State */
+.icon-stack .scan-icons .scan-icon,
+.icon-stack .scan-icons .scan-pri-icon {
+    opacity: 0;
+}
+
+/* Scanning State */
+.icon-stack .scan-icons.scanning .scan-icon {
+    opacity: 1;
+}
+
+/* Priority Scan */
+.icon-stack .scan-icons.priority .scan-pri-icon {
+    opacity: 1;
+}
+
+/* Priority 2 Scan */
+.icon-stack .scan-icons.priority2 .scan-pri-icon {
+    animation: iconFlash 1s infinite;
+    -webkit-animation: iconFlash 1s infinite;
+}
+.icon-stack .scan-icons.priority2 .scan-icon {
+    opacity: 1;
 }
 
 /* Pan Dropdown */
@@ -933,5 +964,23 @@ ion-icon {
     }
     50% {
         color: var(--color-alert-red-light);
+    }
+}
+
+/* Animation for flashing icon */
+@-webkit-keyframes iconFlash {
+    from, to {
+        opacity: 0;
+    }
+    50% {
+        opacity: 1;
+    }
+}
+@keyframes iconFlash {
+    from, to {
+        opacity: 0;
+    }
+    50% {
+        opacity: 1;
     }
 }

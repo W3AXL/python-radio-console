@@ -55,6 +55,8 @@ class Radio():
         self.error = False
         self.selected = False
         self.muted = False
+        self.scanning = False
+        self.priority = 0
         self.softkeys = ["","","","","",""]
         self.softkeyStates = [False, False, False, False, False, False]
 
@@ -185,6 +187,8 @@ class Radio():
         self.state = self.interface.state
         self.chan = self.interface.chanText
         self.zone = self.interface.zoneText
+        self.scanning = self.interface.scanning
+        self.priority = self.interface.priority
         self.softkeys = self.interface.softkeys
         self.softkeyStates = self.interface.softkeyStates
 
@@ -241,6 +245,8 @@ class Radio():
             "lastid": self.lastid,
             "state": stateText,
             "muted": self.muted,
+            "scanning": self.scanning,
+            "priority": self.priority,
             "error": self.error,
             "errorText": errorText,
             "softkeys": self.softkeys,
