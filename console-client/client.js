@@ -1158,10 +1158,10 @@ function createPeerConnection(idx) {
             // Update radio connections
             newSource.audioNode.connect(newSource.agcNode);
             newSource.agcNode.connect(newSource.makeupNode);
-            newSource.makeupNode.connect(newSource.gainNode);
-            newSource.makeupNode.connect(newSource.analyzerNode);
-            newSource.gainNode.connect(newSource.muteNode);
-            newSource.muteNode.connect(newSource.panNode);
+            newSource.makeupNode.connect(newSource.muteNode);
+            newSource.muteNode.connect(newSource.gainNode);
+            newSource.muteNode.connect(newSource.analyzerNode);
+            newSource.gainNode.connect(newSource.panNode);
             newSource.panNode.connect(audio.outputGain);
 
             console.debug(`New source ID: ${newSource.audioNode.id}`);
@@ -1214,7 +1214,7 @@ function sendRtcOffer(idx) {
         var rx = /a=fmtp:.*/g;
         var fmtpLine = rx.exec(offer.sdp);
         // Append bitrate info to SDP
-        offer.sdp = offer.sdp.replace(fmtpLine,`${fmtpLine};maxplaybackrate=${rtcConf.bitrate};sprop-maxcapturerate=${rtcConf.bitrate}`);
+        offer.sdp = offer.sdp.replace(fmtpLine,`${fmtpLine};maxplaybackrate=${rtcConf.bitrate};sprop-maxcapturerate=${rtcConf.bitrate};stereo=0`);
 
         // Debug
         console.debug("SDP offer:");
@@ -1396,12 +1396,6 @@ function audioMeterCallback() {
     radios.forEach((radio, idx) => {
         // Ignore radios with no connected audio
         if (radios[idx].audioSrc == null) {
-            return
-        }
-        // Ignore if not receiving
-        if (radios[idx].status.state != 'Receiving') {
-            // If bar is not zero, set it
-            if ($(`.radio-card#radio${idx} #rx-bar`).width() != '0') {$(`.radio-card#radio${idx} #rx-bar`).width('0')}
             return
         }
         // Get data
