@@ -1,21 +1,15 @@
 {
     "RadioList": [
         {
-            "name": "Rack VHF XTL",
-            "address": "radioconsole.w3axl.com",
+            "name": "Motorola XTL",
+            "address": "1.2.3.4",
             "port": 9501,
             "color": "blue"
         },
         {
-            "name": "Rack UHF XTL",
-            "address": "radioconsole.w3axl.com",
+            "name": "Motorola XPR",
+            "address": "5.6.7.8",
             "port": 9502,
-            "color": "green"
-        },
-        {
-            "name": "Rack UHF XPR",
-            "address": "testbed.w3axl.com",
-            "port": 9503,
             "color": "purple"
         }
     ]
