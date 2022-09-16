@@ -1,0 +1,13 @@
+{
+    "Radio":
+    {
+        "name": "Rack VHF XTL",
+        "desc": "K-Split XTL5000",
+        "ctrlMode": "SB9600-XTL-O",
+        "ctrlPort": "/dev/ttyUSB0",
+        "txDev": "out0",
+        "rxDev": "mic0"
+    },
+    "Certfile": "certs/private/console-cert.crt",
+    "Keyfile": "certs/private/console-cert.key"
+}

@@ -57,6 +57,7 @@ var audio = {
 var rtcConf = {
     // Audio codec
     codec: "opus/48000/2",  // I've found that OPUS seems to have better latency than PCMU
+    bitrate: 8000,
     //codec: "PCMU/8000",
     // Total audio round trip time (in ms) (set as const for now, adds delay before muting RX audio and stopping TX)
     rxLatency: 500,
@@ -1208,6 +1209,12 @@ function sendRtcOffer(idx) {
         // Generate the specifics of the offer
         var offer = radios[idx].rtc.peer.localDescription;
         offer.sdp = sdpFilterCodec('audio', rtcConf.codec, offer.sdp);
+
+        // Get fmtp line for replacement
+        var rx = /a=fmtp:.*/g;
+        var fmtpLine = rx.exec(offer.sdp);
+        // Append bitrate info to SDP
+        offer.sdp = offer.sdp.replace(fmtpLine,`${fmtpLine};maxplaybackrate=${rtcConf.bitrate};sprop-maxcapturerate=${rtcConf.bitrate}`);
 
         // Debug
         console.debug("SDP offer:");

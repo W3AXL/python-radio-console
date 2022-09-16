@@ -11,6 +11,12 @@
             "address": "radioconsole.w3axl.com",
             "port": 9502,
             "color": "green"
+        },
+        {
+            "name": "Rack UHF XPR",
+            "address": "testbed.w3axl.com",
+            "port": 9503,
+            "color": "purple"
         }
     ]
 }
