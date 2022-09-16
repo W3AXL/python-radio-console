@@ -5,13 +5,14 @@ from logger import Logger
 import time
 import queue
 from trboxcmp.xcmp import Xcmp
-import logging
+#import logging
 
 #see if the user defined a keys file, else go to sample file
 try:
     from interface import xcmp_keys
 except ImportError:
-    logging.warning("No XCMP key file found; defaulting to zero keys")
+    templogger = Logger()
+    templogger.warning("No XCMP key file found; defaulting to zero keys")
     from interface import xcmp_keys_sample as xcmp_keys
 
 class XPR:
@@ -39,7 +40,7 @@ class XPR:
         # Port is always 8002
         self.device = Xcmp(xcmp_keys.keys, xcmp_keys.delta, xcmp_keys.kid, self.process, hostname, 8002)
         self.statusCallback = statusCallback
-        logging.basicConfig(format='%(asctime)s %(levelname)-8s %(message)s', level=logging.DEBUG, datefmt='%Y-%m-%d %H:%M:%S')
+        #logging.basicConfig(format='%(asctime)s %(levelname)-8s %(message)s', level=logging.DEBUG, datefmt='%Y-%m-%d %H:%M:%S')
 
         """
         These variables are common to all radio interface classes and are 
@@ -50,10 +51,9 @@ class XPR:
         self.zoneText = ""
         self.chanText = ""
         self.scanning = False
-        self.talkaround = False
-        self.monitor = False
-        self.lowpower = False
-        self.lastid = ""
+        self.priority = 0
+        self.softkeys = ["","","","","","HOME"]
+        self.softkeyStates = [False, False, False, False, False, False]
 
         """
         These variables are specific to this radio class.
@@ -65,7 +65,7 @@ class XPR:
         self.battery = 0
 
         # Logger
-        self.logger = Logger()
+        self.logger = logger
         self.sourceName = "XPR-XCMP"
 
     def connect(self, reset=True):
@@ -115,7 +115,7 @@ class XPR:
         if (msgIn['type'] == 2):    # call status info
             payload = msgIn['payload']
             self.lastid = payload['rid']
-            logging.debug("Setting last ID to {}".format(payload['rid']))
+            self.logger.debug("Setting last ID to {}".format(payload['rid']))
         elif (msgIn['type'] == 6):    # display text
             payload = msgIn['payload']
             if (payload['lineNo'] == 3):     # generally we get our channel text on line 3, this is the case with my gen2 radios, have not tested gen1
