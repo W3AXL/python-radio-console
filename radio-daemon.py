@@ -467,16 +467,10 @@ async def gotRtcOffer(offerObj):
         # Add the mic track to each radio's tx device
         logger.logInfo("Creating RTC mic track for radio {} using device {}, format {}".format(config.Radio.name, config.Radio.txDev, ffmpegFormat))
         recorder = MediaRecorder(config.Radio.txDev, format=ffmpegFormat)
+        #recorder = MediaBlackhole() # debug for memory leak testing
         recorder.addTrack(micRelay.subscribe(track))
         recorders.append(recorder)
         await recorder.start()
-
-        # DEBUG: just do the first radio in the list
-        #radio = config.RadioList[0]
-        #logger.logInfo("Creating RTC mic track for radio {}".format(radio.name))
-        #recorder = MediaRecorder(radio.txDev, format='alsa')
-        #recorder.addTrack(track)
-        #await recorder.start()
 
         # Track ended handler
         @track.on("ended")

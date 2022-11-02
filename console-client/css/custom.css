@@ -583,6 +583,7 @@ ion-icon {
 
 .panning-dropdown.closed {
     opacity: 0;
+    display: none;
 }
 
 .panning-dropdown .topcoat-range {

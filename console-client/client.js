@@ -50,7 +50,7 @@ var audio = {
     agcRatio: 8.0,
     agcAttack: 0.0,
     agcRelease: 0.3,
-    agcMakeup: 1.0,     // right now any makeup gain causes clipping
+    agcMakeup: 1.1,     // right now any makeup gain causes clipping
 }
 
 // WebRTC Variables
@@ -60,8 +60,8 @@ var rtcConf = {
     bitrate: 8000,
     //codec: "PCMU/8000",
     // Total audio round trip time (in ms) (set as const for now, adds delay before muting RX audio and stopping TX)
-    rxLatency: 500,
-    txLatency: 400
+    rxLatency: 600,
+    txLatency: 300
 }
 
 testInput = null;
@@ -993,7 +993,15 @@ function startWebRtc(idx) {
         //navigator.getUserMedia({audio:true},
 
         // New, better (?) way
-        navigator.mediaDevices.getUserMedia({audio:true}).then(
+        navigator.mediaDevices.getUserMedia({
+            audio: {
+                latency: 0.02,
+                echoCancellation: false,
+                autoGainControl: false,
+                mozNoiseSuppression: false,
+                mozAutoGainControl: false
+            }
+        }).then(
             // Add tracks to peer connection and negotiate if successful
             function(stream) {
                 // Set up mic meter dependecies

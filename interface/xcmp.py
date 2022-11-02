@@ -12,7 +12,7 @@ try:
     from interface import xcmp_keys
 except ImportError:
     templogger = Logger()
-    templogger.warning("No XCMP key file found; defaulting to zero keys")
+    templogger.logWarn("No XCMP key file found; defaulting to zero keys")
     from interface import xcmp_keys_sample as xcmp_keys
 
 class XPR:
