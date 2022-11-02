@@ -25,7 +25,7 @@ For a basic console setup, the following is required:
 
 ## Setup
 
-[See SETUP.md for information on setup and configuration](https://github.com/W3AXL/python-radio-console/SETUP.md)
+[See SETUP.md for information on setup and configuration](https://github.com/W3AXL/python-radio-console/blob/version-2/SETUP.md)
 
 ## Known Issues
 
