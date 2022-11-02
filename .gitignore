@@ -15,13 +15,17 @@ startScreen.sh
 *.bat
 *.sh
 
+# Jemalloc Heaps and Graphs
+*.heap
+*.gif
+
 # VENV stuff
 [Ss]cripts/
 Include/
 pyvenv.cfg
 bin/
 lib64
-
+share/
 
 # Ignore local PyAV build
 av/
