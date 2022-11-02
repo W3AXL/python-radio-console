@@ -2,15 +2,20 @@
     Global Variables
 ***********************************************************************************/
 
-var version = "1.0.0"
+var version = "2.0.0";
 
-// User Config Var
+// Local user config variables (saved to cookie)
 var config = {
     timeFormat: "Local",
 
+    tpt: "mot",
+    btnSounds: true,
+
     audio: {
         rxAgc: false,
-        unselectedVol: -3.0    // volume difference in dB for unselected radios
+        unselectedVol: -3.0,
+        input: "default",
+        output: "default"
     },
     
     serverAddress: "",
@@ -18,14 +23,8 @@ var config = {
     serverAutoConn: false
 }
 
-// Radio List (populated from server)
-var radioList = [];
-
-// Radio speaker sources & gain nodes
-var radioSources = [];
-
-// Websocket connection to server
-var serverSocket = null;
+// Radio List (read from radio config initially and populated with audio sources/sinks and rtc connections)
+var radios = [];
 
 // Audio variables
 var audio = {
@@ -34,10 +33,11 @@ var audio = {
     // Input device, stream, meter, etc
     input: null,
     inputStream: null,
+    inputTrack: null,
     inputAnalyzer: null,
     inputPcmData: null,
     inputMeter: document.getElementById("meter-mic"),
-    // Output device, analyzer, and gain (for volume)
+    // Output device, analyzer, and gain (for volume control and visualization)
     output: null,
     outputGain: null,
     outputAnalyzer: null,
@@ -50,22 +50,27 @@ var audio = {
     agcRatio: 8.0,
     agcAttack: 0.0,
     agcRelease: 0.3,
-    agcMakeup: 1.3,     // ~1.1 dB
+    agcMakeup: 1.1,     // right now any makeup gain causes clipping
 }
 
 // WebRTC Variables
-var rtc = {
-    // Peer connection object
-    peer: null,
+var rtcConf = {
     // Audio codec
     codec: "opus/48000/2",  // I've found that OPUS seems to have better latency than PCMU
+    bitrate: 8000,
     //codec: "PCMU/8000",
     // Total audio round trip time (in ms) (set as const for now, adds delay before muting RX audio and stopping TX)
-    rxLatency: 500,
+    rxLatency: 600,
     txLatency: 300
 }
 
-testInput = null,
+testInput = null;
+
+// Radio Card Tempalte
+const radioCardTemplate = document.querySelector('#card-template');
+
+// Radio JSON validation
+const validColors = ["red","amber","green","blue","purple"];
 
 /***********************************************************************************
     State variables
@@ -91,29 +96,30 @@ var disconnecting = false;
  * Page load function. Starts timers, etc.
  */
 function pageLoad() {
+    console.log("Starting client runtime");
+
+    // Enable JQuery Tooltips
+    //$( document ).tooltip();
+
     // Populate version
     $("#navbar-version").html(version);
 
-    console.log("Starting client-side runtime");
-    // Read config
-    readConfig();
+    // Query media devices
+    getAudioDevices();
+
+    // Query radio config from client.json
+    readRadioConfig();
+
+    // Read user config from cookie
+    readUserConfig();
 
     // Get client timezone
     const d = new Date();
     timeZone = d.toLocaleString('en', { timeZoneName: 'short' }).split(' ').pop();
 
     // Setup clock timer
-    setInterval(updateClock, 250);
+    setInterval(updateClock, 100);
 
-    // Connect and load if autoconnect is true
-    if (config.serverAutoConn) {
-        connect()
-    }
-
-    // Bind body click to deselecting radios
-    //$("#body").click(function () {
-    //    deselectRadios();
-    //});
 }
 
 /**
@@ -142,6 +148,14 @@ function connected() {
     $("#navbar-status").html("Connected");
     $("#navbar-status").removeClass("pending");
     $("#navbar-status").addClass("connected");
+}
+
+function radioConnected(idx) {
+    // UI update
+    $(`#radio${idx} .icon-connect`).removeClass('disconnected');
+    $(`#radio${idx} .icon-connect`).removeClass('connecting');
+    $(`#radio${idx} .icon-connect`).addClass('connected');
+    $(`#radio${idx} .icon-connect`).parent().prop('title','Connected, OK');
 }
 
 /**
@@ -222,7 +236,10 @@ $(document).ready(pageLoad());
  * @param {string} id the id of the radio to select
  */
 function selectRadio(id) {
-    console.log("Selecting radio " + id);
+    // Check that the radio is connected before we select it
+    if (radios[getRadioIndex(id)].status.state == "Disconnected") { return; }
+    // Log
+    console.debug("Selecting radio " + id);
     // If the radio was already selected, deselect it
     if (selectedRadio == id) {
         // Deselect all radio cards
@@ -266,14 +283,14 @@ function deselectRadios() {
 }
 
 /**
- * Populate radio cards based on the radios in radioList[] and bind their buttons
+ * Populate radio cards based on the radios in radios[] and bind their buttons
  */
 function populateRadios() {
     // Add a card for each radio in the list
-    radioList.forEach((radio, index) => {
+    radios.forEach((radio, index) => {
         console.log("Adding radio " + radio.name);
         // Add the radio card
-        addRadioCard("radio" + String(index), radio.name);
+        addRadioCard("radio" + String(index), radio.name, radio.color);
         // Populate its text
         updateRadioCard(index);
     });
@@ -290,7 +307,7 @@ function clearRadios() {
     // Clear main layout
     $("#main-layout").empty();
     // Clear radio list
-    radioList = [];
+    radios = [];
 }
 
 /**
@@ -298,22 +315,25 @@ function clearRadios() {
  * @param {string} id ID of the card element
  * @param {string} name Name to display in header
  */
-function addRadioCard(id, name) {
-    var newCardHtml = `
-        <div class="radio-card" id="${id}">
+function addRadioCard(id, name, color) {
+    /*var newCardHtml = `
+        <div class="radio-card disconnected" id="${id}">
             <div class="header">
                 <div class="selected-icon">
                     <ion-icon name="caret-forward-circle-sharp"></ion-icon>
                 </div>
                 <h2>${name}</h2>
                 <div class="icon-stack">
+                    <!-- Pan Dropdown -->
                     <a href="#" onclick="showPanMenu(event, this)" class="enabled"><ion-icon name="headset-sharp" id="icon-panning"></ion-icon></a>
                         <div class="panning-dropdown closed">
-                            <a id="left-spkr-button" href="#" onclick="toggleSpkr(event, this, 'left')"><ion-icon name="volume-off-sharp" style="transform: scaleX(-1);"></ion-icon></a>
-                            <a id="right-spkr-button" href="#" onclick="toggleSpkr(event, this, 'right')"><ion-icon name="volume-off-sharp"></ion-icon></a>
+                            <!-- Slider -->
+                            <input type="range" class="topcoat-range" class="radio-pan" min="-1" max="1" value="0" step="0.1" onclick="stopClick(event, this)" oninput="changePan(event, this)" ondblclick="centerPan(event, this)">
                         </div>
+                    <!-- Mute Button -->
                     <a href="#" onclick="toggleMute(event, this)" class="enabled"><ion-icon name="volume-high-sharp" id="icon-mute"></ion-icon></a>
-                    <a href="#"><ion-icon name="warning-sharp" id="icon-alert"></ion-icon></a>
+                    <!-- Connection Icon -->
+                    <a href="#" onclick="connectButton(event, this)" title="Disconnected"><ion-icon name="wifi-sharp" class="icon-connect disconnected"></ion-icon></a>
                 </div>
             </div>
             <div class="content">
@@ -328,9 +348,20 @@ function addRadioCard(id, name) {
             </div>
             <div class="footer"></div>
         </div>
-    `;
+    `;*/
 
-    $("#main-layout").append(newCardHtml);
+    // New, much easier way to add new cards
+    var newCard = radioCardTemplate.content.cloneNode(true);
+    newCard.querySelector(".radio-card").classList.add(color);
+    newCard.querySelector(".radio-card").id = id;
+    newCard.querySelector(".radio-card .header h2").textContent = name;
+
+    $("#main-layout").append(newCard);
+}
+
+function stopClick(event, obj) {
+    event.stopPropagation();
+    event.preventDefault();
 }
 
 /**
@@ -355,35 +386,35 @@ function bindRadioCardButtons() {
 
 function updateRadioCard(idx) {
     // Get radio from radioList
-    var radio = radioList[idx];
+    var radio = radios[idx];
 
     // Get card object
     var radioCard = $("#radio" + String(idx));
 
     // Update text boxes
-    radioCard.find("#channel-text").html(radio.chan);
-    radioCard.find("#id-text").html(radio.lastid);
+    radioCard.find("#channel-text").html(radio.status.chan);
+    radioCard.find("#zone-text").html(radio.status.zone);
 
     // Remove all current classes
     setTimeout(function() {
         radioCard.removeClass("transmitting");
-    }, rtc.txLatency);
+    }, rtcConf.txLatency);
     setTimeout(function () {
         radioCard.removeClass("receiving");
-    }, rtc.rxLatency);
+    }, rtcConf.rxLatency);
     radioCard.removeClass("disconnected");
 
     // Update radio state
-    switch (radio.state) {
+    switch (radio.status.state) {
         case "Transmitting":
             setTimeout(function() {
                 radioCard.addClass("transmitting");
-            }, rtc.txLatency);
+            }, rtcConf.txLatency);
             break;
         case "Receiving":
             setTimeout(function() {
                 radioCard.addClass("receiving");
-            }, rtc.rxLatency);
+            }, rtcConf.rxLatency); // used to unmute after latency delay but this makes sure we don't miss anything
             break;
         case "Disconnected":
             radioCard.addClass("disconnected");
@@ -391,7 +422,7 @@ function updateRadioCard(idx) {
     }
 
     // Update mute icon
-    if (radio.muted) {
+    if (radio.status.muted) {
         radioCard.find("#icon-mute").attr('name', 'volume-mute-sharp');
         radioCard.find("#icon-mute").addClass("muted");
     } else {
@@ -400,10 +431,29 @@ function updateRadioCard(idx) {
     }
 
     // Update alert icon
-    if (radio.error) {
+    if (radio.status.error) {
         radioCard.find("#icon-alert").addClass("alerting");
     } else {
         radioCard.find("#icon-alert").removeClass("alerting");
+    }
+
+    // Update Scan Icon
+    radioCard.find('.scan-icons').removeClass("scanning");
+    radioCard.find('.scan-icons').removeClass("priority");
+    radioCard.find('.scan-icons').removeClass("priority2");
+    if (radio.status.scanning) {
+        if (radio.status.priority == 2) {
+            console.debug("Got priority 2 status");
+            radioCard.find('.scan-icons').addClass("priority2");
+        } else if (radio.status.priority == 1) {
+            console.debug("Got priority 1 status");
+            radioCard.find('.scan-icons').addClass("priority");
+        } else {
+            console.debug("Got scanning status");
+            radioCard.find('.scan-icons').addClass("scanning");
+        }
+    } else {
+        console.debug("Radio not scanning");
     }
 }
 
@@ -414,34 +464,48 @@ function updateRadioControls() {
     // Update if we have a selected radio
     if (selectedRadio) {
         // Get the radio from the list
-        var radio = radioList[selectedRadioIdx];
+        var radio = radios[selectedRadioIdx];
         // If the radio is disconnected, don't enable the controls
-        if (radio.state == "Disconnected") { return }
-        // Populate text
-        $("#selected-zone-text").html(radio.zone);
-        $("#selected-chan-text").html(radio.chan);
+        if (radio.status.state == "Disconnected") { return }
         // Enable softkeys
-        $("#radio-controls button").prop("disabled", false);
+        $("#radio-controls .btn").removeClass("disabled");
         // Get softkey text
-        radio.softkeys.forEach(function(keytext, index) {
-            $(`#softkey${index+1} .softkey`).html(keytext);
+        radio.status.softkeys.forEach(function(keytext, index) {
+            $(`#softkey${index+1} .btn-text`).html(keytext);
         });
         // Set softkeys on/off
-        radio.softkeyStates.forEach(function(state, index) {
-            if (state) { $(`#softkey${index+1}`).addClass("button-active") } else { $(`#softkey${index+1}`).removeClass("button-active") }
+        radio.status.softkeyStates.forEach(function(state, index) {
+            if (state) { $(`#softkey${index+1}`).addClass("pressed") } else { $(`#softkey${index+1}`).removeClass("pressed") }
         });
     
         // Clear if we don't
     } else {
-        // Clear text
-        $("#selected-zone-text").html("");
-        $("#selected-chan-text").html("");
         for (i=0; i<6; i++) {
-            $(`#softkey${i+1} .softkey`).html("");
+            $(`#softkey${i+1} .btn-text`).html("");
         }
         // Disable softkeys
-        $("#radio-controls button").prop('disabled', true);
-        $("#radio-controls button").removeClass("button-active");
+        $("#radio-controls .btn").addClass("disabled");
+        $("#radio-controls .btn").removeClass("pressed");
+    }
+}
+
+/**
+ * Handles connect button click on radio card
+ * @param {event} event button click event
+ * @param {object} obj html object
+ */
+function connectButton(event, obj) {
+    // Stop propagation of click
+    event.stopPropagation();
+    // Get ID of radio to mute
+    const radioId = $(obj).closest(".radio-card").attr('id');
+    // Get index of radio in list
+    const idx = getRadioIndex(radioId);
+    // If disconnected, connect
+    if (radios[idx].status.state == 'Disconnected') {
+        connectRadio(idx);
+    } else {
+        disconnectRadio(idx);
     }
 }
 
@@ -456,13 +520,17 @@ function startPtt() {
     if (!pttActive && selectedRadio) {
         console.log("Starting PTT on " + selectedRadio);
         pttActive = true;
-        playSound("sound-tx-granted");
+        // Play selected TPT
+        if (config.tpt == "kw") {
+            playSound("sound-tpt-kw");
+        } else {
+            playSound("sound-tpt-mot");
+        }
         // Only send the TX command if we have a valid socket
-        if (serverSocket) {
-            serverSocket.send(
+        if (radios[selectedRadioIdx].wsConn) {
+            radios[selectedRadioIdx].wsConn.send(
                 `{
                     "radioControl": {
-                        "index": ${selectedRadioIdx},
                         "command": "startTx",
                         "options": null
                     }
@@ -482,19 +550,19 @@ function stopPtt() {
     if (pttActive) {
         console.log("PTT released");
         pttActive = false;
-        if (serverSocket && selectedRadio) {
+        if (radios[selectedRadioIdx].wsConn && selectedRadio) {
             // Wait and then stop TX (handles mic latency)
             setTimeout( function() {
-                serverSocket.send(
+                radios[selectedRadioIdx].wsConn.send(
                     `{
                         "radioControl": {
-                            "index": ${selectedRadioIdx},
                             "command": "stopTx",
                             "options": null
                         }
                     }`
-                )
-            }, rtc.txLatency);
+                );
+                playSound("sound-tx-end");
+            }, rtcConf.txLatency);
         }
     }
 }
@@ -504,24 +572,28 @@ function stopPtt() {
  * @param {bool} down Whether to go down or not (heh)
  */
 function changeChannel(down) {
-    if (!pttActive && selectedRadio && serverSocket) {
+    if (!pttActive && selectedRadio && radios[selectedRadioIdx].wsConn) {
         if (down) {
+            if (config.btnSounds) {
+                playSound("sound-btn-press");
+            }
             console.log("Changing channel down on " + selectedRadio);
-            serverSocket.send(
+            radios[selectedRadioIdx].wsConn.send(
                 `{
                     "radioControl": {
-                        "index": ${selectedRadioIdx},
                         "command": "chanDn",
                         "options": null
                     }
                 }`
             );
         } else {
+            if (config.btnSounds) {
+                playSound("sound-btn-press");
+            }
             console.log("Changing channel up on " + selectedRadio);
-            serverSocket.send(
+            radios[selectedRadioIdx].wsConn.send(
                 `{
                     "radioControl": {
-                        "index": ${selectedRadioIdx},
                         "command": "chanUp",
                         "options": null
                     }
@@ -536,6 +608,9 @@ function changeChannel(down) {
  * @param {int} idx softkey index
  */
 function softkey(idx) {
+    if (config.btnSounds) {
+        playSound("sound-btn-press");
+    }
     sendButton(`softkey${idx}`);
 }
 
@@ -543,6 +618,9 @@ function softkey(idx) {
  * Left arrow button
  */
 function button_left() {
+    if (config.btnSounds) {
+        playSound("sound-btn-press");
+    }
     sendButton("left");
 }
 
@@ -550,6 +628,9 @@ function button_left() {
  * Right arrow button
  */
 function button_right() {
+    if (config.btnSounds) {
+        playSound("sound-btn-press");
+    }
     sendButton("right");
 }
 
@@ -558,12 +639,11 @@ function button_right() {
  * @param {string} buttonName name of button
  */
 function sendButton(buttonName) {
-    if (!pttActive && selectedRadio && serverSocket) {
+    if (!pttActive && selectedRadio && radios[selectedRadioIdx].wsConn) {
         console.log(`Sending button: ${buttonName}`);
-        serverSocket.send(
+        radios[selectedRadioIdx].wsConn.send(
             `{
                 "radioControl": {
-                    "index": ${selectedRadioIdx},
                     "command": "button",
                     "options": "${buttonName}"
                 }
@@ -577,30 +657,28 @@ function sendButton(buttonName) {
  * @param {string} obj element whose parent radio to toggle mute on
  */
 function toggleMute(event, obj) {
+    // Get ID of radio to mute
+    const radioId = $(obj).closest(".radio-card").attr('id');
+    // Get index of radio in list
+    const idx = getRadioIndex(radioId);
     // Only do stuff if we have a socket connection
-    if (serverSocket != null) {
-        // Get ID of radio to mute
-        const radioId = $(obj).closest(".radio-card").attr('id');
-        // Get index of radio in list
-        const idx = getRadioIndex(radioId);
+    if (radios[idx].wsConn != null) {
         // Change mute status
-        if (radioList[idx].muted) {
+        if (radios[idx].status.muted) {
             console.log("Unmuting " + radioId);
-            serverSocket.send(
+            radios[idx].wsConn.send(
                 `{
                     "audioControl": {
-                        "command": "unmute",
-                        "index": ${idx}
+                        "command": "unmute"
                     }
                 }`
             )
         } else {
             console.log("Muting " + radioId);
-            serverSocket.send(
+            radios[idx].wsConn.send(
                 `{
                     "audioControl": {
-                        "command": "mute",
-                        "index": ${idx}
+                        "command": "mute"
                     }
                 }`
             )
@@ -635,7 +713,8 @@ function toggleMainMenu() {
  * Shows the specified popup and dims the main screen behind it
  * @param {string} id element ID of the popup to show
  */
-function showPopup(id) {
+function showConfigPopup(id) {
+    console.debug(`Showing popup ${id}`);
     $("#body-dimmer").show();
     $(id).show();
 }
@@ -671,12 +750,10 @@ function updateClock() {
     }
 }
 
-function connectButton() {
+function connectAllButton() {
     // Connect if we're not connected
     if (!serverSocket) {
-        connect();
-    } else if (serverSocket && !disconnecting) {
-        disconnect();
+        //connect();
     }
 }
 
@@ -741,7 +818,7 @@ function saveServerConfig() {
     config.serverAutoConn = autoconnect;
 
     // Save config to cookie
-    saveConfig();
+    saveUserConfig();
 }
 
 /**
@@ -749,17 +826,25 @@ function saveServerConfig() {
  */
 function saveClientConfig() {
     // Get values
-    var timeFormat = $("#client-timeformat").val();
-    var rxAgc = $("#client-rxagc").is(":checked");
-    var unselectedVol = $("#unselected-vol").val();
+    const timeFormat = $("#client-timeformat").val();
+    const rxAgc = $("#client-rxagc").is(":checked");
+    const unselectedVol = $("#unselected-vol").val();
+    const talkPermitTone = $("#tpt-tone").val();
+    const buttonSounds = $("#btn-sounds").is(":checked");
+    const audioInput = $("#audio-input").val();
+    const audioOutput = $("#audio-output").val();
 
     // Set config
     config.timeFormat = timeFormat;
+    config.tpt = talkPermitTone;
+    config.btnSounds = buttonSounds;
     config.audio.rxAgc = rxAgc;
     config.audio.unselectedVol = parseFloat(unselectedVol);
+    config.audio.input = audioInput;
+    config.audio.output = audioOutput;
 
     // Save config to cookie
-    saveConfig();
+    saveUserConfig();
 
     // Update radio audio
     if (audio.context) {
@@ -770,7 +855,7 @@ function saveClientConfig() {
 /**
  * Save config to cookie, as JSON
  */
-function saveConfig() {
+function saveUserConfig() {
     // Convert config object to cookie
     configJson = JSON.stringify(config);
     console.log("Saving config json: " + configJson);
@@ -778,7 +863,10 @@ function saveConfig() {
     Cookies.set('config',configJson);
 }
 
-function readConfig() {
+/**
+ * Read config from cookie
+ */
+function readUserConfig() {
     // Read config from cookie
     configJson = Cookies.get('config');
     // Only try and parse if we have a stored config cookie
@@ -792,7 +880,11 @@ function readConfig() {
         // Update client popup values
         $("#client-timeformat").val(config.timeFormat);
         $("#client-rxagc").prop("checked", config.audio.rxAgc);
+        $(`#tpt-tone option[value=${config.tpt}]`).attr('selected', 'selected');
+        $("#btn-sounds").prop("checked", config.btnSounds);
         $(`#unselected-vol option[value=${config.audio.unselectedVol}]`).attr('selected', 'selected');
+        $(`#audio-input option[value=${config.audio.input}]`).attr('selected', 'selected');
+        $(`#audio-output option[value=${config.audio.output}]`).attr('selected', 'selected');
     } else {
         console.warn("No config cookie detected, using defaults");
     }
@@ -803,6 +895,58 @@ function readConfig() {
  */
 function clearConfig() {
     Cookies.remove('config');
+}
+
+/***********************************************************************************
+    Radio Config Reading
+***********************************************************************************/
+
+function readRadioConfig() {
+    // Read the json config file from the server
+    var radioJson = [];
+    $.ajax({
+        type: 'GET',
+        url: './radios.json',
+        dataType: 'json',
+        success: gotRadioConfig,
+        error: function(obj, status, error) {alert(`Failed to read radios.json: ${error}`);console.error(`${status}: ${error}`);},
+        async: true,
+        timeout: 100
+    });
+}
+
+function gotRadioConfig(data, status, obj) {
+    console.debug(`Successfully read radios.json, status: ${status}`);
+    radioJson = data;
+    console.debug(radioJson['RadioList']);
+    radios = radioJson['RadioList'];
+    // Populate default values (this map function adds the key,value pairs to every item in the list)
+    radios = radios.map(v => ({
+        ...v,
+        status: {
+            state: 'Disconnected'
+        },
+        rtc: {},
+        wsConn: null,
+        audioSrc: null,
+    }));
+
+    // Validate Input
+    radios.forEach((radio, idx) => {
+        // Validate Color
+        if (!validColors.includes(radios[idx].color)) {
+            console.warn(`Color ${radios[idx].color} not valid, defaulting to blue`);
+            radios[idx].color = "blue";
+        }
+    });
+
+    // Populate radio cards
+    populateRadios();
+
+    // Connect and load if autoconnect is true
+    if (config.serverAutoConn) {
+        //connect()
+    }
 }
 
 /***********************************************************************************
@@ -821,15 +965,15 @@ function dummyTrack() {
 
 /**
  * Initiate WebRTC connection with server
+ * @param {int} idx index of radio in radios[]
  * @returns {boolean} true if connection starts successfully
  */
-function startWebRtc() {
-    console.log("Starting WebRTC session");
-    $("#navbar-status").html("Connecting WebRTC");
+function startWebRtc(idx) {
+    console.log(`Starting WebRTC session for ${radios[idx].name}`);
 
     // Create peer
-    rtc.peer = createPeerConnection();
-    if (rtc.peer) {
+    radios[idx].rtc.peer = createPeerConnection(idx);
+    if (radios[idx].rtc.peer) {
         console.log("Created peer connection");
     } else {
         console.error("Failed to create peer connection");
@@ -844,7 +988,20 @@ function startWebRtc() {
     // Open the microphone
     if (navigator.getUserMedia) {
         // Get the microphone
-        navigator.getUserMedia({audio:true},
+
+        // Old, deprecated way
+        //navigator.getUserMedia({audio:true},
+
+        // New, better (?) way
+        navigator.mediaDevices.getUserMedia({
+            audio: {
+                latency: 0.02,
+                echoCancellation: false,
+                autoGainControl: false,
+                mozNoiseSuppression: false,
+                mozAutoGainControl: false
+            }
+        }).then(
             // Add tracks to peer connection and negotiate if successful
             function(stream) {
                 // Set up mic meter dependecies
@@ -852,14 +1009,17 @@ function startWebRtc() {
                 audio.inputAnalyzer = audio.context.createAnalyser();
                 audio.inputPcmData = new Float32Array(audio.inputAnalyzer.fftSize);
                 audio.inputStream.connect(audio.inputAnalyzer);
+                // Get the first available track for the mic
+                audio.inputTrack = stream.getTracks()[0];
+                // Add a listener for when the mic track ends (happens occasionally, not sure why)
+                audio.inputTrack.addEventListener("ended", () => {
+                    alert('Mic track ended, please reconnect');
+                    stopWebRtc();
+                })
                 // Add the first available mic track to the peer connection
-                rtc.peer.addTrack(stream.getTracks()[0]);
-                // Add additional silent audio tracks so we can send the proper amount of speaker tracks back from the server
-                for (var i=0; i<radioList.length - 1; i++) {
-                    rtc.peer.addTrack(dummyTrack());
-                }
+                radios[idx].rtc.peer.addTrack(stream.getTracks()[0]);
                 // Create and send the WebRTC offer
-                return sendRtcOffer();
+                return sendRtcOffer(idx);
             },
             // Report a failure to capture mic
             function(e) {
@@ -873,16 +1033,28 @@ function startWebRtc() {
     }
 }
 
-function stopWebRtc() {
+/**
+ * Stop RTC session for radio at index
+ * @param {int} idx index of radio in radios[]
+ * @returns 
+ */
+function stopWebRtc(idx) {
+    // Return if there was never a peer connection to begin with
+    if (!radios[idx].rtc.hasOwnProperty('peer')) {
+        console.log("No peer connection created");
+        return
+    }
 
-    if (rtc.peer.connectionState == "closed") {
+    // Return if stuff is already closed
+    if (radios[idx].rtc.peer.connectionState == "closed") {
         console.log("RTC peer connection already closed");
         return
     }
 
     // Close any active peer transceivers
-    if (rtc.peer.getTransceivers) {
-        rtc.peer.getTransceivers().forEach(function(tx) {
+    if (radios[idx].rtc.peer.getTransceivers) {
+        radios[idx].rtc.peer.getTransceivers().forEach(function(tx, idx) {
+            console.debug(`Stopping RTC txcvr ${idx}`);
             if (tx.stop) {
                 tx.stop();
             }
@@ -890,21 +1062,25 @@ function stopWebRtc() {
     }
 
     // Close any local audio
-    rtc.peer.getSenders().forEach(function(sender) {
+    radios[idx].rtc.peer.getSenders().forEach(function(sender, idx) {
+        console.debug(`Stopping RTC sender ${idx}`);
         sender.track.stop();
     });
 
     // Close peer connection
     setTimeout(function() {
-        rtc.peer.close();
+        console.debug("Closing peer connection");
+        radios[idx].rtc.peer.close();
+        radios[idx].audioSrc = null;
     }, 500);
 }
 
 /**
  * Create a new WebRTC peer connection
+ * @param {int} idx the index of the radio in radios[]
  * @returns {RTCPeerConnection} the created peer connection object
  */
-function createPeerConnection() {
+function createPeerConnection(idx) {
 
     // Create config object
     var sdpConfig = {
@@ -916,47 +1092,42 @@ function createPeerConnection() {
 
     // Register event listeners for debug
     peer.addEventListener('icegatheringstatechange', function() {
-        console.log(`new peer iceGatheringState: ${peer.iceGatheringState}`);
+        console.log(`new peer iceGatheringState for radio ${radios[idx].name}: ${peer.iceGatheringState}`);
     }, false);
 
     peer.addEventListener('iceconnectionstatechange', function() {
-        console.log(`new peer iceConnectionState: ${peer.iceConnectionState}`);
+        console.log(`new peer iceConnectionState for radio ${radios[idx].name}: ${peer.iceConnectionState}`);
         if (peer.iceConnectionState == "connected") {
-            connected();
+            radioConnected(idx);
         } else if (peer.iceConnectionState == "failed") {
             // Disconnect the client if we had an error (for now, maybe auto-reconnect later?)
-            console.error("WebRTC ICE connection error!");
-            stopWebRtc();
-            serverSocket.close();
+            console.error(`WebRTC ICE connection failed for radio ${radios[idx].name}`);
+            stopWebRtc(idx);
+            radios[idx].wsConn.close();
         } else if (peer.iceConnectionState == "disconnected") {
-            console.error("WebRTC ICE connection disconnected");
-            stopWebRtc();
-            if (serverSocket) {
-                serverSocket.close();
+            console.error(`WebRTC ICE connection disconnected for radio ${radios[idx].name}`);
+            stopWebRtc(idx);
+            if (radios[idx].wsConn) {
+                radios[idx].wsConn.close();
             }
         }
     }, false);
 
     peer.addEventListener('signalingstatechange', function() {
-        console.log(`new peer signallingState: ${peer.signalingState}`);
+        console.log(`new peer signallingState for radio ${radios[idx].name}: ${peer.signalingState}`);
     })
 
     // Print initial states
-    console.log(`new peer iceGatheringState: ${peer.iceGatheringState}`);
-    console.log(`new peer iceConnectionState: ${peer.iceConnectionState}`);
-    console.log(`new peer signallingState: ${peer.signalingState}`);
+    console.log(`new peer iceGatheringState for radio ${radios[idx].name}: ${peer.iceGatheringState}`);
+    console.log(`new peer iceConnectionState for radio ${radios[idx].name}: ${peer.iceConnectionState}`);
+    console.log(`new peer signallingState for radio ${radios[idx].name}: ${peer.signalingState}`);
 
     // Connect audio stream from peer to the web audio objects
     peer.addEventListener('track', function(event) {
         if (event.track.kind == 'audio') {
-            var newIdx = radioSources.length;
-            console.debug("New ontrack event:");
+            console.debug(`New ontrack event for radio ${radios[idx].name}:`);
             console.debug(event);
-            console.log(`Got new audio track from server, index ${newIdx}`);
-
-            // DEBUG: oscillator test
-            //var newStream = audio.context.createOscillator();
-            //newStream.frequency.setValueAtTime(220 + (360 * newIdx), audio.context.currentTime);
+            console.log(`Got new audio track from server for radio ${radios[idx].name}`);
 
             // Create a new MediaStream from the track we want
             var newStream = new MediaStream( [event.track ]);
@@ -967,7 +1138,7 @@ function createPeerConnection() {
             newDummy.srcObject = newStream;
             newDummy.play();
             audio.dummyOutputs.push(newDummy);
-            console.debug(`Started dummy audio element for stream ${newIdx}`);
+            console.debug(`Started dummy audio element for radio ${radios[idx].name}`);
 
             // Create audio source from the track and put it in an object with a local gain node
             var newSource = {
@@ -977,9 +1148,14 @@ function createPeerConnection() {
                 gainNode: audio.context.createGain(),
                 muteNode: audio.context.createGain(),
                 panNode: audio.context.createStereoPanner(),
+                analyzerNode: audio.context.createAnalyser(),
                 leftSpkr: true,
                 rightSpkr: true
             }
+            // Create this afterwards because we need the value from the above node
+            newSource.analyzerData = new Float32Array(newSource.analyzerNode.fftSize);
+
+            // Create analyzer for RX meter
 
             // Setup AGC node
             newSource.agcNode.knee.setValueAtTime(audio.agcKnee, audio.context.currentTime);
@@ -990,16 +1166,16 @@ function createPeerConnection() {
             // Update radio connections
             newSource.audioNode.connect(newSource.agcNode);
             newSource.agcNode.connect(newSource.makeupNode);
-            newSource.makeupNode.connect(newSource.gainNode);
-            newSource.gainNode.connect(newSource.muteNode);
-            newSource.muteNode.connect(newSource.panNode);
+            newSource.makeupNode.connect(newSource.muteNode);
+            newSource.muteNode.connect(newSource.gainNode);
+            newSource.muteNode.connect(newSource.analyzerNode);
+            newSource.gainNode.connect(newSource.panNode);
             newSource.panNode.connect(audio.outputGain);
-            newSource.panNode.connect(audio.outputAnalyzer);
 
             console.debug(`New source ID: ${newSource.audioNode.id}`);
 
             // Add to list of radio streams
-            radioSources.push(newSource);
+            radios[idx].audioSrc = newSource;
 
             // Update the radio audio
             updateRadioAudio();
@@ -1015,38 +1191,45 @@ function createPeerConnection() {
 
 /**
  * Create and send the SDP offer to the server
+ * @param {int} idx index of radio in radios[]
  * @returns {boolean} true on success
  */
-function sendRtcOffer() {
+function sendRtcOffer(idx) {
     // Generate the SDP offer and assign it to the peer object
-    rtc.peer.createOffer().then(function(offer) {
-        return rtc.peer.setLocalDescription(offer);
+    radios[idx].rtc.peer.createOffer().then(function(offer) {
+        return radios[idx].rtc.peer.setLocalDescription(offer);
     }).then(function() {
         // Wait for ICE gathering to complete (this looks messy but it's just waiting for that)
         return new Promise(function(resolve) {
-            if (rtc.peer.iceGatheringState === 'complete') {
+            if (radios[idx].rtc.peer.iceGatheringState === 'complete') {
                 resolve();
             } else {
                 function checkState() {
-                    if (rtc.peer.iceGatheringState === 'complete') {
-                        rtc.peer.removeEventListener('icegatheringstatechange', checkState);
+                    if (radios[idx].rtc.peer.iceGatheringState === 'complete') {
+                        radios[idx].rtc.peer.removeEventListener('icegatheringstatechange', checkState);
                         resolve();
                     }
                 }
-                rtc.peer.addEventListener('icegatheringstatechange', checkState);
+                radios[idx].rtc.peer.addEventListener('icegatheringstatechange', checkState);
             }
         });
     }).then(function() {
         // Generate the specifics of the offer
-        var offer = rtc.peer.localDescription;
-        offer.sdp = sdpFilterCodec('audio', rtc.codec, offer.sdp);
+        var offer = radios[idx].rtc.peer.localDescription;
+        offer.sdp = sdpFilterCodec('audio', rtcConf.codec, offer.sdp);
+
+        // Get fmtp line for replacement
+        var rx = /a=fmtp:.*/g;
+        var fmtpLine = rx.exec(offer.sdp);
+        // Append bitrate info to SDP
+        offer.sdp = offer.sdp.replace(fmtpLine,`${fmtpLine};maxplaybackrate=${rtcConf.bitrate};sprop-maxcapturerate=${rtcConf.bitrate};stereo=0`);
 
         // Debug
         console.debug("SDP offer:");
         console.debug(offer.sdp);
 
         // Send the offer to the server via WebSocket
-        serverSocket.send(
+        radios[idx].wsConn.send(
         `{
             "webRtcOffer": {
                 "type": ${JSON.stringify(offer.type)},
@@ -1064,16 +1247,17 @@ function sendRtcOffer() {
 
 /**
  * Take the SDP response from the server and configure the peer
+ * @param {int} idx index of radio in radios[]
  * @param {string} answerType SDP type
  * @param {string} answerSdp SDP
  */
-function gotRtcResponse(answerType, answerSdp) {
+function gotRtcResponse(idx, answerType, answerSdp) {
     console.log("Got WebRTC response from server");
     var answer = {
         type: answerType,
         sdp: answerSdp
     }
-    rtc.peer.setRemoteDescription(answer);
+    radios[idx].rtc.peer.setRemoteDescription(answer);
 }
 
 /**
@@ -1148,6 +1332,48 @@ function sdpFilterCodec(kind, codec, realSdp) {
     Audio Handling Functions
 ***********************************************************************************/
 
+/**
+ * Queries the specified type of media device
+ * @param {string} type type of device to find ('audioinput', 'audiooutput', or 'videoinput')
+ * @param {function} callback callback to pass the filtered list of devices once retreived
+ */
+async function queryDeviceType(type) {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    return devices.filter(device => device.kind === type)
+}
+
+/**
+ * Populate the audio device lists
+ */
+async function getAudioDevices() {
+    const audioInputs = await queryDeviceType('audioinput');
+    const audioOutputs = await queryDeviceType('audiooutput');
+    
+    audioInputs.forEach(input => {
+        var name = input.label;
+        /*if (name.length > 30) {
+            name = name.substring(0,30) + "...";
+        }*/
+        const device = input.deviceId;
+        $("#audio-input").append($('<option>', {
+            value: device,
+            text: name
+        }));
+    })
+
+    audioOutputs.forEach(output => {
+        var name = output.label;
+        /*if (name.length > 30) {
+            name = name.substring(0,30) + "...";
+        }*/
+        const device = output.deviceId;
+        $("#audio-output").append($('<option>', {
+            value: device,
+            text: name
+        }));
+    })
+}
+
 /** 
 * Checks for browser compatibility and sets up audio devices
 * @return {bool} True on success
@@ -1174,22 +1400,34 @@ function startAudioDevices() {
  * Updates audio meters based on current data. Only called after both mic & speaker are set up and running (otherwise errors)
  */
 function audioMeterCallback() {
-    // Get data from speaker & mic
-    audio.outputAnalyzer.getFloatTimeDomainData(audio.outputPcmData);
-    audio.inputAnalyzer.getFloatTimeDomainData(audio.inputPcmData);
+    // Per-Radio RX Level Bar
+    radios.forEach((radio, idx) => {
+        // Ignore radios with no connected audio
+        if (radios[idx].audioSrc == null) {
+            return
+        }
+        // Get data
+        radios[idx].audioSrc.analyzerNode.getFloatTimeDomainData(radios[idx].audioSrc.analyzerData);
+        // Process into average amplitude
+        var sumSquares = 0.0;
+        for (const amplitude of radios[idx].audioSrc.analyzerData) { sumSquares += amplitude * amplitude; }
+        // We calculate the geometric mean of these samples, and then multiply by an experimentally-found value to get approximately 0-100% scaling
+        const newPct = String(Math.sqrt(sumSquares / radios[idx].audioSrc.analyzerData.length).toFixed(3) * 300);
+        $(`.radio-card#radio${idx} #rx-bar`).width(newPct);
+    });
 
-    // Output meter
-    let sumSquares = 0.0;
-    for (const amplitude of audio.outputPcmData) { sumSquares += amplitude * amplitude; }
-    audio.outputMeter.value = Math.sqrt(sumSquares / audio.outputPcmData.length);
+    // Get data from mic
+    audio.inputAnalyzer.getFloatTimeDomainData(audio.inputPcmData);
 
     // Input meter (only show when PTT)
     if (pttActive) {
         sumSquares = 0.0;
         for (const amplitude of audio.inputPcmData) { sumSquares += amplitude * amplitude; }
-        audio.inputMeter.value = Math.sqrt(sumSquares / audio.outputPcmData.length);
+        const newPct = String(Math.sqrt(sumSquares / audio.outputPcmData.length).toFixed(3) * 300);
+        // Apply to selected radio only
+        $(`.radio-card#radio${selectedRadioIdx} #tx-bar`).width(newPct);
     } else {
-        audio.inputMeter.value = 0.0;
+        $(`.radio-card#radio${selectedRadioIdx} #tx-bar`).width('0');
     }
 
     window.requestAnimationFrame(audioMeterCallback);
@@ -1220,39 +1458,42 @@ function playSound(soundId) {
  */
  function updateRadioAudio() {
     console.debug("Updating radio sound parameters");
-    radioSources.forEach(function(source, idx) {
-        radioListIdx = radioList.length - idx - 1;
-        if (radioListIdx == selectedRadioIdx) {
-            console.debug(`Radio ${idx} is selected. Setting gain to 1`);
-            radioSources[idx].gainNode.gain.setValueAtTime(1, audio.context.currentTime);
+    radios.forEach(function(radio, idx) {
+        // Ignore if audio not connected
+        if (radios[idx].audioSrc == null) {
+            console.debug(`Audio not connected for radio ${radios[idx].name}, skipping`);
+            return;
+        }
+        if (idx == selectedRadioIdx) {
+            console.debug(`Radio ${radios[idx].name} is selected. Setting gain to 1`);
+            radios[idx].audioSrc.gainNode.gain.setValueAtTime(1, audio.context.currentTime);
         } else {
-            console.debug(`Radio ${idx} is unselected. Setting gain to ${config.audio.unselectedVol}`);
-            radioSources[idx].gainNode.gain.setValueAtTime(dbToGain(config.audio.unselectedVol), audio.context.currentTime);
+            console.debug(`Radio ${radios[idx].name} is unselected. Setting gain to ${config.audio.unselectedVol}`);
+            radios[idx].audioSrc.gainNode.gain.setValueAtTime(dbToGain(config.audio.unselectedVol), audio.context.currentTime);
         }
         // Set AGC based on user setting
         if (config.audio.rxAgc) {
-            console.log(`Enabling AGC for radio ${idx}`);
-            radioSources[idx].agcNode.threshold.setValueAtTime(audio.agcThreshold, audio.context.currentTime);
-            radioSources[idx].makeupNode.gain.setValueAtTime(audio.agcMakeup, audio.context.currentTime);
+            console.log(`Enabling AGC for radio ${radios[idx].name}`);
+            radios[idx].audioSrc.agcNode.threshold.setValueAtTime(audio.agcThreshold, audio.context.currentTime);
+            radios[idx].audioSrc.makeupNode.gain.setValueAtTime(audio.agcMakeup, audio.context.currentTime);
         } else {
-            console.log(`Byassing AGC for radio ${idx}`);
-            radioSources[idx].agcNode.threshold.setValueAtTime(0, audio.context.currentTime);
-            radioSources[idx].makeupNode.gain.setValueAtTime(1.0, audio.context.currentTime);
+            console.log(`Byassing AGC for radio ${radios[idx].name}`);
+            radios[idx].audioSrc.agcNode.threshold.setValueAtTime(0, audio.context.currentTime);
+            radios[idx].audioSrc.makeupNode.gain.setValueAtTime(1.0, audio.context.currentTime);
         }
     });
 }
 
 /**
  * Mutes the radio's audio at the given radio index
- * @param {int} radioListIdx index of the radio in the radio list (not the source list)
+ * @param {int} idx index of the radio in radios[]
  * @param {bool} mute whether to mute or not
  */
-function muteRadio(radioListIdx, mute) {
-    var sourceIdx = radioSources.length - radioListIdx - 1;
+function muteRadio(idx, mute) {
     if (mute) {
-        radioSources[sourceIdx].muteNode.gain.setValueAtTime(0, audio.context.currentTime);
+        radios[idx].audioSrc.muteNode.gain.setValueAtTime(0, audio.context.currentTime);
     } else {
-        radioSources[sourceIdx].muteNode.gain.setValueAtTime(1, audio.context.currentTime);
+        radios[idx].audioSrc.muteNode.gain.setValueAtTime(1, audio.context.currentTime);
     }
 }
 
@@ -1261,19 +1502,23 @@ function muteRadio(radioListIdx, mute) {
  */
 function updateMute() {
     console.debug("Updating radio source mute statuses");
-    radioSources.forEach(function(source, idx) {
-        radioListIdx = radioList.length - idx - 1;
+    radios.forEach(function(radio, idx) {
+        // Ignore if we haven't created the node yet
+        if (radios[idx].audioSrc == null) { 
+            console.debug(`Audio not connected for radio ${radios[idx].name}, skipping`);
+            return;
+        }
         // Mute if we're muted or not receiving, after the specified delay in rtc.rxLatency
-        if (radioList[radioListIdx].muted || (radioList[radioListIdx].state != 'Receiving')) {
+        if (radios[idx].status.muted || (radios[idx].status.state != 'Receiving')) {
             setTimeout(function() {
-                console.debug(`Muting audio for radio ${radioListIdx} (${radioList[radioListIdx].name})`);
-                radioSources[idx].muteNode.gain.setValueAtTime(0, audio.context.currentTime);
-            }, rtc.rxLatency);
+                console.debug(`Muting audio for radio ${radios[idx].name}`);
+                radios[idx].audioSrc.muteNode.gain.setValueAtTime(0, audio.context.currentTime);
+            }, rtcConf.rxLatency);
         } else {
             setTimeout(function() {
-                console.debug(`Unmuting audio for radio ${radioListIdx} (${radioList[radioListIdx].name})`);
-                radioSources[idx].muteNode.gain.setValueAtTime(1, audio.context.currentTime);
-            }, rtc.rxLatency);
+                console.debug(`Unmuting audio for radio ${radios[idx].name}`);
+                radios[idx].audioSrc.muteNode.gain.setValueAtTime(1, audio.context.currentTime);
+            }, rtcConf.rxLatency);
         }
     });
 }
@@ -1284,7 +1529,12 @@ function updateMute() {
  * @param {object} obj 
  */
 function showPanMenu(event, obj) {
-    $(obj).closest(".radio-card").find(".panning-dropdown").toggleClass("closed");
+    const radioCard = $(obj).closest(".radio-card");
+    if (radioCard.hasClass("disconnected")) {
+        console.debug("Radio disconnected, not showing pan menu");
+    } else {
+        $(obj).closest(".radio-card").find(".panning-dropdown").toggleClass("closed");
+    }
     event.stopPropagation();
 }
 
@@ -1293,53 +1543,41 @@ function closeAllPanMenus() {
 }
 
 /**
- * Toggles the left or right speaker of a radio on or off
- * @param {event} event 
- * @param {element} obj object calling the function
- * @param {string} channel "left" or "right"
+ * Update the speaker pan for a radio (called by the slider value change)
+ * @param {event} event the calling event
+ * @param {object} obj the calling html object
  */
-function toggleSpkr(event, obj, channel) {
-    // Get calling radio id
-    const radioId = $(obj).closest(".radio-card").attr('id');
-    // Get index of radio in list
-    const idx = getRadioIndex(radioId);
-    // Get index in audio sources (inverse of index in list)
-    const sourceIdx = radioSources.length - idx - 1;
-    // Debug log
-    console.debug(`Toggling ${channel} speaker for radio ${radioId}`);
-    if (channel == 'left') {
-        radioSources[sourceIdx].leftSpkr = !radioSources[sourceIdx].leftSpkr;
-    } else if (channel == 'right') {
-        radioSources[sourceIdx].rightSpkr = !radioSources[sourceIdx].rightSpkr;
-    }
-    updatePan(sourceIdx, radioId);
+function changePan(event, obj) {
+    // Prevent from selecting the card
+    event.preventDefault();
     event.stopPropagation();
+    event.stopImmediatePropagation();
+    // Get new value
+    const newPan = $(obj).val();
+    // Get radio ID and index
+    const radioId = $(obj).closest(".radio-card").attr('id');
+    const idx = getRadioIndex(radioId);
+    // Debug log
+    console.debug(`Setting new pan for radio ${radios[idx]} to ${newPan}`);
+    // Set pan
+    radios[idx].audioSrc.panNode.pan.setValueAtTime(newPan, audio.context.currentTime);
 }
 
 /**
- * Updates panning for specified radio source
- * @param {int} sourceIdx index of source in radioSources list
+ * Center the pan for a radio (fired by slider doubleclick)
+ * @param {event} event the calling button event 
+ * @param {object} obj the calling html object
  */
-function updatePan(sourceIdx, radioId) {
-    if (radioSources[sourceIdx].leftSpkr && radioSources[sourceIdx].rightSpkr) {
-        // Center pan
-        radioSources[sourceIdx].panNode.pan.setValueAtTime(0, audio.context.currentTime);
-        // Enable both icons
-        $(`#${radioId} #right-spkr-button`).removeClass("disabled");
-        $(`#${radioId} #left-spkr-button`).removeClass("disabled");
-    } else if (radioSources[sourceIdx].leftSpkr) {
-        // Left pan
-        radioSources[sourceIdx].panNode.pan.setValueAtTime(-1, audio.context.currentTime);
-        // Update icons
-        $(`#${radioId} #right-spkr-button`).addClass("disabled");
-        $(`#${radioId} #left-spkr-button`).removeClass("disabled");
-    } else if (radioSources[sourceIdx].rightSpkr) {
-        // Right pan
-        radioSources[sourceIdx].panNode.pan.setValueAtTime(1, audio.context.currentTime);
-        // Update icons
-        $(`#${radioId} #right-spkr-button`).removeClass("disabled");
-        $(`#${radioId} #left-spkr-button`).addClass("disabled");
-    }
+function centerPan(event, obj) {
+    // Update slider value
+    $(obj).val(0);
+    // Get radio index
+    const radioId = $(obj).closest(".radio-card").attr('id');
+    const idx = getRadioIndex(radioId);
+    // Update pan
+    console.debug(`Resetting pan for radio ${radios[idx]}`);
+    // Set pan
+    radios[idx].audioSrc.panNode.pan.setValueAtTime(0, audio.context.currentTime);
 }
 
 /***********************************************************************************
@@ -1347,23 +1585,27 @@ function updatePan(sourceIdx, radioId) {
 ***********************************************************************************/
 
 /**
- * Connect to the server's websocket
+ * Create websocket connection to radio and wait for it to connect
+ * @param {int} idx index of radio in radios[]
  */
-function connectWebsocket() {
-    // Change button
-    $("#server-connect-btn").html("Connecting");
-    $("#server-connect-btn").prop("disabled",true);
-    // Change status
-    $("#navbar-status").html("Connecting websocket");
+ function connectRadio(idx) {
     // Log
-    console.log("Websocket connecting to " + config.serverAddress + ":" + config.serverPort);
-    // Setup socket
-    serverSocket = new WebSocket("wss://" + config.serverAddress + ":" + config.serverPort);
-    serverSocket.onerror = handleSocketError;
-    serverSocket.onmessage = recvSocketMessage;
-    serverSocket.onclose = handleSocketClose;
+    console.info(`Connecting to radio ${radios[idx].name}`);
+    // Update radio connection icon
+    $(`#radio${idx} .icon-connect`).removeClass('disconnected');
+    $(`#radio${idx} .icon-connect`).addClass('connecting');
+    $(`#radio${idx} .icon-connect`).parent().prop('title','Connecting to daemon');
+    // Create audio context if we haven't already
+    if (audio.context == null) {
+        startAudioDevices();
+    }
+    // Create websocket
+    radios[idx].wsConn = new WebSocket("wss://" + radios[idx].address + ":" + radios[idx].port);
+    radios[idx].wsConn.onerror = function(event) { handleSocketError(event, idx) };
+    radios[idx].wsConn.onmessage = function(event) { recvSocketMessage(event, idx) };
+    radios[idx].wsConn.onclose = function(event) { handleSocketClose(event, idx) };
     // Wait for connection
-    waitForWebSocket(serverSocket, onConnectWebsocket);
+    waitForWebSocket(radios[idx].wsConn, function() { onConnectWebsocket(idx) });
 }
 
 /**
@@ -1387,36 +1629,38 @@ function waitForWebSocket(socket, callback=null) {
 
 /**
  * Called once the websocket connection is active
+ * @param {int} idx index of radio in radios[]
  */
-function onConnectWebsocket() {
+function onConnectWebsocket(idx) {
     //$("#navbar-status").html("Websocket connected");
-    console.log("Websocket connected");
-    // Query radios
-    console.log("Querying master radio list");
-    serverSocket.send(
+    console.log(`Websocket connected for radio ${radios[idx].name}`);
+    // Query radio status
+    console.log(`Querying radio ${radios[idx].name} status`);
+    radios[idx].wsConn.send(
         `{
-            "radios": {
+            "radio": {
                 "command": "query"
             }
         }`
     )
     // Start webrtc
-    waitForRadioList(startWebRtc);
+    waitForRadioStatus(idx, function() { startWebRtc(idx) });
 }
 
 /**
  * Waits for the radiolist to be populated before calling callback
+ * @param {int} idx index of radio in radios[]
  * @param {function} callback 
  */
-function waitForRadioList(callback) {
+function waitForRadioStatus(idx, callback) {
     setTimeout(
         function() {
-            if (radioList.length > 0) {
+            if (radios[idx].status.state != 'Disconnected') {
                 if (callback != null) {
                     callback();
                 }
             } else {
-                waitForRadioList(callback);
+                waitForRadioStatus(idx, callback);
             }
         },
     5); // 5 ms timeout
@@ -1424,13 +1668,13 @@ function waitForRadioList(callback) {
 
 /**
  * Disconnect from the websocket server
+ * @param {int} idx radio index in radios[]
  */
-function disconnectWebsocket() {
-    
+function disconnectRadio(idx) {
     // Disconnect if we had a connection open
-    if (serverSocket.readyState == WebSocket.OPEN) {
-        console.log("Disconnecting from server");
-        serverSocket.close();
+    if (radios[idx].wsConn.readyState == WebSocket.OPEN) {
+        console.log(`Disconnecting from radio ${radios[idx].name}`);
+        radios[idx].wsConn.close();
     }
 }
 
@@ -1440,15 +1684,15 @@ function disconnectWebsocket() {
  * 
  * This command protocol is specified in `Docs/Websocket JSON Signalling.md`
  * @param {event} event 
+ * @param {int} idx index of radio in radios[]
  */
-function recvSocketMessage(event) {
-
+function recvSocketMessage(event, idx) {
     // Convert to JSON
     var msgObj;
     try {
         msgObj = JSON.parse(event.data);
     } catch (e) {
-        console.warn("Got invalid data from websocket: " + event.data);
+        console.warn(`Got invalid data from radio ${radios[idx].name} websocket: ` + event.data);
         console.warn(e);
         return;
     }
@@ -1457,37 +1701,25 @@ function recvSocketMessage(event) {
     for (const [key, value] of Object.entries(msgObj)) {
         // Handle message data based on key type
         switch (key) {
-
-            // List of configured radios
-            case "radios":
-                // Set our radioList object to the attached radioList object (which was parsed from JSON)
-                console.log("Got master radio list update");
-                radioList = value['radioList'];
-                // Update the UI
-                populateRadios();
-                bindRadioCardButtons();
-                break;
-
-            // Single radio status update
-            case "radio":
-                // get index of radio
-                const idx = value['index'];
-                console.log("Got status update for radio " + idx.toString());
+            // Radio status update
+            case "status":
+                console.log(`Got status update for radio ${radios[idx].name}`);
                 // get status data
-                var radioStatus = value['status'];
+                var radioStatus = msgObj['status'];
+                //console.debug(radioStatus);
                 // Strip out \u0000's from strings (TODO: figure out why python's decode method adds these and how to get rid of them)
                 radioStatus['zone'] = radioStatus['zone'].replace(/\0/g, '');
                 radioStatus['chan'] = radioStatus['chan'].replace(/\0/g, '');
                 // Debug
                 console.debug(radioStatus);
                 // Update radio entry
-                radioList[idx] = radioStatus;
+                radios[idx].status = radioStatus;
                 // Update radio card
                 updateRadioCard(idx);
                 // Update bottom controls
                 updateRadioControls();
                 // Update radio mute status
-                updateMute();
+                updateMute(idx);
                 break;
 
             // WebRTC SDP answer
@@ -1495,7 +1727,7 @@ function recvSocketMessage(event) {
                 // get params
                 answerType = value['type'];
                 answerSdp = value['sdp'];
-                gotRtcResponse(answerType,answerSdp);
+                gotRtcResponse(idx,answerType,answerSdp);
                 break;
 
             // Speaker audio data
@@ -1519,35 +1751,37 @@ function recvSocketMessage(event) {
 /**
  * Handle the websocket closing
  * @param {event} event socket closed event
+ * @param {int} idx index of radio in radios[]
  */
-function handleSocketClose(event) {
-    var clean = true;
-    console.warn("Server connection closed");
+function handleSocketClose(event, idx) {
+    // Console warning
+    console.warn(`Websocket connection closed to ${radios[idx].name}`);
+    console.debug(event);
     if (event.data) {console.warn(event.data);}
 
-    // If it wasn't a commanded disconnect, alert the user after we're done cleaning up
-    if (!disconnecting) {
-        clean = false;
-    }
-
     // Cleanup
-    stopWebRtc();
-    serverSocket = null;
-    disconnected();
-
-    // Show the optional alert
-    if (!clean) {
-        window.alert("Lost connection to server!");
+    if (radios[idx].rtc != null) {
+        stopWebRtc(idx);
     }
+    radios[idx].wsConn = null;
+    radios[idx].status.state = 'Disconnected';
+
+    // UI Update
+    $(`#radio${idx} .icon-connect`).removeClass('connected');
+    $(`#radio${idx} .icon-connect`).removeClass('connecting');
+    $(`#radio${idx} .icon-connect`).addClass('disconnected');
+    $(`#radio${idx} .icon-connect`).parent().prop('title','Disconnected');
+    updateRadioCard(idx);
 }
 
 /**
  * Handle connection errors from the server
  * @param {event} event 
  */
-function handleSocketError(event) {
-    console.error("Server connection error: " + event.data);
-    window.alert("Server connection errror: " + event.data);
+function handleSocketError(event, idx) {
+    console.error(`Websocket connection error for radio ${radios[idx].name}`);
+    console.debug(event);
+    //window.alert("Server connection errror: " + event.data);
 }
 
 /***********************************************************************************

@@ -24,11 +24,10 @@ class Radio():
                     "Soundcard-CM108",  # CM108 GPIO PTT
                     "Soundcard-VOX"]    # Radio-controlled VOX PTT
 
-    def __init__(self, index, name, desc=None, ctrlMode=None, ctrlPort=None, txDev=None, rxDev=None, logger=Logger()):
+    def __init__(self, name, desc=None, ctrlMode=None, ctrlPort=None, txDev=None, rxDev=None, logger=Logger()):
         """Radio configuration object
 
         Args:
-            index (int): index of the radio in the global radio list
             name (string): Radio name
             desc (string): Radio description
             ctrlMode (string): Radio control mode (SB9600, CAT, etc)
@@ -42,7 +41,6 @@ class Radio():
             raise ValueError("Invalid control mode specified: {}".format(ctrlMode))
 
         # Save parameters
-        self.index = index
         self.name = name
         self.desc = desc
         self.ctrlMode = ctrlMode
@@ -57,6 +55,8 @@ class Radio():
         self.error = False
         self.selected = False
         self.muted = False
+        self.scanning = False
+        self.priority = 0
         self.softkeys = ["","","","","",""]
         self.softkeyStates = [False, False, False, False, False, False]
 
@@ -104,10 +104,10 @@ class Radio():
 
         # XTL5000 O-head
         if self.ctrlMode == "SB9600-XTL-O":
-            self.interface = XTL(self.index, self.ctrlPort, 'O5', self.statusCallback, self.logger)
+            self.interface = XTL(self.name, self.ctrlPort, 'O5', self.statusCallback, self.logger)
         # XPR XCMP Control
         elif self.ctrlMode == "XCMP-XPR":
-            self.interface = XPR(self.index, self.ctrlPort, self.statusCallback, self.logger)
+            self.interface = XPR(self.name, self.ctrlPort, self.statusCallback, self.logger)
         
         # Connect to radio (optional reset)
         self.interface.connect(reset=reset)
@@ -169,7 +169,8 @@ class Radio():
         Set status of radio mute and update
         """
         self.muted = state
-        self.statusCallback(self.index)
+        self.logger.logInfo("Muted radio {}".format(self.name))
+        self.statusCallback()
 
     """-------------------------------------------------------------------------------
         Radio Status Functions
@@ -186,6 +187,8 @@ class Radio():
         self.state = self.interface.state
         self.chan = self.interface.chanText
         self.zone = self.interface.zoneText
+        self.scanning = self.interface.scanning
+        self.priority = self.interface.priority
         self.softkeys = self.interface.softkeys
         self.softkeyStates = self.interface.softkeyStates
 
@@ -242,6 +245,8 @@ class Radio():
             "lastid": self.lastid,
             "state": stateText,
             "muted": self.muted,
+            "scanning": self.scanning,
+            "priority": self.priority,
             "error": self.error,
             "errorText": errorText,
             "softkeys": self.softkeys,
@@ -268,7 +273,7 @@ class Radio():
         }
         return config
 
-    def decodeConfig(index, radioDict, logger=Logger()):
+    def decodeConfig(radioDict, logger=Logger()):
         """Decode a dict of config parameters into a new radio object
 
         Args:
@@ -278,8 +283,7 @@ class Radio():
             Radio: a new Radio object
         """
         # create a new radio object from config data
-        return Radio(index,
-                     radioDict['name'],
+        return Radio(radioDict['name'],
                      radioDict['desc'],
                      radioDict['ctrlMode'],
                      radioDict['ctrlPort'],
