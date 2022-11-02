@@ -2,7 +2,7 @@
     Global Variables
 ***********************************************************************************/
 
-var version = "2.0.0";
+var version = "2.0.0-rc1";
 
 // Local user config variables (saved to cookie)
 var config = {
