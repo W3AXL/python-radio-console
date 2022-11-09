@@ -2,7 +2,7 @@
     Global Variables
 ***********************************************************************************/
 
-var version = "1.0.0"
+var version = "2.0.1";
 
 // User Config Var
 var config = {
@@ -65,7 +65,16 @@ var rtc = {
     txLatency: 300
 }
 
-testInput = null,
+testInput = null;
+
+// Radio Card Tempalte
+const radioCardTemplate = document.querySelector('#card-template');
+
+// Alert Dialog Template
+const alertTemplate = document.querySelector("#alert-dialog-template");
+
+// Radio JSON validation
+const validColors = ["red","amber","green","blue","purple"];
 
 /***********************************************************************************
     State variables
@@ -680,6 +689,28 @@ function connectButton() {
     }
 }
 
+/**
+ * Show a new alert dialog
+ * @param {string} id id of the alert dialog
+ * @param {string} title title text
+ * @param {string} text body text
+ */
+function showAlert(id, title, text) {
+    var newAlertDialog = alertTemplate.content.cloneNode(true);
+    newAlertDialog.querySelector(".alert-dialog").title = title;
+    newAlertDialog.querySelector(".alert-dialog").html = text;
+    newAlertDialog.id = id;
+    $("body").append(newAlertDialog);
+    $(`#${id}`).on('dialogclose', function(event) {
+        closeAlert(id);
+    });
+    $(`#${id}`).dialog();
+}
+
+function closeAlert(id) {
+
+}
+
 /***********************************************************************************
     Global Backend Functions
 ***********************************************************************************/
@@ -837,9 +868,10 @@ function startWebRtc() {
     }
     
     // Find the right getUserMedia()
-    if (!navigator.getUserMedia) {
+    // This isn't needed with the new method below
+    /*if (!navigator.getUserMedia) {
         navigator.getUserMedia = navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia || navigator.msGetUserMedia;
-    }
+    }*/
 
     // Open the microphone
     if (navigator.getUserMedia) {
@@ -852,6 +884,13 @@ function startWebRtc() {
                 audio.inputAnalyzer = audio.context.createAnalyser();
                 audio.inputPcmData = new Float32Array(audio.inputAnalyzer.fftSize);
                 audio.inputStream.connect(audio.inputAnalyzer);
+                // Get the first available track for the mic
+                audio.inputTrack = stream.getTracks()[0];
+                // Add a listener for when the mic track ends (happens occasionally, not sure why) and try to reconnect
+                audio.inputTrack.addEventListener("ended", (event) => {
+                    console.error(`Mic track ended for radio ${idx}, attempting to reconnect`);
+                    restartMicTrack(idx);
+                })
                 // Add the first available mic track to the peer connection
                 rtc.peer.addTrack(stream.getTracks()[0]);
                 // Add additional silent audio tracks so we can send the proper amount of speaker tracks back from the server
@@ -873,12 +912,59 @@ function startWebRtc() {
     }
 }
 
-function stopWebRtc() {
+function restartMicTrack(idx) {
+    // Re-get the mic
+    navigator.mediaDevices.getUserMedia({
+        audio: {
+            latency: 0.02,
+            echoCancellation: false,
+            autoGainControl: false,
+            mozNoiseSuppression: false,
+            mozAutoGainControl: false
+        }
+    // Reconnect the track
+    }).then(function(stream) {
+        // Reconnect mic to meters, etc
+        audio.inputStream = audio.context.createMediaStreamSource(stream);
+        audio.inputStream.connect(audio.inputAnalyzer);
+        // Replace mic track in WebRTC connection
+        const sender = radios[idx].rtc.peer.getSenders().find((s) => s.track.kind === audio.inputTrack.kind);
+        console.debug("Found sender for mic track: ", sender);
+        audio.inputTrack = stream.getTracks()[0];
+        console.debug("Replacing with mic track: ", audio.inputTrack);
+        sender.replaceTrack(audio.inputTrack);
+        return true;
+    }).catch((err) => {
+        console.error(`Error on replacing mic track: ${err}, disconnecting`);
+        stopWebRtc(idx);
+        disconnectRadio(idx);
+        return false;
+    });
+}
+
+/**
+ * Stop RTC session for radio at index
+ * @param {int} idx index of radio in radios[]
+ * @returns 
+ */
+function stopWebRtc(idx) {
+    // Return if there was never a peer connection to begin with
+    console.debug(`Stopping RTC for radio ${idx}`);
+    if (!radios[idx].rtc.hasOwnProperty('peer')) {
+        console.log("No peer connection created");
+        return
+    }
 
     if (rtc.peer.connectionState == "closed") {
         console.log("RTC peer connection already closed");
         return
     }
+
+    // Close any local audio
+    radios[idx].rtc.peer.getSenders().forEach(function(sender, idx) {
+        console.debug(`Stopping RTC sender ${idx}`);
+        sender.track.stop();
+    });
 
     // Close any active peer transceivers
     if (rtc.peer.getTransceivers) {
@@ -929,10 +1015,11 @@ function createPeerConnection() {
             stopWebRtc();
             serverSocket.close();
         } else if (peer.iceConnectionState == "disconnected") {
-            console.error("WebRTC ICE connection disconnected");
-            stopWebRtc();
-            if (serverSocket) {
-                serverSocket.close();
+            console.error(`WebRTC ICE connection disconnected for radio ${radios[idx].name}`);
+            stopWebRtc(idx);
+            if (radios[idx].wsConn) {
+                radios[idx].wsConn.close();
+
             }
         }
     }, false);
