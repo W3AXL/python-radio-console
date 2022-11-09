@@ -43,10 +43,10 @@
             <div id="navbar-version" class="navbar-item">VERSION</div>
 
             <!-- Separator -->
-            <div id="navbar-separator" class="navbar-item"> - </div>
+            <!--<div id="navbar-separator" class="navbar-item"> - </div>-->
 
             <!-- Server Status -->
-            <div id="navbar-status" class="navbar-item">Disconnected</div>
+            <!--<div id="navbar-status" class="navbar-item">Disconnected</div>-->
 
             <!-- Clock -->
             <div id="navbar-clock">
@@ -59,8 +59,8 @@
                 <input type="range" class="topcoat-range" id="console-volume" value="75" oninput="changeVolume()" disabled>
             </div>
 
-            <!-- Mic & Speaker Volume Meters -->
-            <div id="navbar-meters" class="navbar-item">
+            <!-- Mic & Speaker Volume Meters (deprecated in version 2) -->
+            <!--<div id="navbar-meters" class="navbar-item">
                 <div class="meter-container">
                     <ion-icon name="mic-sharp"></ion-icon>
                     <meter id="meter-mic" min="0" max="0.4" high="0.3"></meter>
@@ -69,7 +69,7 @@
                     <ion-icon name="volume-off-sharp"></ion-icon>
                     <meter id="meter-spkr" min="0" max="0.4" high="0.3"></meter>
                 </div>
-            </div>
+            </div>-->
 
             <!-- Clear Float -->
             <br class="navbar-clear" />
@@ -81,13 +81,13 @@
             <div class="sidebar sidebar-closed" id="sidebar-mainmenu">
                 <ul>
                     <li>
-                        <a href="#" onclick="showPopup('#server-config-popup');toggleMainMenu();">
+                        <a href="#" onclick="showConfigPopup('#server-config-popup');toggleMainMenu();">
                             <span class="sidebar-icon"><ion-icon name="server-sharp"></ion-icon></span>
                             <span class="sidebar-item">Server Config</span>
                         </a>
                     </li>
                     <li>
-                        <a href="#" onclick="showPopup('#client-config-popup');toggleMainMenu();">
+                        <a href="#" onclick="showConfigPopup('#client-config-popup');toggleMainMenu();">
                             <span class="sidebar-icon"><ion-icon name="settings-sharp"></ion-icon></span>
                             <span class="sidebar-item">Client Config</span>
                         </a>
@@ -104,37 +104,55 @@
             <!-- Main Layout for Radio Entries -->
             <div id="main-layout">
 
-                <!-- Placeholder radio card for development -->
-                <!--<div class="radio-card" id="${id}">
-                    <div class="radio-card" id="${id}">
-                        <div class="header">
-                            <div class="selected-icon">
-                                <ion-icon name="caret-forward-circle-sharp"></ion-icon>
-                            </div>
-                            <h2>${name}</h2>
-                            <div class="icon-stack">
-                                <a href="#" onclick="showPanMenu(event, this)" class="enabled"><ion-icon name="headset-sharp" id="icon-panning"></ion-icon></a>
-                                    <div class="panning-dropdown closed">
-                                        <a id="left-spkr-button" href="#" onclick="toggleSpkr(event, this, 'left')"><ion-icon name="volume-off-sharp" style="transform: scaleX(-1);"></ion-icon></a>
-                                        <a id="right-spkr-button" href="#" onclick="toggleSpkr(event, this, 'right')"><ion-icon name="volume-off-sharp"></ion-icon></a>
+                <!-- Placeholder radio card for development  -->
+                <template id="card-template">
+                    <div class="radio-card disconnected">
+                        <div class="card">
+                            <div class="selected-tab"></div>
+                            <!-- Header -->
+                            <div class="header">
+                                <h2>Placeholder Name</h2>
+                                <div class="icon-stack">
+                                    <!-- Scan Icon -->
+                                    <div class="scan-icons">
+                                        <ion-icon name="moto-scan" class="scan-icon"></ion-icon>
+                                        <ion-icon name="moto-scan-dot" class="scan-pri-icon"></ion-icon>
                                     </div>
-                                <a href="#" onclick="toggleMute(event, this)" class="enabled"><ion-icon name="volume-high-sharp" id="icon-mute"></ion-icon></a>
-                                <a href="#"><ion-icon name="warning-sharp" id="icon-alert"></ion-icon></a>
+                                    <!-- Pan Dropdown -->
+                                    <a href="#" onclick="showPanMenu(event, this)" class="enabled"><ion-icon name="headset-sharp" id="icon-panning"></ion-icon></a>
+                                        <div class="panning-dropdown closed">
+                                            <!-- Slider -->
+                                            <input type="range" class="topcoat-range" class="radio-pan" min="-1" max="1" value="0" step="0.1" onclick="stopClick(event, this)" oninput="changePan(event, this)" ondblclick="centerPan(event, this)">
+                                        </div>
+                                    <!-- Mute Button -->
+                                    <a href="#" onclick="toggleMute(event, this)" class="enabled"><ion-icon name="volume-high-sharp" id="icon-mute"></ion-icon></a>
+                                    <!-- Connection Icon -->
+                                    <a href="#" onclick="connectButton(event, this)" title="Disconnected"><ion-icon name="connection-sharp" class="icon-connect disconnected"></ion-icon></a>
+                                </div>
+                            </div>
+                            <!-- Content -->
+                            <div class="content">
+                                <div id="zone-text">Zone Text</div>
+                                <div id="channel-text">Channel Text</div>
+                                <!-- RX Audio Bar -->
+                                <div class="audio-bar">
+                                    <div class="audio-eq">
+                                        <ion-icon name="volume-off-sharp"></ion-icon>
+                                        <div class="eq-frame">
+                                            <div class="eq-bar" id="rx-bar"></div>
+                                        </div>
+                                    </div>
+                                    <div class="audio-eq">
+                                        <ion-icon name="mic-sharp"></ion-icon>
+                                        <div class="eq-frame">
+                                            <div class="eq-bar" id="tx-bar"></div>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
-                        <div class="content">
-                            <div>
-                                <h3>CHANNEL</h3>
-                                <div id="channel-text" class="value-frame"></div>
-                            </div>
-                            <div>
-                                <h3>LAST ID</h3>
-                                <div id="id-text" class="value-frame"></div>
-                            </div>
-                        </div>
-                        <div class="footer"></div>
                     </div>
-                </div>-->
+                </template>
 
             </div>
 
@@ -152,79 +170,60 @@
 
             <!-- Radio Controls -->
             <div id="radio-controls">
-                <!-- Left Button Bar -->
-                <div class="topcoat-button-bar">
+
+                <!-- Softkey Bar -->
+                <div class="btn-bar">
                     <!-- Left Arrow -->
-                    <div class="topcoat-button-bar__item">
-                        <button id="leftarrow" class="topcoat-button-bar__button--large" onclick="button_left()" disabled style="width:48px">
-                            <ion-icon name="caret-back-sharp"></ion-icon>
-                        </button>
+                    <div id="leftarrow" class="btn disabled" onclick="button_left()" class="disabled">
+                        <span class="btn-text"><ion-icon name="caret-back-sharp"></ion-icon></span>
                     </div>
                     <!-- Softkey 1 -->
-                    <div class="topcoat-button-bar__item">
-                        <button id="softkey1" class="topcoat-button-bar__button--large" onclick="softkey(1)" disabled>
-                            <span class="softkey"></span>
-                        </button>
+                    <div id="softkey1" class="btn softkey disabled" onclick="softkey(1)">
+                        <span class="btn-text"></span>
                     </div>
                     <!-- Softkey 2 -->
-                    <div class="topcoat-button-bar__item">
-                        <button id="softkey2" class="topcoat-button-bar__button--large" onclick="softkey(2)" disabled>
-                            <span class="softkey"></span>
-                        </button>
+                    <div id="softkey2" class="btn softkey disabled" onclick="softkey(2)">
+                        <span class="btn-text"></span>
                     </div>
                     <!-- Softkey 3 -->
-                    <div class="topcoat-button-bar__item">
-                        <button id="softkey3" class="topcoat-button-bar__button--large" onclick="softkey(3)" disabled>
-                            <span class="softkey"></span>
-                        </button>
+                    <div id="softkey3" class="btn softkey disabled" onclick="softkey(3)">
+                        <span class="btn-text"></span>
                     </div>
                     <!-- Softkey 4 -->
-                    <div class="topcoat-button-bar__item">
-                        <button id="softkey4" class="topcoat-button-bar__button--large" onclick="softkey(4)" disabled>
-                            <span class="softkey"></span>
-                        </button>
+                    <div id="softkey4" class="btn softkey disabled" onclick="softkey(4)">
+                        <span class="btn-text"></span>
                     </div>
                     <!-- Softkey 5 -->
-                    <div class="topcoat-button-bar__item">
-                        <button id="softkey5" class="topcoat-button-bar__button--large" onclick="softkey(5)" disabled>
-                            <span class="softkey"></span>
-                        </button>
+                    <div id="softkey5" class="btn softkey disabled" onclick="softkey(5)">
+                        <span class="btn-text"></span>
                     </div>
                     <!-- Softkey 6 -->
-                    <div class="topcoat-button-bar__item">
-                        <button id="softkey6" class="topcoat-button-bar__button--large" onclick="softkey(6)" disabled>
-                            <span class="softkey"></span>
-                        </button>
+                    <div id="softkey6" class="btn softkey disabled" onclick="softkey(6)">
+                        <span class="btn-text"></span>
                     </div>
                     <!-- Right Arrow -->
-                    <div class="topcoat-button-bar__item">
-                        <button id="rightarrow" class="topcoat-button-bar__button--large" onclick="button_right()" disabled style="width:48px">
-                            <ion-icon name="caret-forward-sharp"></ion-icon>
-                        </button>
+                    <div id="rightarrow" class="btn disabled" onclick="button_right()">
+                        <span class="btn-text"><ion-icon name="caret-forward-sharp"></ion-icon></span>
                     </div>
                 </div>
 
-                <!-- Selected Channel LCD screen -->
-                <div class="lcd">
-                    <div id="selected-zone-text"></div>
-                    <div id="selected-chan-text"></div>
+                <!-- Channel Up/Down Buttons -->
+                <div class="btn-bar" id="chan-btns">
+                    <div id="chan-up" class="btn disabled" onclick="changeChannel(false)">
+                        <span class="btn-text"><ion-icon name="caret-up-sharp"></ion-icon></span>
+                    </div>
+                    <div id="chan-down" class="btn disabled" onclick="changeChannel(true)">
+                        <span class="btn-text"><ion-icon name="caret-down-sharp"></ion-icon></span>
+                    </div>
                 </div>
 
-                <!-- Right Button Bar -->
-                <div class="topcoat-button-bar">
-                    <!-- Channel Down -->
-                    <div class="topcoat-button-bar__item">
-                        <button id="control-chanup" title="Channel Down" class="topcoat-button-bar__button--large" style="width:48px" onclick="changeChannel(true)" disabled>
-                            <ion-icon name="caret-down-sharp"></ion-icon>
-                        </button>
-                    </div>
-                    <!-- Channel Up -->
-                    <div class="topcoat-button-bar__item">
-                        <button id="control-chandn" title="Channel Up" class="topcoat-button-bar__button--large" style="width:48px" onclick="changeChannel(false)" disabled>
-                            <ion-icon name="caret-up-sharp"></ion-icon>
-                        </button>
+                <!-- PTT Button -->
+                <div class="btn-bar" id="ptt-btn">
+                    <div id="ptt" class="btn disabled" onmousedown="startPtt()" onmouseup="stopPtt()">
+                        <span class="btn-text"><ion-icon name="flash-sharp"></ion-icon></span>
                     </div>
                 </div>
+
             </div>
             
         </div>
@@ -239,29 +238,11 @@
             </div>
             <div class="popup-content">
                 <table class="popup-table">
-                    <!-- Server address -->
-                    <tr>
-                        <td width="33%">
-                            <h3>Server Address</h3>
-                        </td>
-                        <td width="67%">
-                            <input type="text" class="topcoat-text-input" id="server-address" value="" placeholder="IP address or hostname">
-                        </td>
-                    </tr>
-                    <!-- Server Port -->
-                    <tr>
-                        <td>
-                            <h3>Server Port</h3>
-                        </td>
-                        <td>
-                            <input type="text" class="topcoat-text-input" id="server-port" value="" placeholder="Port number">
-                        </td>
-                    </tr>
                     <!-- Connect / Disconnect Button -->
                     <tr>
                         <td></td>
                         <td>
-                            <button class="topcoat-button--cta" id="server-connect-btn" onclick="connectButton()">Connect</button>
+                            <button class="topcoat-button--cta" id="server-connectall-btn" onclick="connectAllButton()">Connect All</button>
                         </td>
                     </tr>
                     <!-- Auto-connect -->
@@ -299,10 +280,10 @@
                 <table class="popup-table">
                     <!-- Time Format -->
                     <tr>
-                        <td width="33%">
+                        <td width="60%">
                             <h3>Time Format</h3>
                         </td>
-                        <td width="67%">
+                        <td width="40%">
                             <select id="client-timeformat">
                                 <option value="Local">Local</option>
                                 <option value="UTC">UTC</option>
@@ -311,10 +292,10 @@
                     </tr>
                     <!-- RX AGC Toggle -->
                     <tr>
-                        <td width="33%">
+                        <td>
                             <h3>RX Audio AGC</h3>
                         </td>
-                        <td width="67%">
+                        <td>
                             <label class="topcoat-checkbox">
                                 <input type="checkbox" id="client-rxagc">
                                 <div class="topcoat-checkbox__checkmark"></div>
@@ -323,17 +304,42 @@
                     </tr>
                     <!-- Unselected Radio Volume -->
                     <tr>
-                        <td width="33%">
+                        <td>
                             <h3>Unselected Radio Volume</h3>
                         </td>
-                        <td width="67%">
+                        <td>
                             <select id="unselected-vol">
                                 <option value=0 selected="selected">0 dB</option>
                                 <option value=-3>-3 dB</option>
+                                <option value=-6>-6 dB</option>
                                 <option value=-9>-9 dB</option>
                                 <option value=-12>-12 dB</option>
                                 <option value=-100>Muted</option>
                             </select>
+                        </td>
+                    </tr>
+                    <!-- TPT Tone Selection -->
+                    <tr>
+                        <td>
+                            <h3>Talk Permit Tone</h3>
+                        </td>
+                        <td>
+                            <select id="tpt-tone">
+                                <option value="mot" selected="selected">Motorola</option>
+                                <option value="kw">Kenwood</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <!-- Button Sounds -->
+                    <tr>
+                        <td>
+                            <h3>Button Sounds</h3>
+                        </td>
+                        <td>
+                            <label class="topcoat-checkbox">
+                                <input type="checkbox" id="btn-sounds">
+                                <div class="topcoat-checkbox__checkmark"></div>
+                            </label>
                         </td>
                     </tr>
                     <!-- Save Config Button -->
@@ -354,11 +360,14 @@
         </template>
 
         <!-- Sound Files -->
-        <audio src="sound/tx_granted.wav" id="sound-tx-granted" autostart="false" autostart="0"></audio>
+        <audio src="sound/tx_tpt_mot.wav" id="sound-tpt-mot" autostart="false" autostart="0"></audio>
+        <audio src="sound/tx_tpt_kw.wav" id="sound-tpt-kw" autostart="false" autostart="0"></audio>
+        <audio src="sound/tx_end.wav" id="sound-tx-end" autostart="false" autostart="0"></audio>
+        <audio src="sound/btn-pres.wav" id="sound-btn-press" autostart="false" autostart="0"></audio>
 
         <!-- Icon Script -->
-        <script type="module" src="https://unpkg.com/ionicons@5.5.2/dist/ionicons/ionicons.esm.js"></script>
-        <script nomodule src="https://unpkg.com/ionicons@5.5.2/dist/ionicons/ionicons.js"></script>
+        <script type="module" src="ionicons/ionicons.esm.js"></script>
+        <script nomodule src="ionicons/ionicons.js"></script>
         <!-- Runtime Script -->
         <script type="text/javascript" src="client.js"></script>
     </body>

@@ -84,7 +84,7 @@ class XTL:
             'vol_up': 0x531
         }
 
-    def __init__(self, index, comPort, headType, statusCallback, logger=Logger()):
+    def __init__(self, name, comPort, headType, statusCallback, logger=Logger()):
         """Init Function
 
         Args:
@@ -105,15 +105,16 @@ class XTL:
         These variables are common to all radio interface classes and are 
         queried by the base RadioClass whenever statusCallback() is called
         """
-        self.index = index
+        self.name = name
         self.state = RadioState.Disconnected
         self.zoneText = ""
         self.chanText = ""
+        self.scanning = False
+        self.priority = 0
         self.softkeys = ["","","","","","HOME"]
         self.softkeyStates = [False, False, False, False, False, False]
         
         # Internal status flags for tracking softkeys
-        self.scanning = False
         self.monitor = False
         self.direct = False
         self.lowpower = False
@@ -185,6 +186,9 @@ class XTL:
         Main listener for SB9600 and SBEP messages
         """
 
+        waiting = False
+        waitTime = 0
+
         while self.doListen:
             # get a message if there is one
             if self.bus.ser.in_waiting > 0:
@@ -196,30 +200,40 @@ class XTL:
                 self.rxMsgQueue.put_nowait(rxMsg)
                 #self.logger.logVerbose("Got msg {}".format(hexlify(rxMsg," ")))
 
-            # check for outgoing messages
-            try:
-                # get the message
-                txMsg = self.txMsgQueue.get_nowait()
-                # figure out what to do with it
-                if txMsg['type'] == 'SB9600':
-                    sent = False
-                    tries = 0
-                    while (not sent) and (tries <= self.retries):
-                        try:
-                            tries += 1
-                            self.bus.sb9600_send(txMsg['addr'], txMsg['prm1'], txMsg['prm2'], txMsg['func'])
-                            sent = True
-                        except RuntimeError as ex:
-                            self.logger.logWarn("Message send failed, attempt {}/{}".format(tries, self.retries+1))
-            # Do nothing if queue empty
-            except queue.Empty:
+            # Check if we're waiting to send another TX message
+            if waiting and time.time_ns() < waitTime:
                 pass
+            else:
+                # Reset waiting flag
+                waiting = False
+                # check for outgoing messages
+                try:
+                    # get the message
+                    txMsg = self.txMsgQueue.get_nowait()
+                    # Send SB9600
+                    if txMsg['type'] == 'SB9600':
+                        sent = False
+                        tries = 0
+                        while (not sent) and (tries <= self.retries):
+                            try:
+                                tries += 1
+                                self.bus.sb9600_send(txMsg['addr'], txMsg['prm1'], txMsg['prm2'], txMsg['func'])
+                                sent = True
+                            except RuntimeError as ex:
+                                self.logger.logWarn("Message send failed, attempt {}/{}".format(tries, self.retries+1))
+                    # Wait
+                    elif txMsg['type'] == 'wait':
+                        waiting = True
+                        waitTime = time.time_ns() + (1000 * txMsg['time'])
+                # Do nothing if queue empty
+                except queue.Empty:
+                    pass
 
             # give the CPU a break
             time.sleep(0.01)
 
         # Print debug on thread close
-        self.logger.logVerbose("SB9600 listener thread stopped for radio {}".format(self.index))
+        self.logger.logVerbose("SB9600 listener thread stopped for radio {}".format(self.name))
 
     def process(self):
         """
@@ -230,7 +244,7 @@ class XTL:
 
             # Wait until we have a message
             while (not self.rxMsgQueue.qsize()) and self.doProcess:
-                time.sleep(0.05)
+                time.sleep(0.01)
 
             # Kill the thread on shutdown
             if not self.doProcess:
@@ -302,14 +316,14 @@ class XTL:
                     self.newStatus = False
                     self.updateStatus()
 
-        self.logger.logVerbose("SB9600 processor thread stopped for radio {}".format(self.index))
+        self.logger.logVerbose("SB9600 processor thread stopped for radio {}".format(self.name))
         
 
     def updateStatus(self):
         """
-        Call the status callback with the index of the radio
+        Call the status callback
         """
-        self.statusCallback(self.index)
+        self.statusCallback()
 
     def transmit(self, transmit):
         """
@@ -390,7 +404,10 @@ class XTL:
             # Handle based on display subdevice
             if subdev == self.O5Address.display_subdevs['text_zone']:
                 newText = data.rstrip().decode('ascii', 'ignore')
-                if newText != self.zoneText and not any(s in newText for s in self.O5Address.ignored_strings):
+                # Remove random 0x00 from strings
+                newText = newText.replace('\x00','')
+                # Ignore zone text if it's the same as current, if it's in the ignored strings list, or if it's whitespace only
+                if newText != self.zoneText and not any(s in newText for s in self.O5Address.ignored_strings) and not newText.isspace():
                     self.zoneText = newText
                     self.newStatus = True
                     self.logger.logVerbose("Got new zone text: {}".format(newText))
@@ -436,10 +453,16 @@ class XTL:
                 self.logger.logVerbose("Got new scan priority state: {}".format(state))
                 if state == 0x01:
                     self.logger.logVerbose("Channel priority 1 marker")
+                    self.priority = 1
+                    self.newStatus = True
                 elif state == 0x02:
                     self.logger.logVerbose("Channel priority 2 marker")
+                    self.priority = 2
+                    self.newStatus = True
                 elif state == 0x00:
-                    self.logger.logVerbose("Channel priortiy marker cleared")
+                    self.logger.logVerbose("Channel priority marker cleared")
+                    self.priority = 0
+                    self.newStatus = True
                 return totalLength
             # Low power L icon
             elif iconAddr == self.O5Address.display_icons['low_power']:
@@ -763,8 +786,21 @@ class XTL:
             duration (float): duration to press in seconds
         """
         self.sendButton(code, 0x01)
-        time.sleep(duration)
+        self.txWait(50)
         self.sendButton(code, 0x00)
+
+    def txWait(self, time_ms):
+        """
+        Waits the specified number of ms before sending the next message in the tx queue
+
+        Args:
+            time_ms (int): time to wait in ms
+        """
+        msg = {
+            "type": "wait",
+            "time": time_ms
+        }
+        self.txMsgQueue.put_nowait(msg)
 
     def getDisplaySubDev(self, code):
         """Lookup display subdevice by hex code

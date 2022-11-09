@@ -1,3 +1,7 @@
+/********************************
+    Base Element Styling
+********************************/
+
 :root {
     --color-bg-dark: #111;
     --color-bg-mid: #2A2A2A;
@@ -28,16 +32,43 @@
     --color-txt-dark: #777;
 
     --color-lcd-light: #5AC;
+
+    /* Buttons */
+    --color-btn-normal: #525252;
+    --color-btn-pressed: #3D3D3D;
+
+    /* Dynamic Card Colors */
+    --color-card-darkred: #291C1C;
+    --color-card-midred: #523838;
+    --color-card-lightred: #B87D7D;
+    --color-card-darkamber: #292015;
+    --color-card-midamber: #52402B;
+    --color-card-lightamber: #B88E60;
+    --color-card-darkgreen: #1C291E;
+    --color-card-midgreen: #38523B;
+    --color-card-lightgreen: #7DB885;
+    --color-card-darkblue: #1C2529;
+    --color-card-midblue: #384b52;
+    --color-card-lightblue: #7DA8B8;
+    --color-card-darkpurple: #1F1C29;
+    --color-card-midpurple: #3F3852;
+    --color-card-lightpurple: #8D7DB8;
+    
 }
 
 @font-face {
-    font-family: "Share Tech Mono";
-    src: url("../font/ShareTechMono-Regular.ttf");
+    font-family: "Iosevka Bold";
+    src: url("../font/iosevka-bold.ttf");
 }
 
 @font-face {
-    font-family: "Iosevka Term Extended";
-    src: url("../font/iosevka-term-extended.ttf");
+    font-family: "Iosevka Extended Bold";
+    src: url("../font/iosevka-extendedbold.ttf");
+}
+
+@font-face {
+    font-family: "B612";
+    src: url("../font/B612-Regular.ttf")
 }
 
 html {
@@ -54,6 +85,8 @@ body {
 /* Disable ion icon tooltips */
 ion-icon {
     pointer-events :none;
+    fill: currentColor;
+    stroke: currentColor;
 }
 
 /********************************
@@ -208,7 +241,7 @@ ion-icon {
 }
 
 #clock {
-    font-family: "Iosevka Term Extended";
+    font-family: "Iosevka Extended Bold";
     color: var(--color-lcd-light);
     font-size: 24px;
     margin-left: 8px;
@@ -311,6 +344,8 @@ ion-icon {
 #main-layout {
     width: 100%;
     height: 100%;
+    box-sizing: border-box;
+    padding: 4px;
 }
 
 /********************************
@@ -319,16 +354,40 @@ ion-icon {
 
 .radio-card {
     display: inline-block;
-    margin-left: 16px;
-    margin-top: 20px;
-    width: 256px;
-    border-radius: 6px;
-    border: 2px solid transparent;
+    position: relative;
+    margin-left: 10px;
+    margin-top: 10px;
+    width: 294px;
+    height: 124px;
+    font-family: "B612";
+    /* Clip Path for Angles */
+    clip-path: polygon(0 0, 100% 0, 100% 83%, 93% 100%, 0 100%);
+    background-color: rgba(0,0,0,0);
 }
 
-.radio-card.selected {
-    border: 2px solid var(--color-bg-light);
-    border-radius: 8px;
+.radio-card .card {
+    width: 290px;
+    height: 120px;
+    position: absolute;
+}
+
+/* Selected Tab */
+
+.radio-card .selected-tab {
+    background-color: #111;
+    width: 20px;
+    height: 20px;
+    position: absolute;
+    clip-path: polygon(0 0, 100% 0, 0 100%);
+    opacity: 0;
+    z-index: 1;
+    top: 2px;
+    left: 2px;
+}
+
+.radio-card.selected .selected-tab {
+    background-color: var(--color-alert-light2);
+    opacity: 1;
 }
 
 .radio-card.receiving {
@@ -341,24 +400,65 @@ ion-icon {
     animation: txBorderBlink 0.5s ease infinite;
 }
 
-.radio-card.disconnected {
+.radio-card.disconnected .content{
     opacity: 50%;
 }
 
 .radio-card .header {
-    width: 100%;
-    height: 28px;
-    background-color: var(--color-accent-mid);
-    border-radius: 6px 6px 0 0;
-    color: var(--color-txt-mid);
+    width: 290px;
+    height: 30px;
+    position: absolute;
+    top: 2px;
+    left: 2px;
     padding: 4px;
     box-sizing: border-box;
     display: inline-flex;
     font-size: 18px;
 }
 
-.radio-card:hover .header {
-    background-color: var(--color-accent-light);
+/* Dynamic Header Colors */
+.radio-card.red .header {
+    background-color: var(--color-card-midred);
+}
+.radio-card.amber .header {
+    background-color: var(--color-card-midamber);
+}
+.radio-card.green .header {
+    background-color: var(--color-card-midgreen);
+}
+.radio-card.blue .header {
+    background-color: var(--color-card-midblue);
+}
+.radio-card.purple .header {
+    background-color: var(--color-card-midpurple);
+}
+
+/* Hover highlight */
+.radio-card:hover:not(.disconnected) .header,
+.radio-card:hover:not(.disconnected) .content {
+    box-shadow: inset 0 0 100px 100px rgba(255,255,255,0.03);
+}
+
+/* Disconnected Fade */
+.radio-card.disconnected {
+    opacity: 0.75;
+}
+
+/* Dynamic Header Text Color */
+.radio-card.red .header h2 {
+    color: var(--color-card-lightred);
+}
+.radio-card.amber .header h2 {
+    color: var(--color-card-lightamber);
+}
+.radio-card.green .header h2 {
+    color: var(--color-card-lightgreen);
+}
+.radio-card.blue .header h2 {
+    color: var(--color-card-lightblue);
+}
+.radio-card.purple .header h2 {
+    color: var(--color-card-lightpurple);
 }
 
 .radio-card.selected .header h2 {
@@ -370,25 +470,23 @@ ion-icon {
     margin: 0;
     font-weight: normal;
     display: inline;
-    margin-top: -1px;
-    margin-left: 4px;
-    font-size: inherit;
-}
-
-.radio-card .selected-icon {
-    color: var(--color-accent-dark);
-    margin-top: 1px;
-}
-
-.radio-card.selected .selected-icon {
-    color: var(--color-alert-light2);
+    margin-top: 4px;
+    margin-left: 16px;
+    font-size: 13px;
 }
 
 .radio-card .icon-stack {
     height: 100%;
     margin-left: auto;
-    margin-right: 4px;
-    font-size: 20px;
+    font-size: 18px;
+    display: flex;
+    align-items: center;
+}
+
+.radio-card .icon-stack a,
+.radio-card .icon-stack .scan-icons {
+    width: 24px;
+    display: inline-flex;
 }
 
 .icon-stack ion-icon {
@@ -403,84 +501,225 @@ ion-icon {
     color: var(--color-alert-red-light);
 }
 
+.icon-stack .icon-connect.disconnected {
+    color: var(--color-alert-red-light);
+}
+
+.icon-stack .icon-connect.connecting {
+    color: var(--color-alert-light);
+}
+
+.icon-stack .icon-connect.connected {
+    color: var(--color-alert-green-mid);
+}
+
 .icon-stack ion-icon.alerting {
     -webkit-animation: iconAlertRed 0.7s ease infinite;
     animation: iconAlertRed 0.7s ease infinite;
 }
+
+.icon-stack .scan-icons ion-icon {
+    position: absolute;
+    bottom: 5px;
+}
+
+/* No Scan State */
+.icon-stack .scan-icons .scan-icon,
+.icon-stack .scan-icons .scan-pri-icon {
+    opacity: 0;
+}
+
+/* Scanning State */
+.icon-stack .scan-icons.scanning .scan-icon {
+    opacity: 1;
+}
+
+/* Priority Scan */
+.icon-stack .scan-icons.priority .scan-pri-icon {
+    opacity: 1;
+}
+
+/* Priority 2 Scan */
+.icon-stack .scan-icons.priority2 .scan-pri-icon {
+    animation: iconFlash 1s infinite;
+    -webkit-animation: iconFlash 1s infinite;
+}
+.icon-stack .scan-icons.priority2 .scan-icon {
+    opacity: 1;
+}
+
+/* Pan Dropdown */
+
+.panning-dropdown {
+    position: absolute;
+    padding-top: 4px;
+    width: 96px;
+    height: 24px;
+    margin-top: 58px;
+    margin-left: -38px;
+    text-align: center;
+    border-radius: 2px;
+    transition: all 0.25s ease;
+    opacity: 1;
+    z-index: 1;
+}
+
+/* Dynamic dropdown color */
+.radio-card.red .panning-dropdown {
+    background-color: var(--color-card-midred);
+}
+.radio-card.amber .panning-dropdown {
+    background-color: var(--color-card-midamber);
+}
+.radio-card.green .panning-dropdown {
+    background-color: var(--color-card-midgreen);
+}
+.radio-card.blue .panning-dropdown {
+    background-color: var(--color-card-midblue);
+}
+.radio-card.purple .panning-dropdown {
+    background-color: var(--color-card-midpurple);
+}
+
+.panning-dropdown.closed {
+    opacity: 0;
+    display: none;
+}
+
+.panning-dropdown .topcoat-range {
+    width: 75%;
+    height: 6px;
+    margin-top: 8px;
+    border-radius: 2px;
+}
+
+.panning-dropdown .topcoat-range::-webkit-slider-thumb {
+    height: 16px;
+    width: 8px;
+    border-radius: 2px;
+}
+
+.panning-dropdown #left-spkr-button.disabled ion-icon,
+.panning-dropdown #right-spkr-button.disabled ion-icon {
+    color: var(--color-accent-mid);
+}
+
 
 .radio-card a {
     text-decoration: none;
     color: var(--color-accent-light2);
 }
 
+/* Main Card Content */
+
 .radio-card .content {
-    width: 100%;
-    height: 128px;
-    background-color: var(--color-bg-mid);
-    padding: 8px;
-    box-sizing: border-box;
-}
-
-/*.radio-card:hover .content {
-    background-color: var(--color-bg-mid2);
-}*/
-
-.radio-card .content h3 {
-    font-size: 12px !important;
-    color: var(--color-txt-dark);
-    padding: 0;
-    margin: 0;
-    font-weight: normal;
-    display: inline;
-    font-size: inherit;
-}
-
-.radio-card .value-frame {
-    color: var(--color-lcd-light);
-    font-family: "Iosevka Term Extended";
-    font-size: 20px;
-    margin-top: 4px;
-    margin-bottom: 4px;
-    width: 100%;
-    height: 32px;
-    margin-left: auto;
-    margin-right: auto;
-    background-color: black;
-    border-radius: 4px;
-    display: inline-flex;
-    align-items: center;
-    padding-left: 4px;
-    box-sizing: border-box;
-}
-
-.radio-card .footer {
-    width: 100%;
-    height: 4px;
-    margin-bottom: 0;
-    background-color: var(--color-accent-mid);
-    border-radius: 0 0 6px 6px;
-}
-
-.panning-dropdown {
     position: absolute;
-    background-color: var(--color-accent-dark);
+    width: 290px;
+    height: 90px;
+    top: 32px;
+    left: 2px;
+    box-sizing: border-box;
     padding-top: 4px;
-    width: 52px;
-    margin-top: 0;
-    margin-left: -16px;
-    text-align: center;
-    border-radius: 2px;
-    transition: all 0.25s ease;
+    padding-left: 8px;
+    clip-path: polygon(0 0, 100% 0, 100% 77%, 93% 100%, 0 100%);
 }
 
-.panning-dropdown.closed {
-    margin-top: -32px;
-    display: none;
+/* Dynamic Content Color */
+.radio-card.red .content {
+    background-color: var(--color-card-darkred);
+}
+.radio-card.amber .content {
+    background-color: var(--color-card-darkamber);
+}
+.radio-card.green .content {
+    background-color: var(--color-card-darkgreen);
+}
+.radio-card.blue .content {
+    background-color: var(--color-card-darkblue);
+}
+.radio-card.purple .content {
+    background-color: var(--color-card-darkpurple);
 }
 
-.panning-dropdown #left-spkr-button.disabled ion-icon,
-.panning-dropdown #right-spkr-button.disabled ion-icon {
-    color: var(--color-accent-mid);
+.radio-card #zone-text {
+    font-family: "Iosevka Bold";
+    font-size: 20px;
+}
+
+/* Dynamic Zone Text Color */
+.radio-card.red #zone-text {
+    color: var(--color-card-lightred);
+}
+.radio-card.amber #zone-text {
+    color: var(--color-card-lightamber);
+}
+.radio-card.green #zone-text {
+    color: var(--color-card-lightgreen);
+}
+.radio-card.blue #zone-text {
+    color: var(--color-card-lightblue);
+}
+.radio-card.purple #zone-text {
+    color: var(--color-card-lightpurple);
+}
+
+.radio-card #channel-text {
+    font-family: "Iosevka Bold";
+    font-size: 32px;
+    color: var(--color-txt-light);
+    margin-top: -4px;
+}
+
+.radio-card.selected #channel-text {
+    color: #FFF;
+}
+
+
+/* Bottom EQ Bars */
+
+.radio-card .audio-bar {
+    height: 12px;
+    margin-top: 4px;
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.radio-card .audio-bar .audio-eq {
+    display: flex;
+    align-items: center;
+    margin-right: 8px;
+}
+
+.radio-card .audio-bar .eq-frame {
+    display: inline-flex;
+    margin-left: 4px;
+    height: 4px;
+    width: 100px;
+    background-color: var(--color-bg-dark);
+}
+
+.radio-card .audio-bar .eq-frame .eq-bar {
+    width: 0;
+    height: 100%;
+    background-color: var(--color-alert-green-light);
+}
+
+/* Dynamic Icon Color */
+.radio-card.red .audio-bar {
+    color: var(--color-card-midred);
+}
+.radio-card.amber .audio-bar {
+    color: var(--color-card-midamber);
+}
+.radio-card.green .audio-bar {
+    color: var(--color-card-midgreen);
+}
+.radio-card.blue .audio-bar {
+    color: var(--color-card-midblue);
+}
+.radio-card.purple .audio-bar {
+    color: var(--color-card-midpurple);
 }
 
 /********************************
@@ -504,60 +743,87 @@ ion-icon {
     justify-content: center;
 }
 
-#radio-controls button {
-    height: 36px;
-    width: 64px;
-    padding: 8px;
-    box-sizing: border-box;
+#radio-controls .btn-bar {
+    font-size: 0;
+    display: flex;
+}
+
+#radio-controls .btn {
+    display: inline-flex;
+    height: 40px;
+    color: var(--color-txt-mid);
+    background-color: var(--color-btn-normal);
+    font-family: "Iosevka Extended Bold";
     font-size: 18px;
-    border: 0;
+    text-align: center;
+    justify-content: center;
+    align-items: center;
+    user-select: none;
 }
 
-#radio-controls button span {
-    margin: 0;
-    padding: 0;
-    line-height: normal;
-    font-weight: bolder;
-    font-size: 14px;
+#radio-controls .softkey {
+    width: 80px;
 }
 
-#radio-controls .button-active {
-    color: var(--color-lcd-light);
-    text-shadow: 0 -1px rgb(0 0 0 / 69%);
-    background-color: #3f4041;
-    border: 1px solid #333434;
-    box-shadow: inset 0 1px rgb(0 0 0 / 5%);
+#radio-controls #leftarrow,
+#radio-controls #rightarrow {
+    width: 40px;
 }
 
-#radio-controls .button-active:hover {
-    background-color: rgb(70, 70, 70);
+#radio-controls .btn.pressed,
+#radio-controls .btn:active:hover {
+    color: var(--color-txt-light);
+    background-color: var(--color-btn-pressed);
 }
 
-#radio-controls .lcd {
-    height: 47px;
-    width: 256px;
-    background-color: black;
-    color: var(--color-lcd-light);
-    border-radius: 6px;
-    margin-left: 8px;
-    margin-right: 8px;
-    padding: 4px;
-    box-sizing: border-box;
+#radio-controls .btn.disabled {
+    opacity: 0.5;
 }
 
-#selected-zone-text,
-#selected-chan-text {
-    color: var(--color-lcd-light);
-    font-family: "Iosevka Term Extended"; 
-    margin-left: 2px;
+#radio-controls .btn:hover:not(.disabled),
+#leftarrow:hover:not(.disabled),
+#rightarrow:hover:not(.disabled) {
+    box-shadow: inset 0 0 100px 100px rgba(255,255,255,0.05);
 }
 
-#selected-zone-text {
-    font-size: 12px;
+#leftarrow {
+    clip-path: polygon(25% 0, 100% 0, 100% 100%, 0 100%, 0 25%);
+    margin-right: -1px;
 }
 
-#selected-chan-text {
-    font-size: 24px;
+#rightarrow {
+    clip-path: polygon(0 0, 100% 0, 100% 75%, 75% 100%, 0 100%);
+}
+
+#chan-btns {
+    margin-left: 40px;
+}
+
+#chan-up {
+    clip-path: polygon(15% 0, 100% 0, 100% 100%, 0 100%, 0 30%);
+    width: 80px;
+}
+
+#chan-down {
+    clip-path: polygon(0 0, 100% 0, 100% 70%, 85% 100%, 0 100%);
+    width: 80px;
+}
+
+#ptt-btn {
+    margin-left: 40px;
+}
+
+#ptt {
+    background-color: var(--color-card-midred) !important;
+    color: var(--color-card-lightred);
+    clip-path: polygon(15% 0, 100% 0, 100% 70%, 85% 100%, 0 100%, 0 30%);
+    width: 80px;
+}
+
+#ptt.pressed,
+#ptt:active:hover {
+    background-color: var(--color-card-darkred) !important;
+    color: var(--color-txt-light);
 }
 
 /********************************
@@ -672,44 +938,36 @@ ion-icon {
 /* Animation for radio card RX state */
 @-webkit-keyframes rxBorderBlink {
     from, to {
-        border: 2px solid var(--color-alert-green-light-half);
-        border-radius: 8px;
+        background-color: var(--color-alert-green-light-half);
     }
     50% {
-        border: 2px solid var(--color-alert-green-light);
-        border-radius: 8px;
+        background-color: var(--color-alert-green-light);
     }
 }
 @keyframes rxBorderBlink {
     from, to {
-        border: 2px solid var(--color-alert-green-light-half);
-        border-radius: 8px;
+        background-color: var(--color-alert-green-light-half);
     }
     50% {
-        border: 2px solid var(--color-alert-green-light);
-        border-radius: 8px;
+        background-color: var(--color-alert-green-light);
     }
 }
 
 /* Animation for radio card TX state */
 @-webkit-keyframes txBorderBlink {
     from, to {
-        border: 2px solid var(--color-alert-red-mid);
-        border-radius: 8px;
+        background-color: var(--color-alert-red-mid);
     }
     75% {
-        border: 2px solid var(--color-alert-red-light);
-        border-radius: 8px;
+        background-color: var(--color-alert-red-light);
     }
 }
 @keyframes txBorderBlink {
     from, to {
-        border: 2px solid var(--color-alert-red-mid);
-        border-radius: 8px;
+        background-color: var(--color-alert-red-mid);
     }
     75% {
-        border: 2px solid var(--color-alert-red-light);
-        border-radius: 8px;
+        background-color: var(--color-alert-red-light);
     }
 }
 
@@ -728,5 +986,23 @@ ion-icon {
     }
     50% {
         color: var(--color-alert-red-light);
+    }
+}
+
+/* Animation for flashing icon */
+@-webkit-keyframes iconFlash {
+    from, to {
+        opacity: 0;
+    }
+    50% {
+        opacity: 1;
+    }
+}
+@keyframes iconFlash {
+    from, to {
+        opacity: 0;
+    }
+    50% {
+        opacity: 1;
     }
 }

@@ -1,0 +1,12 @@
+{
+    "Radio": {
+        "name": "Motorola XPR",
+        "desc": "UHF XPR4550",
+        "ctrlMode": "XCMP-XPR",
+        "ctrlPort": "192.168.10.1",
+        "txDev": "plughw:CARD=Go,DEV=0",
+        "rxDev": "plughw:CARD=Go,DEV=0"
+    },
+    "Certfile": "certs/console.crt",
+    "Keyfile": "certs/console.key"
+}
