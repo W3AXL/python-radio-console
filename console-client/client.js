@@ -61,7 +61,9 @@ var rtcConf = {
     //codec: "PCMU/8000",
     // Total audio round trip time (in ms) (set as const for now, adds delay before muting RX audio and stopping TX)
     rxLatency: 600,
-    txLatency: 300
+    txLatency: 300,
+    // RTT Limits for RTC connection
+    rttLimit: 0.05
 }
 
 testInput = null;
@@ -1161,7 +1163,12 @@ function createPeerConnection(idx) {
     peer.addEventListener('iceconnectionstatechange', function() {
         console.log(`new peer iceConnectionState for radio ${radios[idx].name}: ${peer.iceConnectionState}`);
         if (peer.iceConnectionState == "connected") {
+            // update UI
             radioConnected(idx);
+            // Create array for averaging roundTripTime
+            radios[idx].rtc.rttArray = new Array(10).fill(0);
+            // Start monitoring roundTripTime
+            checkRoundTripTime(idx);
         } else if (peer.iceConnectionState == "failed") {
             // Disconnect the client if we had an error (for now, maybe auto-reconnect later?)
             console.error(`WebRTC ICE connection failed for radio ${radios[idx].name}`);
@@ -1178,6 +1185,14 @@ function createPeerConnection(idx) {
 
     peer.addEventListener('signalingstatechange', function() {
         console.log(`new peer signallingState for radio ${radios[idx].name}: ${peer.signalingState}`);
+    })
+
+    peer.addEventListener('connectionstatechange', function() {
+        console.log(`new peer connectionState for radio ${radios[idx].name}: ${peer.connectionState}`);
+    })
+
+    peer.addEventListener('negotiationneeded', function() {
+        console.log(`WebRTC ICE negotiation needed for radio ${radios[idx].name}`);
     })
 
     // Print initial states
@@ -1389,6 +1404,41 @@ function sdpFilterCodec(kind, codec, realSdp) {
     }
 
     return sdp;
+}
+
+/**
+ * Check the roundtrip time for the current radio and handle accordingly
+ * @param {int} idx radio index
+ */
+function checkRoundTripTime(idx) {
+    if (radios[idx].rtc.peer != undefined && radios[idx].rtc.peer.iceConnectionState === 'connected') {
+        // Get the ice transport and the stats
+        radios[idx].rtc.peer.getStats(null).then((stats) => {
+            // Iterate over each stats looking for the candidate pair stats
+            stats.forEach((report) => {
+                if (report && report.type === "candidate-pair" && report.state === "succeeded") {
+                    //console.debug(`Got new candidate stats for radio ${idx}`, report)
+                    // Shift the rtt array with the new rtt value
+                    radios[idx].rtc.rttArray.shift();
+                    radios[idx].rtc.rttArray.push(report.currentRoundTripTime);
+                    // Get the current average of all 10
+                    radios[idx].rtc.rttAvg = (radios[idx].rtc.rttArray.reduce((a ,b) => a + b) / 10).toFixed(3);
+                    //console.debug(`Current RTT average for radio ${idx}: ${rttAvg}`);
+                    // If we're above the threshold, throw a disconnect warning
+                    if (radios[idx].rtc.rttAvg > rtcConf.rttLimit) {
+                        console.error(`WebRTC round trip time (${radios[idx].rtc.rttAvg}) exceeded limit (${rtcConf.rttLimit}) for radio ${idx}, disconnecting`);
+                        disconnectRadio(idx);
+                    }
+                }
+            })
+            setTimeout(function() {
+                checkRoundTripTime(idx)
+            }, 1000);
+        })
+    } else {
+        console.warn(`Peer connection closed, stopping RTT monitoring for radio ${idx}`);
+        return;
+    }
 }
 
 /***********************************************************************************
@@ -1766,15 +1816,13 @@ function recvSocketMessage(event, idx) {
         switch (key) {
             // Radio status update
             case "status":
-                console.log(`Got status update for radio ${radios[idx].name}`);
                 // get status data
                 var radioStatus = msgObj['status'];
-                //console.debug(radioStatus);
+                // Debug
+                console.debug(`Got status update for radio ${radios[idx].name}:`, radioStatus);
                 // Strip out \u0000's from strings (TODO: figure out why python's decode method adds these and how to get rid of them)
                 radioStatus['zone'] = radioStatus['zone'].replace(/\0/g, '');
                 radioStatus['chan'] = radioStatus['chan'].replace(/\0/g, '');
-                // Debug
-                console.debug(radioStatus);
                 // Update radio entry
                 radios[idx].status = radioStatus;
                 // Update radio card
