@@ -525,12 +525,8 @@ function startPtt() {
     if (!pttActive && selectedRadio) {
         console.log("Starting PTT on " + selectedRadio);
         pttActive = true;
-        // Play selected TPT
-        if (config.tpt == "kw") {
-            playSound("sound-tpt-kw");
-        } else {
-            playSound("sound-tpt-mot");
-        }
+        // Play TPT
+        playSound("sound-ptt");
         // Only send the TX command if we have a valid socket
         if (radios[selectedRadioIdx].wsConn) {
             radios[selectedRadioIdx].wsConn.send(
@@ -566,7 +562,7 @@ function stopPtt() {
                         }
                     }`
                 );
-                playSound("sound-tx-end");
+                playSound("sound-ptt-end");
             }, rtcConf.txLatency);
         }
     }
@@ -580,7 +576,7 @@ function changeChannel(down) {
     if (!pttActive && selectedRadio && radios[selectedRadioIdx].wsConn) {
         if (down) {
             if (config.btnSounds) {
-                playSound("sound-btn-press");
+                playSound("sound-button");
             }
             console.log("Changing channel down on " + selectedRadio);
             radios[selectedRadioIdx].wsConn.send(
@@ -593,7 +589,7 @@ function changeChannel(down) {
             );
         } else {
             if (config.btnSounds) {
-                playSound("sound-btn-press");
+                playSound("sound-button");
             }
             console.log("Changing channel up on " + selectedRadio);
             radios[selectedRadioIdx].wsConn.send(
@@ -614,7 +610,7 @@ function changeChannel(down) {
  */
 function softkey(idx) {
     if (config.btnSounds) {
-        playSound("sound-btn-press");
+        playSound("sound-button");
     }
     sendButton(`softkey${idx}`);
 }
