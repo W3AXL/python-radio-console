@@ -137,7 +137,7 @@ function connect() {
     $("#navbar-status").addClass("pending");
     // Connect websocket first
     connectWebsocket();
-    // Start audio devices if they're not already started
+    // Start audio devices if they are not already started
     if (!audio.context) {
         startAudioDevices();
     }
