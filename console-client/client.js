@@ -56,7 +56,8 @@ var audio = {
 // WebRTC Variables
 var rtcConf = {
     // Audio codec
-    codec: "opus/48000/2",  // I've found that OPUS seems to have better latency than PCMU
+    // OPUS seems to have better latency than PCMU
+    codec: "opus/48000/2",
     bitrate: 8000,
     //codec: "PCMU/8000",
     // Total audio round trip time (in ms) (set as const for now, adds delay before muting RX audio and stopping TX)
