@@ -59,10 +59,10 @@ var rtcConf = {
     codec: "opus/48000/2",  // I've found that OPUS seems to have better latency than PCMU
     bitrate: 8000,
     //codec: "PCMU/8000",
-    // Total audio round trip time (in ms) (set as const for now, adds delay before muting RX audio and stopping TX)
-    rxLatency: 600,
-    txLatency: 300,
-    // RTT Limits for RTC connection
+    // Base audio encoding/decoding latency. This is added to the current webRTC round trip time when audio functions are called
+    rxBaseLatency: 500,
+    txBaseLatency: 300,
+    // RTT (round-trip time) parameters for RTC connection
     rttLimit: 0.05
 }
 
@@ -403,10 +403,10 @@ function updateRadioCard(idx) {
     // Remove all current classes
     setTimeout(function() {
         radioCard.removeClass("transmitting");
-    }, rtcConf.txLatency);
+    }, radios[idx].rtc.txLatency);
     setTimeout(function () {
         radioCard.removeClass("receiving");
-    }, rtcConf.rxLatency);
+    }, radios[idx].rtc.rxLatency);
     radioCard.removeClass("disconnected");
 
     // Update radio state
@@ -414,12 +414,12 @@ function updateRadioCard(idx) {
         case "Transmitting":
             setTimeout(function() {
                 radioCard.addClass("transmitting");
-            }, rtcConf.txLatency);
+            }, radios[idx].rtc.txLatency);
             break;
         case "Receiving":
             setTimeout(function() {
                 radioCard.addClass("receiving");
-            }, rtcConf.rxLatency); // used to unmute after latency delay but this makes sure we don't miss anything
+            }, radios[idx].rtc.rxLatency); // used to unmute after latency delay but this makes sure we don't miss anything
             break;
         case "Disconnected":
             radioCard.addClass("disconnected");
@@ -529,14 +529,16 @@ function startPtt() {
         playSound("sound-ptt");
         // Only send the TX command if we have a valid socket
         if (radios[selectedRadioIdx].wsConn) {
-            radios[selectedRadioIdx].wsConn.send(
-                `{
-                    "radioControl": {
-                        "command": "startTx",
-                        "options": null
-                    }
-                }`
-            );
+            setTimeout( function() {
+                radios[selectedRadioIdx].wsConn.send(
+                    `{
+                        "radioControl": {
+                            "command": "startTx",
+                            "options": null
+                        }
+                    }`
+                );
+            }, radios[selectedRadioIdx].rtc.txLatency);
         }
     } else if (!pttActive && !selectedRadio) {
         pttActive = true;
@@ -563,7 +565,7 @@ function stopPtt() {
                     }`
                 );
                 playSound("sound-ptt-end");
-            }, rtcConf.txLatency);
+            }, radios[selectedRadioIdx].rtc.txLatency);
         }
     }
 }
@@ -620,7 +622,7 @@ function softkey(idx) {
  */
 function button_left() {
     if (config.btnSounds) {
-        playSound("sound-btn-press");
+        playSound("sound-button");
     }
     sendButton("left");
 }
@@ -630,7 +632,7 @@ function button_left() {
  */
 function button_right() {
     if (config.btnSounds) {
-        playSound("sound-btn-press");
+        playSound("sound-button");
     }
     sendButton("right");
 }
@@ -1237,6 +1239,10 @@ function createPeerConnection(idx) {
             newSource.agcNode.attack.setValueAtTime(audio.agcAttack, audio.context.currentTime);
             newSource.agcNode.release.setValueAtTime(audio.agcRelease, audio.context.currentTime);
 
+            // Set current pan setting
+            var newPan = $(`#radio${idx}`).find('.radio-pan').val();
+            newSource.panNode.pan.setValueAtTime(newPan, audio.context.currentTime);
+
             // Update radio connections
             newSource.audioNode.connect(newSource.agcNode);
             newSource.agcNode.connect(newSource.makeupNode);
@@ -1419,6 +1425,9 @@ function checkRoundTripTime(idx) {
                     radios[idx].rtc.rttArray.push(report.currentRoundTripTime);
                     // Get the current average of all 10
                     radios[idx].rtc.rttAvg = (radios[idx].rtc.rttArray.reduce((a ,b) => a + b) / 10).toFixed(3);
+                    // Update the radio latency parameters
+                    radios[idx].rtc.txLatency = rtcConf.txBaseLatency + (radios[idx].rtc.rttAvg * 1000);
+                    radios[idx].rtc.rxLatency = rtcConf.rxBaseLatency + (radios[idx].rtc.rttAvg * 1000);
                     //console.debug(`Current RTT average for radio ${idx}: ${rttAvg}`);
                     // If we're above the threshold, throw a disconnect warning
                     if (radios[idx].rtc.rttAvg > rtcConf.rttLimit) {
@@ -1622,12 +1631,12 @@ function updateMute() {
             setTimeout(function() {
                 console.debug(`Muting audio for radio ${radios[idx].name}`);
                 radios[idx].audioSrc.muteNode.gain.setValueAtTime(0, audio.context.currentTime);
-            }, rtcConf.rxLatency);
+            }, radios[idx].rtc.rxLatency);
         } else {
             setTimeout(function() {
                 console.debug(`Unmuting audio for radio ${radios[idx].name}`);
                 radios[idx].audioSrc.muteNode.gain.setValueAtTime(1, audio.context.currentTime);
-            }, rtcConf.rxLatency);
+            }, radios[idx].rtc.rxLatency);
         }
     });
 }
