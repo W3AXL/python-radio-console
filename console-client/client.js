@@ -578,7 +578,7 @@ function changeChannel(down) {
     if (!pttActive && selectedRadio && radios[selectedRadioIdx].wsConn) {
         if (down) {
             if (config.btnSounds) {
-                playSound("sound-button");
+                playSound("sound-click");
             }
             console.log("Changing channel down on " + selectedRadio);
             radios[selectedRadioIdx].wsConn.send(
@@ -591,7 +591,7 @@ function changeChannel(down) {
             );
         } else {
             if (config.btnSounds) {
-                playSound("sound-button");
+                playSound("sound-click");
             }
             console.log("Changing channel up on " + selectedRadio);
             radios[selectedRadioIdx].wsConn.send(
@@ -612,7 +612,7 @@ function changeChannel(down) {
  */
 function softkey(idx) {
     if (config.btnSounds) {
-        playSound("sound-button");
+        playSound("sound-click");
     }
     sendButton(`softkey${idx}`);
 }
@@ -622,7 +622,7 @@ function softkey(idx) {
  */
 function button_left() {
     if (config.btnSounds) {
-        playSound("sound-button");
+        playSound("sound-click");
     }
     sendButton("left");
 }
@@ -632,7 +632,7 @@ function button_left() {
  */
 function button_right() {
     if (config.btnSounds) {
-        playSound("sound-button");
+        playSound("sound-click");
     }
     sendButton("right");
 }
