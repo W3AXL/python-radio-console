@@ -810,17 +810,17 @@ class Motorola:
 
             # Radio Ready (RADRDY) opcode
             if opcode == 0x15:
-                self.logger.logVerbose("Got Radio Ready (RADRDY) opcode")
+                self.logger.logDebug("Got Radio Ready (RADRDY) opcode")
                 return
 
             # Radio Keyed (RADKEY) opcode
             elif opcode == 0x19:
-                self.logger.logVerbose("Got Radio Keyed (RADKEY) opcode")
+                self.logger.logDebug("Got Radio Keyed (RADKEY) opcode")
                 return
 
             # RX audio routing
             elif opcode == 0x1A:
-                self.logger.logVerbose("Got RX audio routing opcode")
+                self.logger.logDebug("Got RX audio routing opcode")
                 
             # audio mute opcode
             elif opcode == 0x1D:
@@ -861,25 +861,25 @@ class Motorola:
             elif opcode == 0x1f:
                 optens = BitArray(data[0]).bin[2:]
                 number = data[1]
-                self.logger.logVerbose("Got Active Mode Update (ACTMDU) opcode for mode number {} with option enables {}".format(number,optens))
+                self.logger.logDebug("Got Active Mode Update (ACTMDU) opcode for mode number {} with option enables {}".format(number,optens))
                 return
 
             # PL Detect (PLDECT) opcode
             # Only least two bits of data[1] matter here
             elif opcode == 0x23:
                 if data[1] == 0x00:
-                    self.logger.logVerbose("No PL, channel unqualified")
+                    self.logger.logDebug("No PL, channel unqualified")
                 elif data[1] == 0x01:
-                    self.logger.logVerbose("No PL, channel qualified")
+                    self.logger.logDebug("No PL, channel qualified")
                 elif data[1] == 0x02:
-                    self.logger.logVerbose("Valid PL, channel unqualified")
+                    self.logger.logDebug("Valid PL, channel unqualified")
                 elif data[1] == 0x03:
-                    self.logger.logVerbose("Valid PL, channel qualified")
+                    self.logger.logDebug("Valid PL, channel qualified")
                 return
 
             # Display (DISPLY) opcode
             elif opcode == 0x3c:
-                self.logger.logVerbose("Got Display (DISPLY) update for field {}, data: {}".format(hex(data[0]),hex(data[1])))
+                self.logger.logDebug("Got Display (DISPLY) update for field {}, data: {}".format(hex(data[0]),hex(data[1])))
                 return
 
             # this one isn't in the SB9600 spec, must be something special for the XTLs
