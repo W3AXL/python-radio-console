@@ -714,6 +714,23 @@ function toggleMute(event, obj) {
         event.stopPropagation();
     }
 }
+/**
+ * Dial a DTMF number on the currently active radio
+ * @param {string} number number to dial
+ * @param {int} digitTime time to play each digit
+ * @param {int} delayTime time between each digit
+ */
+function dialNumber(number, digitTime, delayTime) {
+    // initial delay before first tone is played
+    const startTime = 300   
+    // Start PTT
+    //startPtt();
+    // Set a timeout for each digit
+    for (let i = 0; i < number.length; i++) {
+        const nextTime = startTime + ((digitTime + delayTime) * i);
+        console.debug(`Scheduling digit ${number[i]} for time ${nextTime}`);
+    }
+}
 
 /***********************************************************************************
     Global UI Functions
@@ -1758,7 +1775,9 @@ DualTone.prototype.setup = function() {
     this.osc1.connect(this.gainNode);
     this.osc2.connect(this.gainNode);
     this.gainNode.connect(this.filter);
+    // Connect to both local speakers (for sidetone) and the mic analyzer
     this.filter.connect(this.context.destination);
+    this.filter.connect(audio.inputAnalyzer);
 }
 
 DualTone.prototype.start = function() {
