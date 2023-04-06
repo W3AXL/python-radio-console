@@ -1,0 +1,56 @@
+{
+    "Radio":
+    {
+        "name": "Testbed W9",
+        "desc": "S-Split XTL5000",
+        "ctrlMode": "Motorola-W9",
+        "ctrlPort": "/dev/ttyUSB0",
+        "txDev": "plughw:CARD=Set,DEV=0",
+        "rxDev": "plughw:CARD=Set,DEV=0",
+        "chanLookup":
+        {
+            "YB 70SPX": "W9YB 70cm Simplex"
+        },
+        "zoneLookup":
+        {
+            "Z1": "Zone 1: Testing"
+        },
+        "btnBinding":
+        {
+            "btn_top_1": "MON",
+            "btn_top_2": "",
+            "btn_top_3": "SCAN",
+            "btn_top_4": "PWR",
+            "btn_top_5": "DIR",
+            "btn_top_6": "",
+            "btn_kp_1": "",
+            "btn_kp_2": "",
+            "btn_kp_3": "",
+            "btn_kp_4": "",
+            "btn_kp_5": "",
+            "btn_kp_6": "",
+            "btn_kp_7": "",
+            "btn_kp_8": "",
+            "btn_kp_9": "",
+            "btn_kp_*": "RCL",
+            "btn_kp_0": "",
+            "btn_kp_#": "NUIS",
+            "btn_home": "HOME",
+            "btn_sel": "SEL"
+        },
+        "softkeyList": [
+            "MON",
+            "NUIS",
+            "PWR",
+            "SCAN",
+            "DIR",
+            "CALL",
+            "PAGE",
+            "PHONE",
+            "RCL",
+            "SEL"
+        ]
+    },
+    "Certfile": "certs/private/testbed.w3axl.com.crt",
+    "Keyfile": "certs/private/testbed.w3axl.com.key"
+}
