@@ -1,5 +1,5 @@
 
-from interface.xtl import XTL
+from interface.motorola import Motorola
 from interface.xcmp import XPR
 
 import queue
@@ -17,14 +17,13 @@ class Radio():
     # Valid control modes for the radio
     controlModes = ["None",             # No PTT control
                     "XCMP-XPR",         # eXtended Control and Management Protocol for the XPR series radios
-                    "SB9600-XTL-O",     # XTL O5
-                    "SB9600-XTL-W",     # XTL W9
-                    "SB9600-AS-W",      # Astro Spectra W9
-                    "SB9600-MCS-3",     # MCS2000 model 3
+                    "Motorola-O5",      # XTL O5
+                    "Motorola-W9",      # XTL/Astro W9
+                    "Motorola-MCS3",    # MCS2000 model 3
                     "Soundcard-CM108",  # CM108 GPIO PTT
                     "Soundcard-VOX"]    # Radio-controlled VOX PTT
 
-    def __init__(self, name, desc=None, ctrlMode=None, ctrlPort=None, txDev=None, rxDev=None, logger=Logger()):
+    def __init__(self, name, desc=None, ctrlMode=None, ctrlPort=None, txDev=None, rxDev=None, logger=Logger(), zoneLookup=None, chanLookup=None, btnBinding=None, softkeyList=None):
         """Radio configuration object
 
         Args:
@@ -59,6 +58,14 @@ class Radio():
         self.priority = 0
         self.softkeys = ["","","","","",""]
         self.softkeyStates = [False, False, False, False, False, False]
+
+        # Zone/Channel Lookup Dicts
+        self.zoneLookup = zoneLookup
+        self.chanLookup = chanLookup
+
+        # W9/M3 softkey/btn lists
+        self.btnBinding = btnBinding
+        self.softkeyList = softkeyList
 
         # Radio interface class
         self.interface = None
@@ -102,9 +109,12 @@ class Radio():
         # Store callback
         self.statusCallback = statusCallback
 
-        # XTL5000 O-head
-        if self.ctrlMode == "SB9600-XTL-O":
-            self.interface = XTL(self.name, self.ctrlPort, 'O5', self.statusCallback, self.logger)
+        # Motorola O5 head
+        if self.ctrlMode == "Motorola-O5":
+            self.interface = Motorola(self.name, self.ctrlPort, 'O5', self.statusCallback, self.zoneLookup, self.chanLookup, self.logger)
+        # Motorola W9 head
+        elif self.ctrlMode == "Motorola-W9":
+            self.interface = Motorola(self.name, self.ctrlPort, 'W9', self.statusCallback, self.zoneLookup, self.chanLookup, self.logger, self.btnBinding, self.softkeyList)
         # XPR XCMP Control
         elif self.ctrlMode == "XCMP-XPR":
             self.interface = XPR(self.name, self.ctrlPort, self.statusCallback, self.logger)
@@ -282,6 +292,21 @@ class Radio():
         Returns:
             Radio: a new Radio object
         """
+        # These are optional, so default to None
+        zoneLookup = None
+        chanLookup = None
+        btnBinding = None
+        softkeyList = None
+
+        if 'zoneLookup' in radioDict:
+            zoneLookup = radioDict['zoneLookup']
+        if 'chanLookup' in radioDict:
+            chanLookup = radioDict['chanLookup']
+        if 'btnBinding' in radioDict:
+            btnBinding = radioDict['btnBinding']
+        if 'softkeyList' in radioDict:
+            softkeyList = radioDict['softkeyList']
+
         # create a new radio object from config data
         return Radio(radioDict['name'],
                      radioDict['desc'],
@@ -289,4 +314,8 @@ class Radio():
                      radioDict['ctrlPort'],
                      radioDict['txDev'],
                      radioDict['rxDev'],
-                     logger)
+                     logger,
+                     zoneLookup,
+                     chanLookup,
+                     btnBinding,
+                     softkeyList)

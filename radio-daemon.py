@@ -54,12 +54,12 @@ from logger import Logger
 import json
 
 # CPU profiling
-import yappi
+#import yappi
 
 # Memory profiling
-import tracemalloc
-import gc
-from pympler import summary, muppy
+#import tracemalloc
+#import gc
+#from pympler import summary, muppy
 
 # Config class (loaded from JSON)
 class Config():
@@ -310,7 +310,6 @@ def radioStatusUpdate():
 
     # Add the message to the queue
     eventLoop.call_soon_threadsafe(messageQueue.put_nowait,"status")
-
     return
 
 
@@ -894,7 +893,7 @@ if __name__ == "__main__":
     
     try:
         # Enable garbage collector
-        gc.enable()
+        #gc.enable()
 
         # Enable AIORTC debug
         logging.basicConfig(level=logging.ERROR)
