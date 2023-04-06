@@ -11,6 +11,7 @@ numpy==1.22.3
 pycparser==2.21
 pyee==9.0.4
 pylibsrtp==0.7.1
+pympler==1.0.1
 pyserial==3.5
 trboxcmp==0.0.6
 typing-extensions==4.1.1
