@@ -665,7 +665,7 @@ ion-icon {
 
 .radio-card #channel-text {
     font-family: "Iosevka Bold";
-    font-size: 32px;
+    font-size: 30px;
     color: var(--color-txt-light);
     margin-top: -4px;
 }

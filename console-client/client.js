@@ -396,10 +396,18 @@ function updateRadioCard(idx) {
     // Get card object
     var radioCard = $("#radio" + String(idx));
 
-    // Update text boxes
-    radioCard.find("#channel-text").html(radio.status.chan);
-    radioCard.find("#zone-text").html(radio.status.zone);
+    // Limit zone & channel text to 27/18 characters
+    // TODO: figure out dynamic scaling of channel/zone text so we don't have to do this
+    if (radio.status.zone != null) {
+        const shortZone = radio.status.zone.substring(0,28);
+        radioCard.find("#zone-text").html(shortZone);
+    }
 
+    if (radio.status.chan != null) {
+        const shortChan = radio.status.chan.substring(0,19);
+        radioCard.find("#channel-text").html(shortChan);
+    }
+    
     // Remove all current classes
     setTimeout(function() {
         radioCard.removeClass("transmitting");
