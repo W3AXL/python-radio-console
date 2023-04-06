@@ -31,7 +31,7 @@ class Logger:
         if self.debug:
             callingFunction = inspect.currentframe().f_back.f_code.co_name
             timeString = datetime.now().strftime("%m/%d %H:%M:%S.%f")[:-3]
-            print(Fore.BLUE + Style.DIM + "[{}] ({:^16}) DEBG: {}".format(timeString, callingFunction, str(msg)) + Style.RESET_ALL)
+            print(Fore.LIGHTBLUE_EX + Style.DIM + "[{}] ({:^16}) DEBG: {}".format(timeString, callingFunction, str(msg)) + Style.RESET_ALL)
 
     def logVerbose(self, msg):
         if self.verbose:

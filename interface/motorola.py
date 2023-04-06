@@ -82,7 +82,7 @@ class Motorola:
         }
 
         # O5 display icon definitions
-        display_icons = {
+        indicator_map = {
             'monitor': 0x01,
             'scan': 0x04,
             'scan_pri': 0x05,
@@ -245,6 +245,10 @@ class Motorola:
         self.rxMsgQueue = queue.Queue()
         self.txMsgQueue = queue.Queue()
 
+        # Queue for delayed message sending (for long button presses, etc)
+        # Each item has the format [calltime, function, *args]
+        self.txDelayList = []
+
         # SBEP mode switch var
         self.inSBEP = False
         self.sbepSpeed = 0
@@ -312,7 +316,7 @@ class Motorola:
                                 sent = True
                             except RuntimeError as ex:
                                 self.logger.logWarn("Message send failed, attempt {}/{}".format(tries, self.retries+1))
-                
+
                 except queue.Empty:
                     # Do nothing if queue empty
                     pass
@@ -321,6 +325,15 @@ class Motorola:
             if self.newStatus:
                 self.newStatus = False
                 self.updateStatus()
+
+            # Check our pending delayed TX list
+            if len(self.txDelayList) > 0:
+                for idx, delayedFunc in enumerate(self.txDelayList):
+                    if (time.time() * 1000) > delayedFunc[0]:
+                        # call the function with arguments
+                        delayedFunc[1](*delayedFunc[2])
+                        # remove
+                        self.txDelayList.pop(idx)
 
             # give the CPU a break
             time.sleep(0.01)
@@ -446,7 +459,8 @@ class Motorola:
         # Extract message and SBEP data
         msg = msg[:dataStart + length]
         data = msg[dataStart:dataStart+length]
-        self.logger.logDebug("SBEP msg: {}".format(hexlify(msg, " ")))
+        self.logger.logDebug("SBEP msg:   {}".format(hexlify(msg, " ")))
+        self.logger.logDebug("SBEP ASCII: {}".format(msg.decode('ascii','ignore')))
 
         # Checksum verification
         total = sum(msg[0:dataStart+length-1])
@@ -471,20 +485,21 @@ class Motorola:
             # Display Opcode
             self.logger.logVerbose("SBEP Update Display")
 
-            if self.head == 'W9':
-                # W9 Display Update
+            # Get message attributes
+            row = data[0]       # cursor row
+            col = data[1]       # cursor column
+            chars = data[2]     # number of characters in message
+            srow = data[3]      # starting row
+            scol = data[4]      # starting column
 
-                # Get message attributes
-                row = data[0]       # cursor row
-                col = data[1]       # cursor column
-                chars = data[2]     # number of characters in message
-                srow = data[3]      # starting row
-                scol = data[4]      # starting column
-                # Extract display characters
-                text = data[5:5+chars].decode("ascii","ignore")
-                self.logger.logDebug("text string from SBEP: len {}, text {}".format(chars, text))
+            # Extract display characters
+            text = data[5:5+chars].decode("ascii","ignore")
+            self.logger.logDebug("text string from SBEP: len {}, text {}".format(chars, text))
+
+            # W9 Display Update
+            if self.head == 'W9':
                 # Replace current channel text using column index
-                self.logger.logDebug("Got display update for row/col {}/{}".format(srow,scol))
+                self.logger.logDebug("Got W9 display update for row/col {}/{}".format(srow,scol))
                 newDisplay = self.display[:scol] + text + self.display[scol+chars:]
                 self.logger.logVerbose("New display text: {}".format(newDisplay))
                 if newDisplay != self.display:
@@ -510,18 +525,14 @@ class Motorola:
                 return totalBytes
 
             elif self.head == 'O5':
-                # get display subdevice
-                subdev = data[6]
+                self.logger.logVerbose("Got O5 display update for srow/scol {}/{}".format(srow,scol))
                 # Handle based on display subdevice
-                if subdev == self.O5Address.display_subdevs['text_zone']:
-                    newText = data.rstrip().decode('ascii', 'ignore')
-                    # Remove random 0x00 from strings
-                    newText = newText.replace('\x00','')
+                if srow == self.O5.display_subdevs['text_zone']:
                     # Ignore zone text if it's the same as current, if it's in the ignored strings list, or if it's whitespace only
-                    if newText != self.zoneText and not any(s in newText for s in self.O5Address.ignored_strings) and not newText.isspace():
-                        self.zoneText = newText
+                    if text != self.zoneText and not any(s in text for s in self.O5.ignored_strings) and not text.isspace():
+                        self.zoneText = text
                         self.newStatus = True
-                        self.logger.logVerbose("Got new zone text: {}".format(newText))
+                        self.logger.logVerbose("Got new zone text: {}".format(text))
                         # Run lookup on text if applicable
                         if self.zoneLookup:
                             for key in self.zoneLookup:
@@ -530,12 +541,11 @@ class Motorola:
                                     self.zoneText = self.zoneLookup[key]
                                     self.logger.logVerbose("Got new zone text from lookup: {} = {}".format(key,self.zoneText))
                     return totalBytes
-                elif subdev == self.O5Address.display_subdevs['text_channel']:
-                    newText = data.rstrip().decode('ascii', 'ignore')
-                    if newText != self.chanText and not any(s in newText for s in self.O5Address.ignored_strings):
-                        self.chanText = newText
+                elif srow == self.O5.display_subdevs['text_channel']:
+                    if text != self.chanText and not any(s in text for s in self.O5.ignored_strings):
+                        self.chanText = text
                         self.newStatus = True
-                        self.logger.logVerbose("Got new channel text: {}".format(newText))
+                        self.logger.logVerbose("Got new channel text: {}".format(text))
                         # Run lookup on text if applicable
                         if self.chanLookup:
                             for key in self.chanLookup:
@@ -544,9 +554,9 @@ class Motorola:
                                     self.chanText = self.chanLookup[key]
                                     self.logger.logVerbose("Got new chan text from lookup: {} = {}".format(key,self.chanText))
                     return totalBytes
-                elif subdev == self.O5Address.display_subdevs['text_softkeys']:
+                elif srow == self.O5.display_subdevs['text_softkeys']:
                     # Get five softkey texts
-                    self.softkeys = data.decode('ascii', 'ignore').rstrip().rstrip('\x00').split('^')[1:6]
+                    self.softkeys = text.split('^')[1:6]
                     # Add home as the permanent sixth
                     self.softkeys.append("HOME")
                     self.updateSoftkeys()
@@ -580,6 +590,64 @@ class Motorola:
                 name = self.getIndicator(inds[i])
                 state = self.getIndicatorState(states[i])
                 self.logger.logVerbose("Indicator {} state {}".format(name,state))
+
+                # If we're an O5, update the statuses based on the indicator states
+                if self.head == "O5":
+                    # Scan Icon
+                    if name == "scan":
+                        self.logger.logVerbose("Got new scanning state: {}".format(state))
+                        if state == "on":
+                            self.scanning = True
+                        elif state == "off":
+                            self.scanning = False
+                        self.updateSoftkeys()
+                        self.newStatus = True
+
+                    # Scan Priority Dot
+                    elif name == "scan_pri":
+                        self.logger.logVerbose("Got new scan priority state: {}".format(state))
+                        if state == "on":
+                            self.logger.logVerbose("Channel priority 1 marker")
+                            self.priority = 1
+                        elif state == "flashing_1":
+                            self.logger.logVerbose("Channel priority 2 marker")
+                            self.priority = 2
+                        elif state == "off":
+                            self.logger.logVerbose("Channel priority marker cleared")
+                            self.priority = 0
+                        self.newStatus = True
+                        self.updateSoftkeys()
+
+                    # Low power L icon
+                    elif name == 'low_power':
+                        self.logger.logVerbose("Got new lowpower state: {}".format(state))
+                        if state == "on":
+                            self.lowpower = True
+                        elif state == "off":
+                            self.lowpower = False
+                        self.updateSoftkeys()
+                        self.newStatus = True
+
+                    # Monitor icon
+                    elif name == 'monitor':
+                        self.logger.logVerbose("Got new monitor state: {}".format(state))
+                        if state == "on":
+                            self.monitor = True
+                        elif state == "off":
+                            self.monitor = False
+                        self.updateSoftkeys()
+                        self.newStatus = True
+
+                    # Talkaround/direct icon
+                    elif name == 'direct':
+                        self.logger.logVerbose("Got new direct state: {}".format(state))
+                        if state == "on":
+                            self.direct = True
+                        elif state == "off":
+                            self.direct = False
+                        self.updateSoftkeys()
+                        self.newStatus = True
+
                 # if we're a W9 and it's a top-row indicator, map it to the right softkey
                 if self.head == 'W9' and 'ind_top_' in name:
                     indIdx = int(name[-1])-1
@@ -882,7 +950,8 @@ class Motorola:
         # O5 just sends a softkey press normally
         if self.head == 'O5':
             if idx == 6:
-                self.pressButton(self.O5.button_map["btn_home"])
+                # The O5 home button is a special case, we actually have to hold it for a short duration otherwise it doesn't register as a press
+                self.holdButton(self.O5.button_map["btn_home"], 50)
             else:
                 self.pressButton(self.O5.button_map["btn_key_{}".format(idx)])
         # W9 is more involved, we have to search the button mapping for the right key to press
@@ -965,8 +1034,8 @@ class Motorola:
         """
         # Clear all softkey states (softkey 6 is always false, HOME)
         self.softkeyStates = [False, False, False, False, False, False]
-        # O9 just maps softkey to state based on softkey names
-        if self.head == 'O9':
+        # O5 just maps softkey to state based on softkey names
+        if self.head == 'O5':
             # Scan
             idx = self.findSoftkey("SCAN")
             if idx != None:
@@ -1089,6 +1158,29 @@ class Motorola:
             duration (float): duration to press in seconds
         """
         self.sendButton(code, 0x02)
+
+    def holdButton(self, code, duration):
+        """
+        Hold a button for a specified duration
+
+        Args:
+            code (byte): button opcode
+            duration (float): duration to press in seconds
+        """
+        self.sendButton(code, 0x01)
+        self.setTimeout(duration, self.sendButton, code, 0x00)
+
+    def setTimeout(self, duration, func, *args):
+        """
+        Calls a function after a specified delay, non-blocking
+
+        Args:
+            duration (int): time to wait in ms
+            func (function): function to call once time is up
+        """
+        execTime = (time.time() * 1000) + duration
+        item = [execTime, func, [*args]]
+        self.txDelayList.append(item)
 
     def getDisplaySubDev(self, code):
         """Lookup display subdevice by hex code
