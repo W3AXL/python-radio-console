@@ -1140,11 +1140,12 @@ function restartMicTrack(idx) {
     }).then(function(stream) {
         // Reconnect mic to meters, etc
         audio.inputStream = audio.context.createMediaStreamSource(stream);
-        audio.inputStream.connect(audio.inputAnalyzer);
+        // Connect input mic stream to gain, and gain to destination and analyzer
+        audio.inputStream.connect(audio.inputMicGain);
         // Replace mic track in WebRTC connection
         const sender = radios[idx].rtc.peer.getSenders().find((s) => s.track.kind === audio.inputTrack.kind);
         console.debug("Found sender for mic track: ", sender);
-        audio.inputTrack = stream.getTracks()[0];
+        audio.inputTrack = audio.inputStream.getTracks()[0];
         console.debug("Replacing with mic track: ", audio.inputTrack);
         sender.replaceTrack(audio.inputTrack);
         return true;
@@ -1629,6 +1630,11 @@ function changeVolume() {
     const newVol = Math.pow($("#console-volume").val() / 100, 2);
     // Set gain node to new value
     audio.outputGain.gain.value = newVol;
+    // Set volume of each ui html sound
+    const uiSounds = document.getElementsByClassName("ui-audio");
+    for (var i = 0; i < uiSounds.length; i++) {
+        uiSounds.item(i).volume = newVol;
+    }
 }
 
 /**
@@ -1880,7 +1886,7 @@ DualTone.prototype.setup = function() {
     this.osc2.connect(this.gainNode);
     this.gainNode.connect(this.filter);
     // Connect to both local speakers (for sidetone) and the mic destination/analyzer
-    this.filter.connect(this.context.destination);
+    this.filter.connect(audio.outputGain);
     this.filter.connect(audio.inputAnalyzer);
     this.filter.connect(audio.inputDest);
 }
