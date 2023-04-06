@@ -371,7 +371,7 @@ class Motorola:
             self.inSBEP = False
             # Process
             processed = self.processSBEP(msg)
-            self.logger.logVerbose("Exiting SBEP")
+            self.logger.logDebug("Exiting SBEP")
             # Check if SBEP decode worked
             if processed < 0:
                 self.logger.logError("Failed to process SBEP message!")
@@ -483,7 +483,7 @@ class Motorola:
         if opcode == 0x1:
             
             # Display Opcode
-            self.logger.logVerbose("SBEP Update Display")
+            self.logger.logDebug("SBEP Update Display")
 
             # Get message attributes
             row = data[0]       # cursor row
@@ -565,24 +565,24 @@ class Motorola:
                     return totalBytes
         elif opcode == 0x2:
             # RF Hardware Test
-            self.logger.logVerbose("SBEP RF Hardware Test")
+            self.logger.logDebug("SBEP RF Hardware Test")
         elif opcode == 0x3:
             # Virtual Source
-            self.logger.logVerbose("SBEP Virtual Source")
+            self.logger.logDebug("SBEP Virtual Source")
         elif opcode == 0x5:
             # ACK
-            self.logger.logVerbose("SBEP ACK")
+            self.logger.logDebug("SBEP ACK")
         elif opcode == 0x6:
             # NACK
-            self.logger.logVerbose("SBEP NACK")
+            self.logger.logDebug("SBEP NACK")
 
         # Extended Opcodes (Broadcast)
         elif opcode == 0x10:
             # SBEP Reset Broadcast
-            self.logger.logVerbose("SBEP Reset")
+            self.logger.logDebug("SBEP Reset")
         elif opcode == 0x21:
             # Indicator Updates
-            self.logger.logVerbose("SBEP Indicator Update")
+            self.logger.logDebug("SBEP Indicator Update")
             num = data[0]
             inds = data[1:1+num]
             states = data[1+num:1+num+num]
@@ -713,7 +713,7 @@ class Motorola:
                 else:
                     self.sbepSpeed = data[0]
 
-                self.logger.logVerbose("Entering SBEP mode at {} baud".format(self.sbepSpeed))
+                self.logger.logDebug("Entering SBEP mode at {} baud".format(self.sbepSpeed))
 
                 return
 

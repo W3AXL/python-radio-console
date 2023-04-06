@@ -30,6 +30,8 @@ var radios = [];
 var audio = {
     // Audio context
     context: null,
+    // DTMF generator
+    dtmf: null,
     // Input device, stream, meter, etc
     input: null,
     inputStream: null,
@@ -51,6 +53,26 @@ var audio = {
     agcAttack: 0.0,
     agcRelease: 0.3,
     agcMakeup: 1.1,     // right now any makeup gain causes clipping
+}
+
+// DTMF array
+const dtmfFrequencies = {
+	"1": {f1: 697, f2: 1209},
+	"2": {f1: 697, f2: 1336},
+	"3": {f1: 697, f2: 1477},
+    "A": {f1: 697, f2: 1633},
+	"4": {f1: 770, f2: 1209},
+	"5": {f1: 770, f2: 1336},
+	"6": {f1: 770, f2: 1477},
+    "B": {f1: 770, f2: 1633},
+	"7": {f1: 852, f2: 1209},
+	"8": {f1: 852, f2: 1336},
+	"9": {f1: 852, f2: 1477},
+    "C": {f1: 852, f2: 1633},
+	"*": {f1: 941, f2: 1209},
+	"0": {f1: 941, f2: 1336},
+	"#": {f1: 941, f2: 1477},
+    "D": {f1: 941, f2: 1633}
 }
 
 // WebRTC Variables
@@ -1505,6 +1527,9 @@ function startAudioDevices() {
     audio.outputAnalyzer = audio.context.createAnalyser();
     audio.outputPcmData = new Float32Array(audio.outputAnalyzer.fftSize);
 
+    // Create DTMF tone generator
+    audio.dtmf = new DualTone(audio.context, 100, 200);
+
     // Create gain node for output volume and connect it to the default output device
     audio.outputGain = audio.context.createGain();
     audio.outputGain.gain.value = 0.75;
@@ -1696,6 +1721,74 @@ function centerPan(event, obj) {
     console.debug(`Resetting pan for radio ${radios[idx]}`);
     // Set pan
     radios[idx].audioSrc.panNode.pan.setValueAtTime(0, audio.context.currentTime);
+}
+
+/***********************************************************************************
+    DTMF Functions
+    Mostly lifted from the example here:
+    https://codepen.io/edball/pen/EVMaVN
+***********************************************************************************/
+
+/**
+ * Dual Tone Generator Class for DTMF
+ * @param {audioContext} context Audio context
+ * @param {int} freq1 frequency 1
+ * @param {int} freq2 frequency 2
+ */
+function DualTone(context, freq1, freq2) {
+    this.context = context;
+    this.status = 0;
+    this.freq1 = freq1;
+    this.freq2 = freq2;
+}
+
+DualTone.prototype.setup = function() {
+    // Create the audio nodes
+    this.osc1 = this.context.createOscillator();
+    this.osc2 = this.context.createOscillator();
+    this.gainNode = this.context.createGain();
+    this.filter = this.context.createBiquadFilter();
+    // Setup initial values
+    this.osc1.frequency.value = this.freq1;
+    this.osc2.frequency.value = this.freq2;
+    this.gainNode.gain.value = 0.25;
+    this.filter.type = 'lowpass';
+    this.filter.frequency = '4000';
+    // Connect everything
+    this.osc1.connect(this.gainNode);
+    this.osc2.connect(this.gainNode);
+    this.gainNode.connect(this.filter);
+    this.filter.connect(this.context.destination);
+}
+
+DualTone.prototype.start = function() {
+    this.setup();
+    this.osc1.start(0);
+    this.osc2.start(0);
+    this.status = 1;
+}
+
+DualTone.prototype.stop = function() {
+    this.osc1.stop(0);
+    this.osc2.stop(0);
+    this.status = 0;
+}
+
+/**
+ * Starts the DTMF generator for the specified digit and duration
+ * @param {char} digit digit to send (0-9, A-D, # or *)
+ * @param {*} duration duration to play digit in ms
+ */
+function sendDigit(digit, duration) {
+    const fPair = dtmfFrequencies[digit];
+    audio.dtmf.freq1 = fPair.f1;
+    audio.dtmf.freq2 = fPair.f2;
+    if (audio.dtmf.status == 0) {
+        audio.dtmf.start();
+    }
+    setTimeout(() => {
+        audio.dtmf.stop();
+    }, duration);
 }
 
 /***********************************************************************************
