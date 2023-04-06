@@ -556,34 +556,12 @@ ion-icon {
     width: 96px;
     height: 24px;
     margin-top: 58px;
-    margin-left: -38px;
+    margin-left: 8px;
     text-align: center;
     border-radius: 2px;
     transition: all 0.25s ease;
     opacity: 1;
     z-index: 1;
-}
-
-/* Dynamic dropdown color */
-.radio-card.red .panning-dropdown {
-    background-color: var(--color-card-midred);
-}
-.radio-card.amber .panning-dropdown {
-    background-color: var(--color-card-midamber);
-}
-.radio-card.green .panning-dropdown {
-    background-color: var(--color-card-midgreen);
-}
-.radio-card.blue .panning-dropdown {
-    background-color: var(--color-card-midblue);
-}
-.radio-card.purple .panning-dropdown {
-    background-color: var(--color-card-midpurple);
-}
-
-.panning-dropdown.closed {
-    opacity: 0;
-    display: none;
 }
 
 .panning-dropdown .topcoat-range {
@@ -604,13 +582,108 @@ ion-icon {
     color: var(--color-accent-mid);
 }
 
+/* DTMF Dropdown */
+
+.dtmf-dropdown {
+    position: absolute;
+    width: 100px;
+    height: 86px;
+    margin-top: 118px;
+    margin-left: 24px;
+    text-align: center;
+    border-radius: 2px;
+    transition: all 0.25s ease;
+    opacity: 1;
+    z-index: 1;
+    -webkit-user-select: none; /* Safari */
+    -ms-user-select: none; /* IE 10 and IE 11 */
+    user-select: none; /* Standard syntax */
+    clip-path: polygon(0 0, 100% 0, 100% 77%, 80% 100%, 0 100%);
+}
+
+.dtmf-dialpad {
+    position: absolute;
+    height: 24px;
+    width: 90px;
+    right: 100px;
+    top: 30px;
+    font-size: 16px;
+    font-family: "Iosevka Bold";
+    color: var(--color-txt-light);
+    background-color: rgba(32,32,32,0.5);
+    border: 1px solid rgba(128,128,128,0.5);
+    z-index: 10;
+}
+
+.dtmf-dialpad span {
+    display: block;
+    width: 86px;
+    text-align: right;
+    padding-top: 4px;
+    padding-right: 4px;
+}
+
+.dtmf-table {
+    margin-top: -2px;
+    font-size: 13px;
+    font-family: "Iosevka Bold";
+    color: var(--color-txt-light);
+    width: 100px;
+    height: 80px;
+}
+
+.dtmf-table td, .dtmf-table th, .dtmf-table tr {
+    margin: 0;
+    padding: 0;
+    width: 20px;
+    height: 20px;
+    text-align: center;
+}
+
+.dtmf-table td:hover {
+    background-color: rgba(255,255,255,0.1);
+}
+
+.dtmf-table td:active {
+    background-color: rgba(0,0,0,0.2);
+}
+
+/* Common dropdown styling */
+
+.radio-card.red .panning-dropdown,
+.radio-card.red .dtmf-dropdown {
+    background-color: var(--color-card-midred);
+}
+.radio-card.amber .panning-dropdown,
+.radio-card.amber .dtmf-dropdown {
+    background-color: var(--color-card-midamber);
+}
+.radio-card.green .panning-dropdown,
+.radio-card.green .dtmf-dropdown {
+    background-color: var(--color-card-midgreen);
+}
+.radio-card.blue .panning-dropdown,
+.radio-card.blue .dtmf-dropdown {
+    background-color: var(--color-card-midblue);
+}
+.radio-card.purple .panning-dropdown,
+.radio-card.purple .dtmf-dropdown {
+    background-color: var(--color-card-midpurple);
+}
+
+.panning-dropdown.closed,
+.dtmf-dropdown.closed,
+.dtmf-dialpad.closed {
+    opacity: 0;
+    display: none;
+}
+
+/* Main Card Content */
 
 .radio-card a {
     text-decoration: none;
     color: var(--color-accent-light2);
 }
-
-/* Main Card Content */
 
 .radio-card .content {
     position: absolute;
