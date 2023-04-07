@@ -722,34 +722,53 @@ function toggleMute(event, obj) {
         event.stopPropagation();
     }
 }
+
+function startDTMF(radioId, number, digitTime, delayTime) {
+    // Mute mic
+    audio.inputMicGain.gain.value = 0;
+    // Start PTT
+    startPtt();
+    // Dial (will wait for transmit active before dialing)
+    dialNumber(radioId, number, digitTime, delayTime);
+}
+
 /**
- * Dial a DTMF number on the currently active radio
+ * Waits for PTT to be active and then dials the number
+ * @param {int} radioIdx index of the radio dialing (for re-enabling DTMF when done)
  * @param {string} number number to dial
  * @param {int} digitTime time to play each digit
  * @param {int} delayTime time between each digit
  * 
  * @returns {int} the total duration of the dial event
  */
-function dialNumber(number, digitTime, delayTime) {
-    // initial delay before first tone is played
-    const startTime = dtmfTiming.initialDelay;
-    // Mute mic
-    audio.inputMicGain.gain.value = 0;
-    // Start PTT
-    startPtt();
-    // Set a timeout for each digit
-    for (let i = 0; i < number.length; i++) {
-        const nextTime = startTime + ((digitTime + delayTime) * i);
-        console.debug(`Scheduling digit ${number[i]} for time ${nextTime}`);
-        sendDigit(number[i], digitTime, nextTime);
+function dialNumber(radioId, number, digitTime, delayTime) {
+    // Wait until we're transmitting
+    if (radios[selectedRadioIdx].status.state != "Transmitting") {
+        console.debug("Waiting for radio to start transmitting");
+        setTimeout(() => {
+            dialNumber(radioId, number, digitTime, delayTime);
+        }, 50);
+    } else {
+        console.debug("Radio is now transmitting, dialing DTMF");
+        // initial delay before first tone is played
+        const startTime = dtmfTiming.initialDelay;
+        // Set a timeout for each digit
+        for (let i = 0; i < number.length; i++) {
+            const nextTime = startTime + ((digitTime + delayTime) * i);
+            console.debug(`Scheduling digit ${number[i]} for time ${nextTime}`);
+            sendDigit(number[i], digitTime, nextTime);
+        }
+        // Stop PTT after dialing
+        setTimeout(() => {
+            stopPtt();
+        }, startTime + ((digitTime + delayTime) * number.length));
+        // Re-enable mic and DTMF keypad a little later
+        setTimeout(()=> {
+            audio.inputMicGain.gain.value = 1;
+            enableDTMFKeypad(radioId, true);
+            clearDTMFDialpad(radioId);
+        }, startTime + ((digitTime + delayTime) * number.length) + rtcConf.txBaseLatency);
     }
-    // Stop PTT and unmute mic after done
-    setTimeout(() => {
-        stopPtt();
-        audio.inputMicGain.gain.value = 1;
-    }, startTime + ((digitTime + delayTime) * number.length) + delayTime);
-
-    return startTime + ((digitTime + delayTime) * number.length) + delayTime;
 }
 
 /***********************************************************************************
@@ -1811,6 +1830,8 @@ function dtmfPressed(event, obj) {
     const dialpad = obj.closest('.icon-stack').querySelector('.dtmf-digits');
     // Get digit number
     const digit = cell.innerHTML;
+    // Get ID of the radio this dialpad is for
+    const radioId = obj.closest('.radio-card').id;
     // Log
     console.debug(`Clicked dtmf ${digit}`);
     // Handle clear or call
@@ -1822,21 +1843,12 @@ function dtmfPressed(event, obj) {
             return;
         }
         // Disable keypad
-        digitTable.setAttribute('disabled', true);
-        // Get index of the radio this dialpad is for
-        const radio = obj.closest('.radio-card').id;
-        console.log(radio);
+        enableDTMFKeypad(radioId, false);
         // switch focus to radio if it's not already
         deselectRadios();
-        selectRadio(radio);
+        selectRadio(radioId);
         // Dial
-        const totalDur = dialNumber(digits, dtmfTiming.digitDuration, dtmfTiming.digitDelay);
-        // Clear number and re-enable when done
-        setTimeout(() => {
-            console.debug("Re-enabling DTMF");
-            dialpad.innerHTML = "";
-            digitTable.removeAttribute('disabled');
-        }, totalDur);
+        startDTMF(radioId, digits, dtmfTiming.digitDuration, dtmfTiming.digitDelay);
     } else if (digit.includes("trash-sharp")) {
         // Clear the dialpad
         dialpad.innerHTML = "";
@@ -1848,6 +1860,27 @@ function dtmfPressed(event, obj) {
         }
     }
     stopClick(event, obj);
+}
+
+function enableDTMFKeypad(radioId, enabled) {
+    // Get elements
+    const radioCard = document.querySelector(`#${radioId}`);
+    const digitTable = radioCard.querySelector('.dtmf-table');
+    // Disable
+    if (enabled) {
+        console.debug("Re-enabling DTMF");
+        digitTable.removeAttribute('disabled');
+    } else {
+        console.debug("Disabling DTMF");
+        digitTable.setAttribute('disabled', true);
+    }
+}
+
+function clearDTMFDialpad(radioId) {
+    // Get elements
+    const radioCard = document.querySelector(`#${radioId}`);
+    const dialpad = radioCard.querySelector('.dtmf-digits');
+    dialpad.innerHTML = "";
 }
 
 /***********************************************************************************
