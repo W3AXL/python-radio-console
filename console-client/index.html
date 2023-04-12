@@ -118,6 +118,19 @@
                                         <ion-icon name="moto-scan" class="scan-icon"></ion-icon>
                                         <ion-icon name="moto-scan-dot" class="scan-pri-icon"></ion-icon>
                                     </div>
+                                    <!-- DTMF Dropdown -->
+                                    <a href="#" onclick="showDTMFMenu(event, this)" class="enabled"><ion-icon name="keypad-sharp" id="icon-dtmf"></ion-icon></a>
+                                        <div class="dtmf-dropdown closed">
+                                            <table class="dtmf-table" onclick="dtmfPressed(event, this)">
+                                                <tr><td>1</td><td>2</td><td>3</td><td>A</td><td><ion-icon name="call-sharp"></ion-icon></td></tr>
+                                                <tr><td>4</td><td>5</td><td>6</td><td>B</td><td><ion-icon name="trash-sharp"></td></tr>
+                                                <tr><td>7</td><td>8</td><td>9</td><td>C</td></tr>
+                                                <tr><td>*</td><td>0</td><td>#</td><td>D</td></tr>
+                                            </table>>
+                                        </div>
+                                        <div class="dtmf-dialpad closed">
+                                            <span class="dtmf-digits"></span>
+                                        </div>
                                     <!-- Pan Dropdown -->
                                     <a href="#" onclick="showPanMenu(event, this)" class="enabled"><ion-icon name="headset-sharp" id="icon-panning"></ion-icon></a>
                                         <div class="panning-dropdown closed">
@@ -360,9 +373,9 @@
         </template>
 
         <!-- Sound Files -->
-        <audio src="sound/ptt.wav" id="sound-ptt" autostart="false" autostart="0"></audio>
-        <audio src="sound/ptt_end.wav" id="sound-ptt-end" autostart="false" autostart="0"></audio>
-        <audio src="sound/click.wav" id="sound-click" autostart="false" autostart="0"></audio>
+        <audio src="sound/ptt.wav" id="sound-ptt" autostart="false" autostart="0" class="ui-audio"></audio>
+        <audio src="sound/ptt_end.wav" id="sound-ptt-end" autostart="false" autostart="0" class="ui-audio"></audio>
+        <audio src="sound/click.wav" id="sound-click" autostart="false" autostart="0" class="ui-audio"></audio>
 
         <!-- Icon Script -->
         <script type="module" src="ionicons/ionicons.esm.js"></script>

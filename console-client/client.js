@@ -30,11 +30,15 @@ var radios = [];
 var audio = {
     // Audio context
     context: null,
+    // DTMF generator
+    dtmf: null,
     // Input device, stream, meter, etc
     input: null,
     inputStream: null,
     inputTrack: null,
     inputAnalyzer: null,
+    inputDest: null,
+    inputMicGain: null,
     inputPcmData: null,
     inputMeter: document.getElementById("meter-mic"),
     // Output device, analyzer, and gain (for volume control and visualization)
@@ -51,6 +55,32 @@ var audio = {
     agcAttack: 0.0,
     agcRelease: 0.3,
     agcMakeup: 1.1,     // right now any makeup gain causes clipping
+}
+
+// DTMF array
+const dtmfFrequencies = {
+	"1": {f1: 697, f2: 1209},
+	"2": {f1: 697, f2: 1336},
+	"3": {f1: 697, f2: 1477},
+    "A": {f1: 697, f2: 1633},
+	"4": {f1: 770, f2: 1209},
+	"5": {f1: 770, f2: 1336},
+	"6": {f1: 770, f2: 1477},
+    "B": {f1: 770, f2: 1633},
+	"7": {f1: 852, f2: 1209},
+	"8": {f1: 852, f2: 1336},
+	"9": {f1: 852, f2: 1477},
+    "C": {f1: 852, f2: 1633},
+	"*": {f1: 941, f2: 1209},
+	"0": {f1: 941, f2: 1336},
+	"#": {f1: 941, f2: 1477},
+    "D": {f1: 941, f2: 1633}
+}
+
+const dtmfTiming = {
+    "initialDelay": 300,
+    "digitDuration": 250,
+    "digitDelay": 125
 }
 
 // WebRTC Variables
@@ -701,6 +731,54 @@ function toggleMute(event, obj) {
     }
 }
 
+function startDTMF(radioId, number, digitTime, delayTime) {
+    // Mute mic
+    audio.inputMicGain.gain.value = 0;
+    // Start PTT
+    startPtt();
+    // Dial (will wait for transmit active before dialing)
+    dialNumber(radioId, number, digitTime, delayTime);
+}
+
+/**
+ * Waits for PTT to be active and then dials the number
+ * @param {int} radioIdx index of the radio dialing (for re-enabling DTMF when done)
+ * @param {string} number number to dial
+ * @param {int} digitTime time to play each digit
+ * @param {int} delayTime time between each digit
+ * 
+ * @returns {int} the total duration of the dial event
+ */
+function dialNumber(radioId, number, digitTime, delayTime) {
+    // Wait until we're transmitting
+    if (radios[selectedRadioIdx].status.state != "Transmitting") {
+        console.debug("Waiting for radio to start transmitting");
+        setTimeout(() => {
+            dialNumber(radioId, number, digitTime, delayTime);
+        }, 50);
+    } else {
+        console.debug("Radio is now transmitting, dialing DTMF");
+        // initial delay before first tone is played
+        const startTime = dtmfTiming.initialDelay;
+        // Set a timeout for each digit
+        for (let i = 0; i < number.length; i++) {
+            const nextTime = startTime + ((digitTime + delayTime) * i);
+            console.debug(`Scheduling digit ${number[i]} for time ${nextTime}`);
+            sendDigit(number[i], digitTime, nextTime);
+        }
+        // Stop PTT after dialing
+        setTimeout(() => {
+            stopPtt();
+        }, startTime + ((digitTime + delayTime) * number.length));
+        // Re-enable mic and DTMF keypad a little later
+        setTimeout(()=> {
+            audio.inputMicGain.gain.value = 1;
+            enableDTMFKeypad(radioId, true);
+            clearDTMFDialpad(radioId);
+        }, startTime + ((digitTime + delayTime) * number.length) + rtcConf.txBaseLatency);
+    }
+}
+
 /***********************************************************************************
     Global UI Functions
 ***********************************************************************************/
@@ -1042,16 +1120,24 @@ function startWebRtc(idx) {
                 audio.inputStream = audio.context.createMediaStreamSource(stream);
                 audio.inputAnalyzer = audio.context.createAnalyser();
                 audio.inputPcmData = new Float32Array(audio.inputAnalyzer.fftSize);
-                audio.inputStream.connect(audio.inputAnalyzer);
-                // Get the first available track for the mic
-                audio.inputTrack = stream.getTracks()[0];
+                // Create a mic gain for muting the mic during DTMF, tones, etc
+                audio.inputMicGain = audio.context.createGain();
+                audio.inputMicGain.gain.value = 1;
+                // Create a MediaStreamDestination for sending to the WebRTC peer
+                audio.inputDest = audio.context.createMediaStreamDestination();
+                // Connect input mic stream to gain, and gain to destination and analyzer
+                audio.inputStream.connect(audio.inputMicGain);
+                audio.inputMicGain.connect(audio.inputDest);
+                audio.inputMicGain.connect(audio.inputAnalyzer);
+                // Get the first available track for the destination
+                audio.inputTrack = audio.inputDest.stream.getTracks()[0];
                 // Add a listener for when the mic track ends (happens occasionally, not sure why) and try to reconnect
                 audio.inputTrack.addEventListener("ended", (event) => {
                     console.error(`Mic track ended for radio ${idx}, attempting to reconnect`);
                     restartMicTrack(idx);
                 })
                 // Add the first available mic track to the peer connection
-                radios[idx].rtc.peer.addTrack(stream.getTracks()[0]);
+                radios[idx].rtc.peer.addTrack(audio.inputTrack);
                 // Create and send the WebRTC offer
                 return sendRtcOffer(idx);
             },
@@ -1081,11 +1167,12 @@ function restartMicTrack(idx) {
     }).then(function(stream) {
         // Reconnect mic to meters, etc
         audio.inputStream = audio.context.createMediaStreamSource(stream);
-        audio.inputStream.connect(audio.inputAnalyzer);
+        // Connect input mic stream to gain, and gain to destination and analyzer
+        audio.inputStream.connect(audio.inputMicGain);
         // Replace mic track in WebRTC connection
         const sender = radios[idx].rtc.peer.getSenders().find((s) => s.track.kind === audio.inputTrack.kind);
         console.debug("Found sender for mic track: ", sender);
-        audio.inputTrack = stream.getTracks()[0];
+        audio.inputTrack = audio.inputStream.getTracks()[0];
         console.debug("Replacing with mic track: ", audio.inputTrack);
         sender.replaceTrack(audio.inputTrack);
         return true;
@@ -1513,6 +1600,9 @@ function startAudioDevices() {
     audio.outputAnalyzer = audio.context.createAnalyser();
     audio.outputPcmData = new Float32Array(audio.outputAnalyzer.fftSize);
 
+    // Create DTMF tone generator
+    audio.dtmf = new DualTone(audio.context, 100, 200);
+
     // Create gain node for output volume and connect it to the default output device
     audio.outputGain = audio.context.createGain();
     audio.outputGain.gain.value = 0.75;
@@ -1567,6 +1657,11 @@ function changeVolume() {
     const newVol = Math.pow($("#console-volume").val() / 100, 2);
     // Set gain node to new value
     audio.outputGain.gain.value = newVol;
+    // Set volume of each ui html sound
+    const uiSounds = document.getElementsByClassName("ui-audio");
+    for (var i = 0; i < uiSounds.length; i++) {
+        uiSounds.item(i).volume = newVol;
+    }
 }
 
 /**
@@ -1650,7 +1745,7 @@ function updateMute() {
 }
 
 /**
- * Shows or hides the dropdown
+ * Shows or hides the pan dropdown
  * @param {event} event 
  * @param {object} obj 
  */
@@ -1664,8 +1759,26 @@ function showPanMenu(event, obj) {
     event.stopPropagation();
 }
 
-function closeAllPanMenus() {
+/**
+ * Shows or hides the dtmf dropdown
+ * @param {event} event 
+ * @param {object} obj 
+ */
+ function showDTMFMenu(event, obj) {
+    const radioCard = $(obj).closest(".radio-card");
+    if (radioCard.hasClass("disconnected")) {
+        console.debug("Radio disconnected, not showing dtmf menu");
+    } else {
+        $(obj).closest(".radio-card").find(".dtmf-dropdown").toggleClass("closed");
+        $(obj).closest(".radio-card").find(".dtmf-dialpad").toggleClass("closed");
+    }
+    event.stopPropagation();
+}
+
+function closeAllDropdownMenus() {
     $(".panning-dropdown").addClass("closed");
+    $(".dtmf-dropdown").addClass("closed");
+    $(".dtmf-dialpad").addClass("closed");
 }
 
 /**
@@ -1704,6 +1817,156 @@ function centerPan(event, obj) {
     console.debug(`Resetting pan for radio ${radios[idx]}`);
     // Set pan
     radios[idx].audioSrc.panNode.pan.setValueAtTime(0, audio.context.currentTime);
+}
+
+function dtmfPressed(event, obj) {
+    // Make sure it's a valid cell
+    const cell = event.target.closest('td');
+    if (!cell) {
+        console.log("No cell clicked");
+        return;
+    }
+    // Get dialpad object
+    const digitTable = obj.closest('.dtmf-table');
+    // Don't do anything if the table is disabled
+    if (digitTable.getAttribute('disabled')) {
+        console.log("DTMF keypad is disabled");
+        stopClick(event, obj);
+        return;
+    }
+    // Get the dtmf dialpad span
+    const dialpad = obj.closest('.icon-stack').querySelector('.dtmf-digits');
+    // Get digit number
+    const digit = cell.innerHTML;
+    // Get ID of the radio this dialpad is for
+    const radioId = obj.closest('.radio-card').id;
+    // Log
+    console.debug(`Clicked dtmf ${digit}`);
+    // Handle clear or call
+    if (digit.includes("call-sharp")) {
+        // Get number to dial
+        const digits = dialpad.innerHTML;
+        // Do nothing if no digits
+        if (digits.length < 1) {
+            return;
+        }
+        // Disable keypad
+        enableDTMFKeypad(radioId, false);
+        // switch focus to radio if it's not already
+        deselectRadios();
+        selectRadio(radioId);
+        // Dial
+        startDTMF(radioId, digits, dtmfTiming.digitDuration, dtmfTiming.digitDelay);
+    } else if (digit.includes("trash-sharp")) {
+        // Clear the dialpad
+        dialpad.innerHTML = "";
+    } else {
+        // Only add digits if we're under 10
+        console.debug("Adding digit to dialpad");
+        if (dialpad.innerHTML.length < 10) {
+            dialpad.innerHTML += digit;
+        }
+    }
+    stopClick(event, obj);
+}
+
+function enableDTMFKeypad(radioId, enabled) {
+    // Get elements
+    const radioCard = document.querySelector(`#${radioId}`);
+    const digitTable = radioCard.querySelector('.dtmf-table');
+    // Disable
+    if (enabled) {
+        console.debug("Re-enabling DTMF");
+        digitTable.removeAttribute('disabled');
+    } else {
+        console.debug("Disabling DTMF");
+        digitTable.setAttribute('disabled', true);
+    }
+}
+
+function clearDTMFDialpad(radioId) {
+    // Get elements
+    const radioCard = document.querySelector(`#${radioId}`);
+    const dialpad = radioCard.querySelector('.dtmf-digits');
+    dialpad.innerHTML = "";
+}
+
+/***********************************************************************************
+    DTMF Functions
+    Mostly lifted from the example here:
+    https://codepen.io/edball/pen/EVMaVN
+***********************************************************************************/
+
+/**
+ * Dual Tone Generator Class for DTMF
+ * @param {audioContext} context Audio context
+ * @param {int} freq1 frequency 1
+ * @param {int} freq2 frequency 2
+ */
+function DualTone(context, freq1, freq2) {
+    this.context = context;
+    this.status = 0;
+    this.freq1 = freq1;
+    this.freq2 = freq2;
+}
+
+DualTone.prototype.setup = function() {
+    // Create the audio nodes
+    this.osc1 = this.context.createOscillator();
+    this.osc2 = this.context.createOscillator();
+    this.gainNode = this.context.createGain();
+    this.filter = this.context.createBiquadFilter();
+    // Setup initial values
+    this.osc1.frequency.value = this.freq1;
+    this.osc2.frequency.value = this.freq2;
+    this.gainNode.gain.value = 0.25;
+    this.filter.type = 'lowpass';
+    this.filter.frequency = '4000';
+    // Connect everything
+    this.osc1.connect(this.gainNode);
+    this.osc2.connect(this.gainNode);
+    this.gainNode.connect(this.filter);
+    // Connect to both local speakers (for sidetone) and the mic destination/analyzer
+    this.filter.connect(audio.outputGain);
+    this.filter.connect(audio.inputAnalyzer);
+    this.filter.connect(audio.inputDest);
+}
+
+DualTone.prototype.start = function() {
+    this.setup();
+    this.osc1.start(0);
+    this.osc2.start(0);
+    this.status = 1;
+    this.gainNode.gain.value = 0.25;
+}
+
+DualTone.prototype.stop = function() {
+    this.osc1.stop(0);
+    this.osc2.stop(0);
+    this.status = 0;
+    this.gainNode.gain.value = 0;
+}
+
+/**
+ * Starts the DTMF generator for the specified digit and duration
+ * @param {char} digit digit to send (0-9, A-D, # or *)
+ * @param {int} duration duration to play digit in ms
+ * @param {int} delay time to start playing the tone
+ */
+function sendDigit(digit, duration, delay) {
+    const fPair = dtmfFrequencies[digit];
+    if (audio.dtmf.status == 0) {
+        setTimeout(() => {
+            console.debug(`Starting digit ${digit}: ${fPair.f1}, ${fPair.f2}`);
+            audio.dtmf.freq1 = fPair.f1;
+            audio.dtmf.freq2 = fPair.f2;
+            audio.dtmf.start();
+        }, delay)
+        setTimeout(() => {
+            console.debug(`Stopping digit ${digit}`);
+            audio.dtmf.stop();
+        }, duration + delay);
+    }
 }
 
 /***********************************************************************************
