@@ -19,7 +19,7 @@ class Radio():
                     "XCMP-XPR",         # eXtended Control and Management Protocol for the XPR series radios
                     "Motorola-O5",      # XTL O5
                     "Motorola-W9",      # XTL/Astro W9
-                    "Motorola-MCS3",    # MCS2000 model 3
+                    "Motorola-M3",    # MCS2000 model 3
                     "Soundcard-CM108",  # CM108 GPIO PTT
                     "Soundcard-VOX"]    # Radio-controlled VOX PTT
 
@@ -118,6 +118,8 @@ class Radio():
         # XPR XCMP Control
         elif self.ctrlMode == "XCMP-XPR":
             self.interface = XPR(self.name, self.ctrlPort, self.statusCallback, self.logger)
+        else:
+            raise Exception("Unknown control mode: {}".format(self.ctrlMode))
         
         # Connect to radio (optional reset)
         self.interface.connect(reset=reset)
