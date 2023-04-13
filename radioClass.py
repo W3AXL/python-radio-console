@@ -115,9 +115,13 @@ class Radio():
         # Motorola W9 head
         elif self.ctrlMode == "Motorola-W9":
             self.interface = Motorola(self.name, self.ctrlPort, 'W9', self.statusCallback, self.zoneLookup, self.chanLookup, self.logger, self.btnBinding, self.softkeyList)
+        # Motorola MCS2000 M3 head
+        elif self.ctrlMode == "Motorola-M3":
+            self.interface = Motorola(self.name, self.ctrlPort, "M3", self.statusCallback, self.zoneLookup, self.chanLookup, self.logger, self.btnBinding, self.softkeyList)
         # XPR XCMP Control
         elif self.ctrlMode == "XCMP-XPR":
             self.interface = XPR(self.name, self.ctrlPort, self.statusCallback, self.logger)
+        # Fallback error
         else:
             raise Exception("Unknown control mode: {}".format(self.ctrlMode))
         
