@@ -394,6 +394,7 @@ class Motorola:
             # Update status if needed
             if self.newStatus:
                 self.newStatus = False
+                self.logger.logVerbose("Sending new status update for radio {}".format(self.name))
                 self.updateStatus()
 
             # Check our pending delayed TX list
@@ -583,6 +584,10 @@ class Motorola:
                     self.display = newDisplay
                     #self.zoneText = ""
                     self.newStatus = True
+                    
+                    # By default, just use the full display string as the channel text
+                    self.chanText = self.display
+
                     # Convert to zone/channel text if applicable
                     if self.zoneLookup:
                         for key in self.zoneLookup:
@@ -645,27 +650,33 @@ class Motorola:
                 if srow == 0:
                     # Verify the text is new and not on the ignored list
                     if text != self.zoneText and not any(s in text for s in self.headObj.ignored_strings) and not text.isspace():
+                        # Clip anything beyond 14 characters (from a previous lookup)
+                        self.zoneText = self.zoneText[:14]
+                        # Apply the new text
                         self.zoneText = self.zoneText[:scol] + text + self.zoneText[scol + len(text):]
                         self.newStatus = True
                         self.logger.logVerbose("Got new zone text: {}".format(self.zoneText))
                         # Run lookup if applicable
                         if self.zoneLookup:
                             for key in self.zoneLookup:
-                                self.logger.logDebug("Checking if zone lookup key {} in new string {}".format(key, self.display))
-                                if key.casefold() in self.display.casefold():
+                                self.logger.logDebug("Checking if zone lookup key {} in new string {}".format(key, self.zoneText))
+                                if key.casefold() in self.zoneText.casefold():
                                     self.zoneText = self.zoneLookup[key]
                                     self.logger.logVerbose("Got new zone text from lookup: {} = {}".format(key,self.zoneText))
                 # Row 1 is channel text
                 elif srow == 1:
                     if text != self.chanText and not any(s in text for s in self.headObj.ignored_strings) and not text.isspace():
+                        # Clip anything beyond 14 characters (from a previous lookup)
+                        self.chanText = self.chanText[:14]
+                        # Apply the new text
                         self.chanText = self.chanText[:scol] + text + self.chanText[scol + len(text):]
                         self.newStatus = True
                         self.logger.logVerbose("Got new channel text: {}".format(self.chanText))
                         # Run lookup on text if applicable
                         if self.chanLookup:
                             for key in self.chanLookup:
-                                self.logger.logDebug("Checking if chan lookup key {} in new string {}".format(key, self.display))
-                                if key.casefold() in self.display.casefold():
+                                self.logger.logDebug("Checking if chan lookup key {} in new string {}".format(key, self.chanText))
+                                if key.casefold() in self.chanText.casefold():
                                     self.chanText = self.chanLookup[key]
                                     self.logger.logVerbose("Got new chan text from lookup: {} = {}".format(key,self.chanText))
  

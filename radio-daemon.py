@@ -383,6 +383,8 @@ def getRadioStatusJson():
     # Get the status of the specified radio
     status = config.Radio.encodeClientStatus()
 
+    logger.logDebug(status)
+
     return json.dumps(status)
     
 """-------------------------------------------------------------------------------
