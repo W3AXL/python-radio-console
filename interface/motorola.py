@@ -202,7 +202,7 @@ class Motorola:
             'scan': 0x04,
             'scan_pri': 0x05,
             'direct': 0x07,
-            'led_amber': 0x0f,
+            'led_amber': 0x0d,
             'led_red': 0xb,
             'ind_bot_1': 0x14,
             'ind_bot_2': 0x15,
@@ -279,6 +279,11 @@ class Motorola:
         # Create buffer for single line display if W9
         if self.head == 'W9':
             self.display = '            '
+
+        # Create two buffers for multiline display if M3
+        if self.head == 'M3':
+            self.topdisplay = '              '
+            self.botdisplay = '              '
 
         # Create arrays for button bindings and softkey list
         if self.head in ['W9','M3']:
@@ -592,7 +597,7 @@ class Motorola:
                     if self.zoneLookup:
                         for key in self.zoneLookup:
                             self.logger.logDebug("Checking if zone lookup key {} in new string {}".format(key, self.display))
-                            if key.casefold() in self.display.casefold():
+                            if key in self.display:
                                 self.zoneText = self.zoneLookup[key]
                                 self.logger.logVerbose("Got new zone text from lookup: {} = {}".format(key,self.zoneText))
                                 # Strip the matched zone string from the channel display
@@ -601,7 +606,7 @@ class Motorola:
                     if self.chanLookup:
                         for key in self.chanLookup:
                             self.logger.logDebug("Checking if chan lookup key {} in new string {}".format(key, self.display))
-                            if key.casefold() in self.display.casefold():
+                            if key in self.display:
                                 self.chanText = self.chanLookup[key]
                                 self.logger.logVerbose("Got new chan text from lookup: {} = {}".format(key,self.chanText))
             
@@ -619,7 +624,7 @@ class Motorola:
                         if self.zoneLookup:
                             for key in self.zoneLookup:
                                 self.logger.logDebug("Checking if zone lookup key {} in new string {}".format(key, self.display))
-                                if key.casefold() in self.display.casefold():
+                                if key in self.display:
                                     self.zoneText = self.zoneLookup[key]
                                     self.logger.logVerbose("Got new zone text from lookup: {} = {}".format(key,self.zoneText))
                 elif srow == self.O5.display_subdevs['text_channel']:
@@ -631,7 +636,7 @@ class Motorola:
                         if self.chanLookup:
                             for key in self.chanLookup:
                                 self.logger.logDebug("Checking if chan lookup key {} in new string {}".format(key, self.display))
-                                if key.casefold() in self.display.casefold():
+                                if key in self.display:
                                     self.chanText = self.chanLookup[key]
                                     self.logger.logVerbose("Got new chan text from lookup: {} = {}".format(key,self.chanText))
                 elif srow == self.O5.display_subdevs['text_softkeys']:
@@ -646,39 +651,44 @@ class Motorola:
             # MCS2000 M3 Head
             elif self.head == 'M3':
                 self.logger.logVerbose("Got M3 display update for srow/scol {}/{}".format(srow,scol))
+
                 # Row 0 is zone text
                 if srow == 0:
-                    # Verify the text is new and not on the ignored list
-                    if text != self.zoneText and not any(s in text for s in self.headObj.ignored_strings) and not text.isspace():
-                        # Clip anything beyond 14 characters (from a previous lookup)
-                        self.zoneText = self.zoneText[:14]
-                        # Apply the new text
-                        self.zoneText = self.zoneText[:scol] + text + self.zoneText[scol + len(text):]
-                        self.newStatus = True
+                    # Update the zone text buffer
+                    self.topdisplay = self.topdisplay[:scol] + text + self.topdisplay[scol + len(text):]
+                    pendingText = self.topdisplay
+                    # Verify against ignored strings
+                    if not any(s in pendingText for s in self.headObj.ignored_strings) and not pendingText.isspace():
+                        # Set the new zone text and flag an update
+                        self.zoneText = pendingText
                         self.logger.logVerbose("Got new zone text: {}".format(self.zoneText))
-                        # Run lookup if applicable
+                        self.newStatus = True
+                        # Run a text lookup
                         if self.zoneLookup:
                             for key in self.zoneLookup:
-                                self.logger.logDebug("Checking if zone lookup key {} in new string {}".format(key, self.zoneText))
-                                if key.casefold() in self.zoneText.casefold():
+                                self.logger.logDebug("Checking if zone lookup key {} in new string {}".format(key, pendingText))
+                                if key in pendingText:
                                     self.zoneText = self.zoneLookup[key]
-                                    self.logger.logVerbose("Got new zone text from lookup: {} = {}".format(key,self.zoneText))
+                                    self.logger.logVerbose("Got new zone text from lookup: {} = {}".format(key,pendingText))
+                
                 # Row 1 is channel text
                 elif srow == 1:
-                    if text != self.chanText and not any(s in text for s in self.headObj.ignored_strings) and not text.isspace():
-                        # Clip anything beyond 14 characters (from a previous lookup)
-                        self.chanText = self.chanText[:14]
-                        # Apply the new text
-                        self.chanText = self.chanText[:scol] + text + self.chanText[scol + len(text):]
-                        self.newStatus = True
+                    # Update the chan text buffer
+                    self.botdisplay = self.botdisplay[:scol] + text + self.botdisplay[scol + len(text):]
+                    pendingText = self.botdisplay
+                    # Verify against ignored strings
+                    if not any(s in pendingText for s in self.headObj.ignored_strings) and not pendingText.isspace():
+                        # Set the new zone text and flag an update
+                        self.chanText = pendingText
                         self.logger.logVerbose("Got new channel text: {}".format(self.chanText))
-                        # Run lookup on text if applicable
+                        self.newStatus = True
+                        # Run a text lookup
                         if self.chanLookup:
                             for key in self.chanLookup:
-                                self.logger.logDebug("Checking if chan lookup key {} in new string {}".format(key, self.chanText))
-                                if key.casefold() in self.chanText.casefold():
+                                self.logger.logDebug("Checking if channel lookup key {} in new string {}".format(key, pendingText))
+                                if key in pendingText:
                                     self.chanText = self.chanLookup[key]
-                                    self.logger.logVerbose("Got new chan text from lookup: {} = {}".format(key,self.chanText))
+                                    self.logger.logVerbose("Got new channel text from lookup: {} = {}".format(key,pendingText))
  
         elif opcode == 0x2:
             # RF Hardware Test
@@ -764,6 +774,19 @@ class Motorola:
                             self.direct = False
                         self.updateSoftkeys()
                         self.newStatus = True
+
+                    elif name == 'led_amber':
+                        self.logger.logVerbose("Got new amber LED state: {}".format(state))
+                        if state == "on":
+                            if self.state != RadioState.Receiving:
+                                self.logger.logInfo("Radio now receiving, source: RX LED")
+                                self.state = RadioState.Receiving
+                                self.newStatus = True
+                        elif state == "off":
+                            if self.state != RadioState.Idle and self.state != RadioState.Transmitting:
+                                self.logger.logInfo("Radio no longer receiving, source: RX LED")
+                                self.state = RadioState.Idle
+                                self.newStatus = True
 
                 # if we're an M3/W9 and it's a top or bottom-row indicator, map it to the right softkey
                 if (self.head == 'W9' and 'ind_top_' in name) or (self.head == 'M3' and 'ind_bot_' in name):
