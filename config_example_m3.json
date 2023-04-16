@@ -1,28 +1,23 @@
 {
     "Radio":
     {
-        "name": "Testbed W9",
-        "desc": "S-Split XTL5000",
-        "ctrlMode": "Motorola-W9",
+        "name": "Example MCS2000 M3 Head",
+        "desc": "K-Split MCS2000",
+        "ctrlMode": "Motorola-M3",
         "ctrlPort": "/dev/ttyUSB0",
         "txDev": "plughw:CARD=Set,DEV=0",
         "rxDev": "plughw:CARD=Set,DEV=0",
-        "chanLookup":
-        {
-            "YB 70SPX": "W9YB 70cm Simplex"
-        },
-        "zoneLookup":
-        {
-            "Z1": "Zone 1: Testing"
-        },
         "btnBinding":
         {
-            "btn_top_1": "MON",
-            "btn_top_2": "",
-            "btn_top_3": "SCAN",
-            "btn_top_4": "PWR",
-            "btn_top_5": "DIR",
-            "btn_top_6": "",
+            "btn_left_top": "ZONE",
+            "btn_left_mid": "HOME",
+            "btn_left_bot": "NUIS",
+            "btn_bot_1": "DIR",
+            "btn_bot_2": "MON",
+            "btn_bot_3": "PWR",
+            "btn_bot_4": "SCAN",
+            "btn_bot_5": "CALL",
+            "btn_bot_6": "PAGE",
             "btn_kp_1": "",
             "btn_kp_2": "",
             "btn_kp_3": "",
@@ -30,13 +25,12 @@
             "btn_kp_5": "",
             "btn_kp_6": "",
             "btn_kp_7": "",
-            "btn_kp_8": "",
-            "btn_kp_9": "",
-            "btn_kp_*": "RCL",
-            "btn_kp_0": "",
-            "btn_kp_#": "NUIS",
-            "btn_home": "HOME",
-            "btn_sel": "SEL"
+            "btn_kp_8": "PHON",
+            "btn_kp_9": "RCL",
+            "btn_kp_a": "chan_up",
+            "btn_kp_b": "chan_dn",
+            "btn_kp_c": "SEL",
+            "btn_kp_d": "MENU"
         },
         "softkeyList": [
             "MON",
@@ -44,6 +38,8 @@
             "PWR",
             "SCAN",
             "DIR",
+            "HOME",
+            "ZONE",
             "CALL",
             "PAGE",
             "PHON",

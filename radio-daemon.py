@@ -7,8 +7,8 @@ import glob
 import os
 import argparse
 import platform
-import threading
 import time
+from datetime import datetime
 #import time
 import json
 #import queue
@@ -22,8 +22,6 @@ import websockets.exceptions
 import asyncio
 
 # HTTP server stuff
-#import socketserver
-import http.server
 import ssl
 
 # WebRTC Stuff
@@ -384,6 +382,8 @@ def getRadioStatusJson():
     
     # Get the status of the specified radio
     status = config.Radio.encodeClientStatus()
+
+    logger.logDebug(status)
 
     return json.dumps(status)
     
@@ -915,22 +915,23 @@ if __name__ == "__main__":
         parseArguments()
 
         # Start CPU profiling
-        #yappi.set_clock_type('cpu')
-        #yappi.start(builtins=True)
+        #if cpuProfiling:
+        #    yappi.set_clock_type('cpu')
+        #    yappi.start(builtins=True)
 
         # Start Memory Profiling
-        if memProfiling:
-            logger.logInfo("Memory profiling enabled")
-            tracemalloc.start(10)
+        #if memProfiling:
+        #    logger.logInfo("Memory profiling enabled")
+        #    tracemalloc.start(10)
             # Start tracking with muppy
             #logger.logInfo("Starting memory summary thread")
             #sumThread = threading.Thread(target=getSummary)
             #sumThread.start()
 
         # Start Garbage Collector Debug
-        if gcProfiling:
-            logger.logInfo("Garbage collector profiling enabled")
-            gc.set_debug(gc.DEBUG_LEAK)
+        #if gcProfiling:
+        #    logger.logInfo("Garbage collector profiling enabled")
+        #    gc.set_debug(gc.DEBUG_LEAK)
 
         # Get sound devices
         getSoundDevices()
@@ -952,9 +953,10 @@ if __name__ == "__main__":
         logger.logWarn("Caught KeyboardInterrupt, shutting down")
 
         # Stop profiling
-        #stats = yappi.get_func_stats()
-        #timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
-        #stats.save("callgrind_{}.out".format(timestamp), type='callgrind')
+        if cpuProfiling:
+            stats = yappi.get_func_stats()
+            timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+            stats.save("callgrind_{}.out".format(timestamp), type='callgrind')
 
         # Stop memory profiling
         if memProfiling:

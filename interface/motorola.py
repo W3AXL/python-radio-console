@@ -160,6 +160,64 @@ class Motorola:
             'ind_xmit': 0x10
         }
 
+    class M3:
+        """
+        SB9600/SBEP addresses for MCS2000 M3 control head
+        """
+
+        # Button hex codes
+        button_map = {
+            'ptt': 0x01,
+            'knob_vol': 0x02,
+            'btn_left_top': 0x60,
+            'btn_left_mid': 0x61,
+            'btn_left_bot': 0x62,
+            'btn_bot_1': 0x63,
+            'btn_bot_2': 0x64,
+            'btn_bot_3': 0x65,
+            'btn_bot_4': 0x66,
+            'btn_bot_5': 0x67,
+            'btn_bot_6': 0x68,
+            'btn_kp_1': 0x31,
+            'btn_kp_2': 0x32,
+            'btn_kp_3': 0x33,
+            'btn_kp_4': 0x34,
+            'btn_kp_5': 0x35,
+            'btn_kp_6': 0x36,
+            'btn_kp_7': 0x37,
+            'btn_kp_8': 0x38,
+            'btn_kp_9': 0x39,
+            'btn_kp_*': 0x3a,
+            'btn_kp_0': 0x30,
+            'btn_kp_#': 0x3b,
+            'btn_kp_a': 0x69,
+            'btn_kp_b': 0x6a,
+            'btn_kp_c': 0x6b,
+            'btn_kp_d': 0x6d
+        }
+
+        # Indicator hex codes
+        indicator_map = {
+            'monitor': 0x01,
+            'scan': 0x04,
+            'scan_pri': 0x05,
+            'direct': 0x07,
+            'led_amber': 0x0d,
+            'led_red': 0xb,
+            'ind_bot_1': 0x14,
+            'ind_bot_2': 0x15,
+            'ind_bot_3': 0x16,
+            'ind_bot_4': 0x17,
+            'ind_bot_5': 0x18,
+            'ind_bot_6': 0x19
+        }
+
+        # Strings to ignore when parsing channel text
+        ignored_strings = [
+            "SELF TEST",
+            "LAST RCVD/XMIT"
+        ]
+
     # General state values shared between all head types
     class States:
 
@@ -185,6 +243,16 @@ class Motorola:
         self.inSBEP = False
         self.logger = logger
         self.headType = head
+
+        # Get head object
+        if self.head == "O5":
+            self.headObj = self.O5
+        elif self.head == "W9":
+            self.headObj = self.W9
+        elif self.head == "M3":
+            self.headObj = self.M3
+        else:
+            raise ValueError("Invalid head specified: {}".format(self.head))
 
         # lookup tables for extended zone/channel text mapping
         self.zoneLookup = zoneLookup
@@ -212,18 +280,25 @@ class Motorola:
         if self.head == 'W9':
             self.display = '            '
 
+        # Create two buffers for multiline display if M3
+        if self.head == 'M3':
+            self.topdisplay = '              '
+            self.botdisplay = '              '
+
         # Create arrays for button bindings and softkey list
-        if self.head == 'W9':
+        if self.head in ['W9','M3']:
             if not btnBinding or not softkeyList:
-                raise ValueError("You must specify a btnBinding and softkeyList for a W9 head!")
+                raise ValueError("You must specify a btnBinding and softkeyList for a W9/M3 head!")
             else:
                 self.btnBinding = btnBinding
                 self.softkeyList = softkeyList
                 # These are used to change softkeys on radios without a true softkey system
                 self.softkeyPage = 0
-                self.maxKeyPage = math.floor(len(self.softkeyList) / 6)
+                self.maxKeyPage = math.floor((len(self.softkeyList) - 1) / 6)   # we have to subtract 1 because even multiples of 6 will result in an extra blank page
                 # Used to track softkey states when not on the same page
                 self.indicatorStates = [False, False, False, False, False, False]
+
+        # Pull in button
 
         # SB9600 retry counter (if sending a message fails)
         self.retries = 1
@@ -269,8 +344,8 @@ class Motorola:
         if reset:
             self.bus.sb9600_reset()
 
-        # If we're a W9, update the softkeys with the first five in the list
-        if self.head == 'W9':
+        # If we're a W9 or M3, update the softkeys with the first five in the list
+        if self.head in ['W9', 'M3']:
             self.softkeys = self.softkeyList[0:6]
 
         # Update radio state
@@ -324,6 +399,7 @@ class Motorola:
             # Update status if needed
             if self.newStatus:
                 self.newStatus = False
+                self.logger.logVerbose("Sending new status update for radio {}".format(self.name))
                 self.updateStatus()
 
             # Check our pending delayed TX list
@@ -375,9 +451,11 @@ class Motorola:
             # Check if SBEP decode worked
             if processed < 0:
                 self.logger.logError("Failed to process SBEP message!")
-            # See if we had any remaining SB9600 messages afterwards
+
+            # Clear the bytes we read from the buffer if there's more
             if len(msg) > processed:
                 msg = msg[processed:]
+                # Process remaining
                 self.logger.logDebug("Processing remaining SB9600 data: {}".format(hexlify(msg, " ")))
                 self.process(msg)
 
@@ -406,13 +484,17 @@ class Motorola:
             msg (byte[]): message array of bytes
         """
 
+        self.logger.logDebug("Incoming SBEP message: {}".format(hexlify(msg, ' ')))
+
         totalBytes = 0
-        origLength = len(msg)
+        origMsg = msg
 
         # Ignore the SBEP ack at the beginning of the byte string (if present)
         if msg[0] == 0x50:
             msg = msg[1:]
             totalBytes += 1
+            self.logger.logDebug("Ignoring starting 0x50 SBEP ACK")
+            self.logger.logDebug("New SBEP message buffer: {}".format(hexlify(msg, ' ')))
 
         # The following processing algorithm comes from Appendix I.5 of the SB9600 manual
 
@@ -471,11 +553,12 @@ class Motorola:
             return -1
 
         # Used to feed back to processing routine if there was more than one message in a block of bytes
-        totalBytes = dataStart + length
+        totalBytes += (dataStart + length)
 
-        # Ignore the last byte if it's outside our message and is the 0x50 ACK byte (basically makes sure we're not accidentally missing anything)
-        if totalBytes < origLength and msg[-1] == 0x50:
+        # Check if the next byte after our message is 0x50 and ignore it (add 1 to total length) since it's the SBEP ack byte
+        if (len(origMsg) > totalBytes) and (origMsg[totalBytes] == 0x50):
             totalBytes += 1
+            self.logger.logDebug("Detected trailing SBEP ACK, final bytes read: {}".format(totalBytes))
 
         self.logger.logDebug("Read {} bytes".format(totalBytes))
 
@@ -506,11 +589,15 @@ class Motorola:
                     self.display = newDisplay
                     #self.zoneText = ""
                     self.newStatus = True
+                    
+                    # By default, just use the full display string as the channel text
+                    self.chanText = self.display
+
                     # Convert to zone/channel text if applicable
                     if self.zoneLookup:
                         for key in self.zoneLookup:
                             self.logger.logDebug("Checking if zone lookup key {} in new string {}".format(key, self.display))
-                            if key.casefold() in self.display.casefold():
+                            if key in self.display:
                                 self.zoneText = self.zoneLookup[key]
                                 self.logger.logVerbose("Got new zone text from lookup: {} = {}".format(key,self.zoneText))
                                 # Strip the matched zone string from the channel display
@@ -519,17 +606,17 @@ class Motorola:
                     if self.chanLookup:
                         for key in self.chanLookup:
                             self.logger.logDebug("Checking if chan lookup key {} in new string {}".format(key, self.display))
-                            if key.casefold() in self.display.casefold():
+                            if key in self.display:
                                 self.chanText = self.chanLookup[key]
                                 self.logger.logVerbose("Got new chan text from lookup: {} = {}".format(key,self.chanText))
-                return totalBytes
-
+            
+            # XTL O5 Control Head
             elif self.head == 'O5':
                 self.logger.logVerbose("Got O5 display update for srow/scol {}/{}".format(srow,scol))
                 # Handle based on display subdevice
                 if srow == self.O5.display_subdevs['text_zone']:
                     # Ignore zone text if it's the same as current, if it's in the ignored strings list, or if it's whitespace only
-                    if text != self.zoneText and not any(s in text for s in self.O5.ignored_strings) and not text.isspace():
+                    if text != self.zoneText and not any(s in text for s in self.headObj.ignored_strings) and not text.isspace():
                         self.zoneText = text
                         self.newStatus = True
                         self.logger.logVerbose("Got new zone text: {}".format(text))
@@ -537,12 +624,11 @@ class Motorola:
                         if self.zoneLookup:
                             for key in self.zoneLookup:
                                 self.logger.logDebug("Checking if zone lookup key {} in new string {}".format(key, self.display))
-                                if key.casefold() in self.display.casefold():
+                                if key in self.display:
                                     self.zoneText = self.zoneLookup[key]
                                     self.logger.logVerbose("Got new zone text from lookup: {} = {}".format(key,self.zoneText))
-                    return totalBytes
                 elif srow == self.O5.display_subdevs['text_channel']:
-                    if text != self.chanText and not any(s in text for s in self.O5.ignored_strings):
+                    if text != self.chanText and not any(s in text for s in self.headObj.ignored_strings):
                         self.chanText = text
                         self.newStatus = True
                         self.logger.logVerbose("Got new channel text: {}".format(text))
@@ -550,10 +636,9 @@ class Motorola:
                         if self.chanLookup:
                             for key in self.chanLookup:
                                 self.logger.logDebug("Checking if chan lookup key {} in new string {}".format(key, self.display))
-                                if key.casefold() in self.display.casefold():
+                                if key in self.display:
                                     self.chanText = self.chanLookup[key]
                                     self.logger.logVerbose("Got new chan text from lookup: {} = {}".format(key,self.chanText))
-                    return totalBytes
                 elif srow == self.O5.display_subdevs['text_softkeys']:
                     # Get five softkey texts
                     self.softkeys = text.split('^')[1:6]
@@ -562,7 +647,49 @@ class Motorola:
                     self.updateSoftkeys()
                     self.newStatus = True
                     self.logger.logVerbose("Got new softkeys: {}".format(self.softkeys))
-                    return totalBytes
+
+            # MCS2000 M3 Head
+            elif self.head == 'M3':
+                self.logger.logVerbose("Got M3 display update for srow/scol {}/{}".format(srow,scol))
+
+                # Row 0 is zone text
+                if srow == 0:
+                    # Update the zone text buffer
+                    self.topdisplay = self.topdisplay[:scol] + text + self.topdisplay[scol + len(text):]
+                    pendingText = self.topdisplay
+                    # Verify against ignored strings
+                    if not any(s in pendingText for s in self.headObj.ignored_strings) and not pendingText.isspace():
+                        # Set the new zone text and flag an update
+                        self.zoneText = pendingText
+                        self.logger.logVerbose("Got new zone text: {}".format(self.zoneText))
+                        self.newStatus = True
+                        # Run a text lookup
+                        if self.zoneLookup:
+                            for key in self.zoneLookup:
+                                self.logger.logDebug("Checking if zone lookup key {} in new string {}".format(key, pendingText))
+                                if key in pendingText:
+                                    self.zoneText = self.zoneLookup[key]
+                                    self.logger.logVerbose("Got new zone text from lookup: {} = {}".format(key,pendingText))
+                
+                # Row 1 is channel text
+                elif srow == 1:
+                    # Update the chan text buffer
+                    self.botdisplay = self.botdisplay[:scol] + text + self.botdisplay[scol + len(text):]
+                    pendingText = self.botdisplay
+                    # Verify against ignored strings
+                    if not any(s in pendingText for s in self.headObj.ignored_strings) and not pendingText.isspace():
+                        # Set the new zone text and flag an update
+                        self.chanText = pendingText
+                        self.logger.logVerbose("Got new channel text: {}".format(self.chanText))
+                        self.newStatus = True
+                        # Run a text lookup
+                        if self.chanLookup:
+                            for key in self.chanLookup:
+                                self.logger.logDebug("Checking if channel lookup key {} in new string {}".format(key, pendingText))
+                                if key in pendingText:
+                                    self.chanText = self.chanLookup[key]
+                                    self.logger.logVerbose("Got new channel text from lookup: {} = {}".format(key,pendingText))
+ 
         elif opcode == 0x2:
             # RF Hardware Test
             self.logger.logDebug("SBEP RF Hardware Test")
@@ -591,8 +718,8 @@ class Motorola:
                 state = self.getIndicatorState(states[i])
                 self.logger.logVerbose("Indicator {} state {}".format(name,state))
 
-                # If we're an O5, update the statuses based on the indicator states
-                if self.head == "O5":
+                # If we're an O5 or M3, update the statuses based on the indicator states
+                if self.head in ["M3", "O5"]:
                     # Scan Icon
                     if name == "scan":
                         self.logger.logVerbose("Got new scanning state: {}".format(state))
@@ -648,22 +775,49 @@ class Motorola:
                         self.updateSoftkeys()
                         self.newStatus = True
 
-                # if we're a W9 and it's a top-row indicator, map it to the right softkey
-                if self.head == 'W9' and 'ind_top_' in name:
+                    elif name == 'led_amber':
+                        self.logger.logVerbose("Got new amber LED state: {}".format(state))
+                        if state == "on":
+                            if self.state != RadioState.Receiving:
+                                self.logger.logInfo("Radio now receiving, source: RX LED")
+                                self.state = RadioState.Receiving
+                                self.newStatus = True
+                        elif state == "off":
+                            if self.state != RadioState.Idle and self.state != RadioState.Transmitting:
+                                self.logger.logInfo("Radio no longer receiving, source: RX LED")
+                                self.state = RadioState.Idle
+                                self.newStatus = True
+
+                # if we're an M3/W9 and it's a top or bottom-row indicator, map it to the right softkey
+                if (self.head == 'W9' and 'ind_top_' in name) or (self.head == 'M3' and 'ind_bot_' in name):
                     indIdx = int(name[-1])-1
                     if state == "on":
                         self.indicatorStates[indIdx] = True
                     elif state == "off":
                         self.indicatorStates[indIdx] = False
-                    # If it's specifically bound to the scan button, update scanning status
-                    if self.btnBinding["btn_top_{}".format(indIdx+1)] == "SCAN":
-                        if state == "on":
-                            self.scanning = True
-                        elif state == "off":
-                            self.scanning = False
+                    # If it's specifically bound to the scan button, update scanning status (M3 gets it from the scan icon on the display)
+                    if self.head == "W9":
+                        if self.btnBinding["btn_top_{}".format(indIdx+1)] == "SCAN":
+                            if state == "on":
+                                self.scanning = True
+                            elif state == "off":
+                                self.scanning = False
+                    # If it's specifically bound to low power, update low power status
+                    if self.head == "W9":
+                        if self.btnBinding["btn_top_{}".format(indIdx+1)] == "PWR":
+                            if state == "on":
+                                self.lowpower = True
+                            elif state == "off":
+                                self.lowpower = False
+                    elif self.head == "M3":
+                        if self.btnBinding["btn_bot_{}".format(indIdx+1)] == "PWR":
+                            if state == "on":
+                                self.lowpower = True
+                            elif state == "off":
+                                self.lowpower = False
+                    
                     self.updateSoftkeys()
                     self.newStatus = True
-
                     
         
         # Fallback
@@ -816,6 +970,17 @@ class Motorola:
             # Radio Keyed (RADKEY) opcode
             elif opcode == 0x19:
                 self.logger.logDebug("Got Radio Keyed (RADKEY) opcode")
+                if data[1] == 0x01:
+                    if self.state != RadioState.Transmitting:
+                        self.logger.logInfo("Radio now transmitting")
+                        self.state = RadioState.Transmitting
+                        self.newStatus = True
+                else:
+                    # Change to idle as long as we're not receiving
+                    if (self.state != RadioState.Receiving) and (self.state != RadioState.Idle):
+                        self.logger.logInfo("Radio now idle")
+                        self.state = RadioState.Idle
+                        self.newStatus = True
                 return
 
             # RX audio routing
@@ -914,11 +1079,15 @@ class Motorola:
                 self.sendButton(self.O5.button_map['ptt'], 0x01)
             elif self.head == "W9":
                 self.sendButton(self.W9.button_map['ptt'], 0x01)
+            elif self.head == "M3":
+                self.sendButton(self.M3.button_map['ptt'], 0x01)
         else:
             if self.head == "O5":
                 self.sendButton(self.O5.button_map['ptt'], 0x00)
             elif self.head == "W9":
                 self.sendButton(self.W9.button_map['ptt'], 0x00)
+            elif self.head == "M3":
+                self.sendButton(self.M3.button_map['ptt'], 0x00)
 
     def changeChannel(self, down):
         """
@@ -932,11 +1101,21 @@ class Motorola:
                 self.sendButton(self.O5.button_map['knob_chan'], 0xFF)
             elif self.head == 'W9':
                 self.pressButton(self.W9.button_map['mode_down'])
+            elif self.head == 'M3':
+                if self.getBtnBinding('chan_dn'):
+                    self.pressButton(self.M3.button_map[self.getBtnBinding('chan_dn')])
+                else:
+                    self.logger.logError("Button binding missing 'chan_dn' mapping, cannot decrement channel")
         else:
             if self.head == 'O5':
                 self.sendButton(self.O5.button_map['knob_chan'], 0x01)
             elif self.head == 'W9':
                 self.pressButton(self.W9.button_map['mode_up'])
+            elif self.head == 'M3':
+                if self.getBtnBinding('chan_up'):
+                    self.pressButton(self.M3.button_map[self.getBtnBinding('chan_up')])
+                else:
+                    self.logger.logError("Button binding missing 'chan_up' mapping, cannot decrement channel")
 
     def toggleSoftkey(self, idx):
         """
@@ -955,11 +1134,20 @@ class Motorola:
             else:
                 self.pressButton(self.O5.button_map["btn_key_{}".format(idx)])
         # W9 is more involved, we have to search the button mapping for the right key to press
-        elif self.head == 'W9':
+        elif self.head in ['W9', 'M3']:
             softkey = self.softkeys[idx-1]
             for key, value in self.btnBinding.items():
                 if value == softkey:
-                    self.pressButton(self.W9.button_map[key])
+                    self.pressButton(self.headObj.button_map[key])
+
+    def getBtnBinding(self, binding):
+        """
+        Gets the control head button name from the binding name
+        """
+        for key, value in self.btnBinding.items():
+            if value == binding:
+                return key
+        return False
 
     def leftArrow(self):
         """
@@ -967,7 +1155,7 @@ class Motorola:
         """
         if self.head == 'O5':
             self.pressButton(self.O5.button_map["btn_dp_lf"])
-        elif self.head == 'W9':
+        elif self.head in ['W9', 'M3']:
             if self.softkeyPage == 0:
                 self.softkeyPage = self.maxKeyPage
             else:
@@ -980,7 +1168,7 @@ class Motorola:
         """
         if self.head == 'O5':
             self.pressButton(self.O5.button_map["btn_dp_lf"])
-        elif self.head == 'W9':
+        elif self.head in ['W9', 'M3']:
             if self.softkeyPage == self.maxKeyPage:
                 self.softkeyPage = 0
             else:
@@ -1052,7 +1240,7 @@ class Motorola:
             idx = self.findSoftkey("PWR ")
             if idx != None:
                 self.softkeyStates[idx] = self.lowpower
-        # W9/M3 maps based on the btnMapping
+        # W9 based on the btnMapping
         elif self.head == 'W9':
             # iterate through the 6 top indicators
             for i in range(6):
@@ -1064,23 +1252,44 @@ class Motorola:
                     self.softkeyStates[idx] = self.indicatorStates[i]
                 else:
                     self.logger.logDebug("No softkey found for button mapping {}".format(btnBind))
+        # M3 does the same thing but with buttom buttons
+        elif self.head == 'M3':
+            # iterate through the 6 top indicators
+            for i in range(6):
+                btnName = "btn_bot_{}".format(i+1)
+                btnBind = self.btnBinding[btnName]
+                idx = self.findSoftkey(btnBind)
+                if idx != None:
+                    self.logger.logDebug("Indicator/bottom button {} is bound to softkey {} at index {}".format(i, btnBind, idx))
+                    self.softkeyStates[idx] = self.indicatorStates[i]
+                else:
+                    self.logger.logDebug("No softkey found for button mapping {}".format(btnBind))
+            # Check if any of the standard names are in our button bindings as well
+            # Scan
+            idx = self.findSoftkey("SCAN")
+            if idx != None:
+                self.softkeyStates[idx] = self.scanning
+            # Mon
+            idx = self.findSoftkey("MON")
+            if idx != None:
+                self.softkeyStates[idx] = self.monitor
+            # Dir
+            idx = self.findSoftkey("DIR")
+            if idx != None:
+                self.softkeyStates[idx] = self.direct
+            # Pwr
+            idx = self.findSoftkey("PWR")
+            if idx != None:
+                self.softkeyStates[idx] = self.lowpower
     
     def getIndicator(self, code):
         """
         Lookup indicator code
         """
-        if self.headType == 'O5':
-            for key, value in self.O5.indicator_map.items():
-                if code == value:
-                    return key
-            return "{} (Unknown)".format(hex(code))
-        elif self.headType == 'W9':
-            for key, value in self.W9.indicator_map.items():
-                if code == value:
-                    return key
-            return "{} (Unknown)".format(hex(code))
-        else:
-            raise ValueError("Invalid head specified")
+        for key, value in self.headObj.indicator_map.items():
+            if code == value:
+                return key
+        return "{} (Unknown)".format(hex(code))
 
     def getIndicatorState(self, code):
         for key, value in self.States.indicator_states.items():
@@ -1100,18 +1309,10 @@ class Motorola:
         Returns:
             string: button name
         """
-        if self.headType == 'O5':
-            for key, value in self.O5.button_map.items():
-                if code == value:
-                    return key
-            return "{} (Unknown)".format(hex(code))
-        elif self.headType == 'W9':
-            for key, value in self.W9.button_map.items():
-                if code == value:
-                    return key
-            return "{} (Unknown)".format(hex(code))
-        else:
-            raise ValueError("Invalid head specified")
+        for key, value in self.headObj.button_map.items():
+            if code == value:
+                return key
+        return "{} (Unknown)".format(hex(code))
 
     def sendButton(self, code, value):
         """
@@ -1194,13 +1395,10 @@ class Motorola:
         Returns:
             string: subdevice name
         """
-        if self.headType == 'O5':
-            for key, value in self.O5.display_subdevs.items():
-                if code == value:
-                    return key
-            return "{} (Unknown)".format(hex(code))
-        else:
-            raise ValueError("Invalid head specified")
+        for key, value in self.headObj.display_subdevs.items():
+            if code == value:
+                return key
+        return "{} (Unknown)".format(hex(code))
 
     def getDisplayIcon(self, code):
         """Lookup display icon by hex code
@@ -1214,20 +1412,7 @@ class Motorola:
         Returns:
             string: icon name
         """
-        if self.headType == 'O5':
-            for key, value in self.O5.display_icons.items():
-                if code == value:
-                    return key
-            return "{} (Unknown)".format(hex(code))
-        else:
-            raise ValueError("Invalid head specified")
-
-    def printMsg(self, source, msg):
-        """Debug message printing
-
-        Args:
-            source (string): Message source
-            msg (string): message
-        """
-
-        self.logger.logInfo("{: >10} >>: {}".format(source, msg))
+        for key, value in self.headObj.display_icons.items():
+            if code == value:
+                return key
+        return "{} (Unknown)".format(hex(code))
