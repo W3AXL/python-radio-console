@@ -30,6 +30,8 @@ var radios = [];
 var audio = {
     // Audio context
     context: null,
+    // Flag for whether we've done initial setup
+    running: false,
     // DTMF generator
     dtmf: null,
     // Input device, stream, meter, etc
@@ -55,6 +57,8 @@ var audio = {
     agcAttack: 0.0,
     agcRelease: 0.3,
     agcMakeup: 1.1,     // right now any makeup gain causes clipping
+    // TX/RX audio filter cutoff (hz)
+    filterCutoff: 4000,
 }
 
 // DTMF array
@@ -1097,63 +1101,76 @@ function startWebRtc(idx) {
         navigator.getUserMedia = navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia || navigator.msGetUserMedia;
     }*/
 
-    // Open the microphone
-    if (navigator.getUserMedia) {
-        // Get the microphone
+    // Only do all this initial setup if we haven't yet (we only need to set up all the tracks, etc once per session)
+    if (!audio.running) {
+        console.log("Running initial microphone and audio routing setup");
+        // Open the microphone
+        if (navigator.getUserMedia) {
+            // Get the microphone
 
-        // Old, deprecated way
-        //navigator.getUserMedia({audio:true},
+            // Old, deprecated way
+            //navigator.getUserMedia({audio:true},
 
-        // New, better (?) way
-        navigator.mediaDevices.getUserMedia({
-            audio: {
-                latency: 0.02,
-                echoCancellation: false,
-                autoGainControl: false,
-                mozNoiseSuppression: false,
-                mozAutoGainControl: false
-            }
-        }).then(
-            // Add tracks to peer connection and negotiate if successful
-            function(stream) {
-                // Set up mic meter dependecies
-                audio.inputStream = audio.context.createMediaStreamSource(stream);
-                audio.inputAnalyzer = audio.context.createAnalyser();
-                audio.inputPcmData = new Float32Array(audio.inputAnalyzer.fftSize);
-                // Create a mic gain for muting the mic during DTMF, tones, etc
-                audio.inputMicGain = audio.context.createGain();
-                audio.inputMicGain.gain.value = 1;
-                // Create a MediaStreamDestination for sending to the WebRTC peer
-                audio.inputDest = audio.context.createMediaStreamDestination();
-                // Connect input mic stream to gain, and gain to destination and analyzer
-                audio.inputStream.connect(audio.inputMicGain);
-                audio.inputMicGain.connect(audio.inputDest);
-                audio.inputMicGain.connect(audio.inputAnalyzer);
-                // Get the first available track for the destination
-                audio.inputTrack = audio.inputDest.stream.getTracks()[0];
-                // Add a listener for when the mic track ends (happens occasionally, not sure why) and try to reconnect
-                audio.inputTrack.addEventListener("ended", (event) => {
-                    console.error(`Mic track ended for radio ${idx}, attempting to reconnect`);
-                    restartMicTrack(idx);
-                })
-                // Add the first available mic track to the peer connection
-                radios[idx].rtc.peer.addTrack(audio.inputTrack);
-                // Create and send the WebRTC offer
-                return sendRtcOffer(idx);
-            },
-            // Report a failure to capture mic
-            function(e) {
-                alert('Error capturing microphone device');
-                return false;
-            }
-        );
+            // New, better (?) way
+            navigator.mediaDevices.getUserMedia({
+                audio: {
+                    latency: 0.02,
+                    echoCancellation: false,
+                    autoGainControl: false,
+                    mozNoiseSuppression: false,
+                    mozAutoGainControl: false
+                }
+            }).then(
+                // Add tracks to peer connection and negotiate if successful
+                function(stream) {
+                    // Set up mic meter dependecies
+                    audio.inputStream = audio.context.createMediaStreamSource(stream);
+                    audio.inputAnalyzer = audio.context.createAnalyser();
+                    audio.inputPcmData = new Float32Array(audio.inputAnalyzer.fftSize);
+                    // Create a mic gain for muting the mic during DTMF, tones, etc
+                    audio.inputMicGain = audio.context.createGain();
+                    audio.inputMicGain.gain.value = 1;
+                    // Create a MediaStreamDestination for sending to the WebRTC peer
+                    audio.inputDest = audio.context.createMediaStreamDestination();
+                    // Connect input mic stream to gain, and gain to destination and analyzer
+                    audio.inputStream.connect(audio.inputMicGain);
+                    audio.inputMicGain.connect(audio.inputDest);
+                    audio.inputMicGain.connect(audio.inputAnalyzer);
+                    // Get the first available track for the destination
+                    audio.inputTrack = audio.inputDest.stream.getTracks()[0];
+                    // Add a listener for when the mic track ends (happens occasionally, not sure why) and try to reconnect
+                    audio.inputTrack.addEventListener("ended", (event) => {
+                        console.error(`Mic track ended, attempting to reconnect`);
+                        restartMicTrack();
+                    })
+                    // Setup DTMF generator once we have our input audio nodes
+                    audio.dtmf = new DualTone(audio.context, 100, 200);
+                    // We've now set up audio, yay
+                    audio.running = true;
+                    // Add the first available mic track to the peer connection
+                    radios[idx].rtc.peer.addTrack(audio.inputTrack);
+                    // Create and send the WebRTC offer
+                    return sendRtcOffer(idx);
+                },
+                // Report a failure to capture mic
+                function(e) {
+                    alert('Error capturing microphone device');
+                    return false;
+                }
+            );
+        } else {
+            alert('Cannot capture microphone: getUserMedia() not supported in this browser');
+            return false;
+        }
     } else {
-        alert('Cannot capture microphone: getUserMedia() not supported in this browser');
-        return false;
+        console.log("Audio setup already complete, connecting mic track to new WebRTC connection");
+        // Just connect the existing mic
+        radios[idx].rtc.peer.addTrack(audio.inputTrack);
+        return sendRtcOffer(idx);
     }
 }
 
-function restartMicTrack(idx) {
+function restartMicTrack() {
     // Re-get the mic
     navigator.mediaDevices.getUserMedia({
         audio: {
@@ -1165,16 +1182,28 @@ function restartMicTrack(idx) {
         }
     // Reconnect the track
     }).then(function(stream) {
-        // Reconnect mic to meters, etc
+        // Reconnect mic stream
         audio.inputStream = audio.context.createMediaStreamSource(stream);
-        // Connect input mic stream to gain, and gain to destination and analyzer
+        // Connect new input mic stream to gain
         audio.inputStream.connect(audio.inputMicGain);
-        // Replace mic track in WebRTC connection
-        const sender = radios[idx].rtc.peer.getSenders().find((s) => s.track.kind === audio.inputTrack.kind);
-        console.debug("Found sender for mic track: ", sender);
-        audio.inputTrack = audio.inputStream.getTracks()[0];
-        console.debug("Replacing with mic track: ", audio.inputTrack);
-        sender.replaceTrack(audio.inputTrack);
+        // Create a new MediaStreamDestination for sending to the WebRTC peer
+        audio.inputDest = audio.context.createMediaStreamDestination();
+        // Connect new input mic stream to gain
+        audio.inputStream.connect(audio.inputMicGain);
+        // Get the first available track for the destination
+        audio.inputTrack = audio.inputDest.stream.getTracks()[0];
+        // Add a listener for when the mic track ends (happens occasionally, not sure why) and try to reconnect
+        audio.inputTrack.addEventListener("ended", (event) => {
+            console.error(`Mic track ended, attempting to reconnect`);
+            restartMicTrack();
+        })
+        // Replace mic tracks in WebRTC connection
+        radios.forEach(radio => {
+            const sender = radio.rtc.peer.getSenders().find((s) => s.track.kind === audio.inputTrack.kind);
+            console.debug("Found sender for mic track: ", sender);
+            console.debug("Replacing with mic track: ", audio.inputTrack);
+            sender.replaceTrack(audio.inputTrack);
+        })
         return true;
     }).catch((err) => {
         console.error(`Error on replacing mic track: ${err}, disconnecting`);
@@ -1314,6 +1343,7 @@ function createPeerConnection(idx) {
             // Create audio source from the track and put it in an object with a local gain node
             var newSource = {
                 audioNode: audio.context.createMediaStreamSource(newStream),
+                filterNode: audio.context.createBiquadFilter(),
                 agcNode: audio.context.createDynamicsCompressor(),
                 makeupNode: audio.context.createGain(),
                 gainNode: audio.context.createGain(),
@@ -1326,7 +1356,9 @@ function createPeerConnection(idx) {
             // Create this afterwards because we need the value from the above node
             newSource.analyzerData = new Float32Array(newSource.analyzerNode.fftSize);
 
-            // Create analyzer for RX meter
+            // Setup lowpass filter
+            newSource.filterNode.type = 'lowpass'
+            newSource.filterNode.frequency.setValueAtTime(audio.filterCutoff, audio.context.currentTime);
 
             // Setup AGC node
             newSource.agcNode.knee.setValueAtTime(audio.agcKnee, audio.context.currentTime);
@@ -1339,7 +1371,8 @@ function createPeerConnection(idx) {
             newSource.panNode.pan.setValueAtTime(newPan, audio.context.currentTime);
 
             // Update radio connections
-            newSource.audioNode.connect(newSource.agcNode);
+            newSource.audioNode.connect(newSource.filterNode);
+            newSource.filterNode.connect(newSource.agcNode);
             newSource.agcNode.connect(newSource.makeupNode);
             newSource.makeupNode.connect(newSource.muteNode);
             newSource.muteNode.connect(newSource.gainNode);
@@ -1599,9 +1632,6 @@ function startAudioDevices() {
     // Create analyzer node for volume meter under volume slider
     audio.outputAnalyzer = audio.context.createAnalyser();
     audio.outputPcmData = new Float32Array(audio.outputAnalyzer.fftSize);
-
-    // Create DTMF tone generator
-    audio.dtmf = new DualTone(audio.context, 100, 200);
 
     // Create gain node for output volume and connect it to the default output device
     audio.outputGain = audio.context.createGain();
@@ -1919,7 +1949,7 @@ DualTone.prototype.setup = function() {
     // Setup initial values
     this.osc1.frequency.value = this.freq1;
     this.osc2.frequency.value = this.freq2;
-    this.gainNode.gain.value = 0.25;
+    this.gainNode.gain.value = 0.3;
     this.filter.type = 'lowpass';
     this.filter.frequency = '4000';
     // Connect everything
@@ -1937,7 +1967,7 @@ DualTone.prototype.start = function() {
     this.osc1.start(0);
     this.osc2.start(0);
     this.status = 1;
-    this.gainNode.gain.value = 0.25;
+    this.gainNode.gain.value = 0.3;
 }
 
 DualTone.prototype.stop = function() {
