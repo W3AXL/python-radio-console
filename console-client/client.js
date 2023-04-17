@@ -1171,6 +1171,7 @@ function startWebRtc(idx) {
 }
 
 function restartMicTrack() {
+    console.log("Restarting mic track");
     // Re-get the mic
     navigator.mediaDevices.getUserMedia({
         audio: {
@@ -1233,10 +1234,10 @@ function stopWebRtc(idx) {
     }
 
     // Close any local audio
-    radios[idx].rtc.peer.getSenders().forEach(function(sender, idx) {
-        console.debug(`Stopping RTC sender ${idx}`);
-        sender.track.stop();
-    });
+    //radios[idx].rtc.peer.getSenders().forEach(function(sender, idx) {
+    //    console.debug(`Stopping RTC sender ${idx}`);
+    //    sender.track.stop();
+    //});
 
     // Close any active peer transceivers
     if (radios[idx].rtc.peer.getTransceivers) {
@@ -1247,12 +1248,6 @@ function stopWebRtc(idx) {
             }
         })
     }
-
-    // Close any local audio
-    radios[idx].rtc.peer.getSenders().forEach(function(sender, idx) {
-        console.debug(`Stopping RTC sender ${idx}`);
-        sender.track.stop();
-    });
 
     // Close peer connection
     setTimeout(function() {
