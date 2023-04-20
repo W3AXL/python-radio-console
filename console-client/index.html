@@ -31,9 +31,9 @@
 
             <!-- Menu Dropdown -->
             <div class="navbar-item">
-                <button id="button-mainmenu" class="topcoat-button--quiet" onclick="toggleMainMenu()">
+                <div id="button-mainmenu" class="btn" onclick="toggleMainMenu()">
                     <ion-icon name="menu-sharp"></ion-icon>
-                </button>
+                </div>
             </div>
 
             <!-- Logo and Title -->
@@ -50,7 +50,12 @@
 
             <!-- Clock -->
             <div id="navbar-clock">
-                <div id="clock"></div>>
+                <div id="clock"></div>
+            </div>
+
+            <!-- Connect/Disconnect All Button -->
+            <div id="navbar-connect" class="navbar-item disconnected" title="Connect All Radios" onclick="connectAllButton()">
+                <div class="btn"><ion-icon name="power-sharp"></ion-icon></div>
             </div>
 
             <!-- Volume Slider -->
@@ -80,12 +85,6 @@
             <!-- Sidebar Menu -->
             <div class="sidebar sidebar-closed" id="sidebar-mainmenu">
                 <ul>
-                    <li>
-                        <a href="#" onclick="showConfigPopup('#server-config-popup');toggleMainMenu();">
-                            <span class="sidebar-icon"><ion-icon name="server-sharp"></ion-icon></span>
-                            <span class="sidebar-item">Server Config</span>
-                        </a>
-                    </li>
                     <li>
                         <a href="#" onclick="showConfigPopup('#client-config-popup');toggleMainMenu();">
                             <span class="sidebar-icon"><ion-icon name="settings-sharp"></ion-icon></span>
@@ -241,46 +240,6 @@
             
         </div>
 
-        <!-- Server Config Popup -->
-        <div id="server-config-popup" class="popup" style="display: none;">
-            <div class="popup-header">
-                <h2>Server Config</h2>
-                <div class="popup-buttons">
-                    <a href="#" onclick="closePopup(this)"><ion-icon name="close-circle-sharp"></ion-icon></a>
-                </div>
-            </div>
-            <div class="popup-content">
-                <table class="popup-table">
-                    <!-- Connect / Disconnect Button -->
-                    <tr>
-                        <td></td>
-                        <td>
-                            <button class="topcoat-button--cta" id="server-connectall-btn" onclick="connectAllButton()">Connect All</button>
-                        </td>
-                    </tr>
-                    <!-- Auto-connect -->
-                    <tr>
-                        <td>
-                            <h3>Auto-Connect</h3>
-                        </td>
-                        <td>
-                            <label class="topcoat-checkbox">
-                                <input type="checkbox" id="server-autoconnect">
-                                <div class="topcoat-checkbox__checkmark"></div>
-                            </label>
-                        </td>
-                    </tr>
-                    <!-- Save Button -->
-                    <tr>
-                        <td></td>
-                        <td>
-                            <button class="topcoat-button--cta" onclick="saveServerConfig()">Save</button>
-                        </td>
-                    </tr>
-                </table>
-            </div>
-        </div>
-
         <!-- Client Config Popup -->
         <div id="client-config-popup" class="popup" style="display: none;">
             <div class="popup-header">
@@ -331,28 +290,18 @@
                             </select>
                         </td>
                     </tr>
-                    <!-- TPT Tone Selection -->
+                    <!-- Tone Volume Offset -->
                     <tr>
                         <td>
-                            <h3>Talk Permit Tone</h3>
+                            <h3>Console Tone Volume</h3>
                         </td>
                         <td>
-                            <select id="tpt-tone">
-                                <option value="mot" selected="selected">Motorola</option>
-                                <option value="kw">Kenwood</option>
+                            <select id="tone-vol">
+                                <option value=0 selected="selected">0 dB</option>
+                                <option value=-6>-6 dB</option>
+                                <option value=-12>-12 dB</option>
+                                <option value=-100>Muted</option>
                             </select>
-                        </td>
-                    </tr>
-                    <!-- Button Sounds -->
-                    <tr>
-                        <td>
-                            <h3>Button Sounds</h3>
-                        </td>
-                        <td>
-                            <label class="topcoat-checkbox">
-                                <input type="checkbox" id="btn-sounds">
-                                <div class="topcoat-checkbox__checkmark"></div>
-                            </label>
                         </td>
                     </tr>
                     <!-- Save Config Button -->

@@ -4,7 +4,8 @@
             "name": "Motorola XTL",
             "address": "1.2.3.4",
             "port": 9501,
-            "color": "blue"
+            "color": "blue",
+            "pan": -1
         },
         {
             "name": "Motorola XPR",

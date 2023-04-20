@@ -159,6 +159,11 @@ function pageLoad() {
     // Setup clock timer
     setInterval(updateClock, 100);
 
+    // If autoconnect is specified, autoconnect!
+    if (config.autoconnect) {
+        connectAllButton();
+    }
+
 }
 
 /**
@@ -195,6 +200,9 @@ function radioConnected(idx) {
     $(`#radio${idx} .icon-connect`).removeClass('connecting');
     $(`#radio${idx} .icon-connect`).addClass('connected');
     $(`#radio${idx} .icon-connect`).parent().prop('title','Connected, OK');
+    // Update master connect/disconnect button
+    $(`#navbar-connect`).removeClass('disconnected');
+    $(`#navbar-connect`).addClass('connected');
 }
 
 /**
@@ -502,6 +510,9 @@ function updateRadioCard(idx) {
     } else {
         console.debug("Radio not scanning");
     }
+
+    // Update pan from config (which in turn is set when you adjust the pan slider)
+    radioCard.find('.radio-pan').attr('value', radios[idx].pan);
 }
 
 /**
@@ -844,10 +855,17 @@ function updateClock() {
 }
 
 function connectAllButton() {
-    // Connect if we're not connected
-    if (!serverSocket) {
-        //connect();
+    // Connect if button is red
+    if ($(`#navbar-connect`).hasClass("disconnected")) {
+        radios.forEach((radio, index) => {
+            connectRadio(index);
+        });
+    } else if ($(`#navbar-connect`).hasClass("connected")) {
+        radios.forEach((radio, index) => {
+            disconnectRadio(index);
+        });
     }
+    
 }
 
 /**
@@ -910,26 +928,13 @@ function getRadioIndex(id) {
 /**
  * Save the server config input
  */
-function saveServerConfig() {
+function saveDaemonConfig() {
     // Disconnect from existing server
 
     // Get values
-    var address = $("#server-address").val();
-    var port = $("#server-port").val();
-    var autoconnect = $("#server-autoconnect").prop('checked');
-
-    // Remove invalid class
-    $("#server-port").removeClass("invalid");
-
-    // Validate port
-    if (parseInt(port) < 1 || parseInt(port) > 65535) {
-        $("#server-port").addClass("invalid");
-        return
-    }
+    const autoconnect = $("#daemon-autoconnect").prop('checked');
 
     // Save config info
-    config.serverAddress = address;
-    config.serverPort = port;
     config.serverAutoConn = autoconnect;
 
     // Save config to cookie
@@ -944,19 +949,13 @@ function saveClientConfig() {
     const timeFormat = $("#client-timeformat").val();
     const rxAgc = $("#client-rxagc").is(":checked");
     const unselectedVol = $("#unselected-vol").val();
-    const talkPermitTone = $("#tpt-tone").val();
-    const buttonSounds = $("#btn-sounds").is(":checked");
-    const audioInput = $("#audio-input").val();
-    const audioOutput = $("#audio-output").val();
+    const toneVol = $("#tone-vol").val();
 
     // Set config
     config.timeFormat = timeFormat;
-    config.tpt = talkPermitTone;
-    config.btnSounds = buttonSounds;
     config.audio.rxAgc = rxAgc;
     config.audio.unselectedVol = parseFloat(unselectedVol);
-    config.audio.input = audioInput;
-    config.audio.output = audioOutput;
+    config.audio.toneVol = parseFloat(toneVol);
 
     // Save config to cookie
     saveUserConfig();
@@ -965,6 +964,11 @@ function saveClientConfig() {
     if (audio.context) {
         updateRadioAudio();
     }
+
+    // Update tone audio
+    $('#sound-ptt').prop("volume", dbToGain(config.audio.toneVol));
+    $('#sound-ptt-end').prop("volume", dbToGain(config.audio.toneVol));
+    $('#sound-click').prop("volume", dbToGain(config.audio.toneVol));
 }
 
 /**
@@ -989,17 +993,12 @@ function readUserConfig() {
         // Convert to config object
         config = JSON.parse(configJson);
         // Update server popup values
-        $("#server-address").val(config.serverAddress);
-        $("#server-port").val(config.serverPort);
-        $("#server-autoconnect").prop('checked',config.serverAutoConn);
+        $("#daemon-autoconnect").prop('checked',config.daemonAutoConn);
         // Update client popup values
         $("#client-timeformat").val(config.timeFormat);
         $("#client-rxagc").prop("checked", config.audio.rxAgc);
-        $(`#tpt-tone option[value=${config.tpt}]`).attr('selected', 'selected');
-        $("#btn-sounds").prop("checked", config.btnSounds);
         $(`#unselected-vol option[value=${config.audio.unselectedVol}]`).attr('selected', 'selected');
-        $(`#audio-input option[value=${config.audio.input}]`).attr('selected', 'selected');
-        $(`#audio-output option[value=${config.audio.output}]`).attr('selected', 'selected');
+        $(`#tone-vol option[value=${config.audio.toneVol}]`).attr('selected', 'selected');
     } else {
         console.warn("No config cookie detected, using defaults");
     }
@@ -1052,6 +1051,11 @@ function gotRadioConfig(data, status, obj) {
         if (!validColors.includes(radios[idx].color)) {
             console.warn(`Color ${radios[idx].color} not valid, defaulting to blue`);
             radios[idx].color = "blue";
+        }
+        // Default pan
+        if (!Object.hasOwn(radios[idx], 'pan')) {
+            console.debug(`Radio ${idx} has no pan property, defaulting to 0`);
+            radios[idx].pan = 0;
         }
     });
 
@@ -1824,6 +1828,7 @@ function changePan(event, obj) {
     // Debug log
     console.debug(`Setting new pan for radio ${radios[idx]} to ${newPan}`);
     // Set pan
+    radios[idx].pan = newPan;
     radios[idx].audioSrc.panNode.pan.setValueAtTime(newPan, audio.context.currentTime);
 }
 
@@ -2086,9 +2091,11 @@ function waitForRadioStatus(idx, callback) {
  */
 function disconnectRadio(idx) {
     // Disconnect if we had a connection open
-    if (radios[idx].wsConn.readyState == WebSocket.OPEN) {
-        console.log(`Disconnecting from radio ${radios[idx].name}`);
-        radios[idx].wsConn.close();
+    if (radios[idx].wsConn) {
+        if (radios[idx].wsConn.readyState == WebSocket.OPEN) {
+            console.log(`Disconnecting from radio ${radios[idx].name}`);
+            radios[idx].wsConn.close();
+        }
     }
 }
 
@@ -2184,6 +2191,10 @@ function handleSocketClose(event, idx) {
     $(`#radio${idx} .icon-connect`).addClass('disconnected');
     $(`#radio${idx} .icon-connect`).parent().prop('title','Disconnected');
     updateRadioCard(idx);
+
+    // If no more radios connected, set master connect button to disconnected
+    $(`#navbar-connect`).removeClass("connected");
+    $(`#navbar-connect`).addClass("disconnected");
 }
 
 /**
