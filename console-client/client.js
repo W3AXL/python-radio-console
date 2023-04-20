@@ -2193,8 +2193,10 @@ function handleSocketClose(event, idx) {
     updateRadioCard(idx);
 
     // If no more radios connected, set master connect button to disconnected
-    $(`#navbar-connect`).removeClass("connected");
-    $(`#navbar-connect`).addClass("disconnected");
+    if (!radios.some(e => e.wsConn != null)) {
+        $(`#navbar-connect`).removeClass("connected");
+        $(`#navbar-connect`).addClass("disconnected");
+    }
 }
 
 /**
