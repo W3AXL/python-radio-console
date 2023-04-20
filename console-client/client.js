@@ -660,14 +660,22 @@ function changeChannel(down) {
 }
 
 /**
- * Toggle a softkey on the selected radio
+ * Press a softkey on the selected radio
  * @param {int} idx softkey index
  */
-function softkey(idx) {
+function pressSoftkey(idx) {
+    pressButton(`softkey${idx}`);
+}
+
+/**
+ * Release a softkey on the selected radio
+ * @param {int} idx softkey index
+ */
+function releaseSoftkey(idx) {
     if (config.btnSounds) {
         playSound("sound-click");
     }
-    sendButton(`softkey${idx}`);
+    releaseButton(`softkey${idx}`);
 }
 
 /**
@@ -677,7 +685,7 @@ function button_left() {
     if (config.btnSounds) {
         playSound("sound-click");
     }
-    sendButton("left");
+    toggleButton("left");
 }
 
 /**
@@ -687,20 +695,53 @@ function button_right() {
     if (config.btnSounds) {
         playSound("sound-click");
     }
-    sendButton("right");
+    toggleButton("right");
 }
 
 /**
- * Send button command to selected radio
+ * Send button commands to selected radio
  * @param {string} buttonName name of button
  */
-function sendButton(buttonName) {
+function toggleButton(buttonName) {
     if (!pttActive && selectedRadio && radios[selectedRadioIdx].wsConn) {
-        console.log(`Sending button: ${buttonName}`);
+        console.log(`Sending button toggle: ${buttonName}`);
         radios[selectedRadioIdx].wsConn.send(
             `{
                 "radioControl": {
-                    "command": "button",
+                    "command": "buttonToggle",
+                    "options": "${buttonName}"
+                }
+            }`
+        )
+    }
+}
+
+function pressButton(buttonName) {
+    if (!pttActive && selectedRadio && radios[selectedRadioIdx].wsConn) {
+        console.log(`Sending button depress: ${buttonName}`);
+        radios[selectedRadioIdx].wsConn.send(
+            `{
+                "radioControl": {
+                    "command": "buttonPress",
+                    "options": "${buttonName}"
+                }
+            }`
+        )
+    }
+    // Set a timeout to release the button in the event that something breaks
+    setTimeout(() => {
+        console.debug(`Fallback button release handler for stuck button ${buttonName}`);
+        releaseButton(buttonName);
+    }, 1500);
+}
+
+function releaseButton(buttonName) {
+    if (!pttActive && selectedRadio && radios[selectedRadioIdx].wsConn) {
+        console.log(`Sending button release: ${buttonName}`);
+        radios[selectedRadioIdx].wsConn.send(
+            `{
+                "radioControl": {
+                    "command": "buttonRelease",
                     "options": "${buttonName}"
                 }
             }`

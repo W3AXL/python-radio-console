@@ -345,6 +345,28 @@ def toggleSoftkey(softkeyidx):
 
     return
 
+def pressSoftkey(softkeyidx):
+    """
+    Depresses softkey on radio
+
+    Args:
+        softkeyidx (int): Index of softkey (1-5)
+    """
+    config.Radio.pressSoftkey(softkeyidx)
+
+    return
+
+def releaseSoftkey(softkeyidx):
+    """
+    Releases softkey on radio
+
+    Args:
+        softkeyidx (int): Index of softkey (1-5)
+    """
+    config.Radio.releaseSoftkey(softkeyidx)
+
+    return
+
 def leftArrow():
     """
     Presses left arrow button (for softkey scrolling)
@@ -680,7 +702,7 @@ async def consumer_handler(websocket, path):
                         changeChannel(True)
 
                     # Buttons
-                    elif command == "button":
+                    elif command == "buttonToggle":
                         # Get button
                         button = options
 
@@ -694,6 +716,18 @@ async def consumer_handler(websocket, path):
                             leftArrow()
                         elif button == "right":
                             rightArrow()
+
+                    elif command == "buttonPress":
+                        button = options
+                        if "softkey" in button:
+                            softkeyidx = int(button[7])
+                            pressSoftkey(softkeyidx)
+
+                    elif command == "buttonRelease":
+                        button = options
+                        if "softkey" in button:
+                            softkeyidx = int(button[7])
+                            releaseSoftkey(softkeyidx)
 
                 #
                 #   Audio Control Messages

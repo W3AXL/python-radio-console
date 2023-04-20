@@ -1100,28 +1100,28 @@ class Motorola:
             if self.head == 'O5':
                 self.sendButton(self.O5.button_map['knob_chan'], 0xFF)
             elif self.head == 'W9':
-                self.pressButton(self.W9.button_map['mode_down'])
+                self.toggleButton(self.W9.button_map['mode_down'])
             elif self.head == 'M3':
                 if self.getBtnBinding('chan_dn'):
-                    self.pressButton(self.M3.button_map[self.getBtnBinding('chan_dn')])
+                    self.toggleButton(self.M3.button_map[self.getBtnBinding('chan_dn')])
                 else:
                     self.logger.logError("Button binding missing 'chan_dn' mapping, cannot decrement channel")
         else:
             if self.head == 'O5':
                 self.sendButton(self.O5.button_map['knob_chan'], 0x01)
             elif self.head == 'W9':
-                self.pressButton(self.W9.button_map['mode_up'])
+                self.toggleButton(self.W9.button_map['mode_up'])
             elif self.head == 'M3':
                 if self.getBtnBinding('chan_up'):
-                    self.pressButton(self.M3.button_map[self.getBtnBinding('chan_up')])
+                    self.toggleButton(self.M3.button_map[self.getBtnBinding('chan_up')])
                 else:
                     self.logger.logError("Button binding missing 'chan_up' mapping, cannot decrement channel")
 
     def toggleSoftkey(self, idx):
         """
-        Press softkey button
+        Send toggle button message for softkey button
 
-        Softkey 6 is hardcoded as HOME
+        Softkey 6 is hardcoded as HOME on O5
 
         Args:
             idx (int): 1-5, softkey number
@@ -1132,13 +1132,49 @@ class Motorola:
                 # The O5 home button is a special case, we actually have to hold it for a short duration otherwise it doesn't register as a press
                 self.holdButton(self.O5.button_map["btn_home"], 50)
             else:
-                self.pressButton(self.O5.button_map["btn_key_{}".format(idx)])
+                self.toggleButton(self.O5.button_map["btn_key_{}".format(idx)])
         # W9 is more involved, we have to search the button mapping for the right key to press
         elif self.head in ['W9', 'M3']:
             softkey = self.softkeys[idx-1]
             for key, value in self.btnBinding.items():
                 if value == softkey:
+                    self.toggleButton(self.headObj.button_map[key])
+
+    def pressSoftkey(self, idx):
+        """
+        Press a softkey button (don't release)
+
+        Args:
+            idx (int): 1-6, softkey number
+        """
+        if self.head == 'O5':
+            if idx == 6:
+                self.pressButton(self.O5.button_map["btn_home"])
+            else:
+                self.pressButton(self.O5.button_map["btn_key_{}".format(idx)])
+        elif self.head in ['W9', 'M3']:
+            softkey = self.softkeys[idx-1]
+            for key, value in self.btnBinding.items():
+                if value == softkey:
                     self.pressButton(self.headObj.button_map[key])
+
+    def releaseSoftkey(self, idx):
+        """
+        Release a softkey button
+
+        Args:
+            idx (int): 1-6, softkey number
+        """
+        if self.head == 'O5':
+            if idx == 6:
+                self.releaseButton(self.O5.button_map["btn_home"])
+            else:
+                self.releaseButton(self.O5.button_map["btn_key_{}".format(idx)])
+        elif self.head in ['W9', 'M3']:
+            softkey = self.softkeys[idx-1]
+            for key, value in self.btnBinding.items():
+                if value == softkey:
+                    self.releaseButton(self.headObj.button_map[key])
 
     def getBtnBinding(self, binding):
         """
@@ -1154,7 +1190,7 @@ class Motorola:
         Presses left arrow button or toggles softkey list left
         """
         if self.head == 'O5':
-            self.pressButton(self.O5.button_map["btn_dp_lf"])
+            self.toggleButton(self.O5.button_map["btn_dp_lf"])
         elif self.head in ['W9', 'M3']:
             if self.softkeyPage == 0:
                 self.softkeyPage = self.maxKeyPage
@@ -1167,7 +1203,7 @@ class Motorola:
         Presses right arrow button or toggles softkey list right
         """
         if self.head == 'O5':
-            self.pressButton(self.O5.button_map["btn_dp_lf"])
+            self.toggleButton(self.O5.button_map["btn_dp_lf"])
         elif self.head in ['W9', 'M3']:
             if self.softkeyPage == self.maxKeyPage:
                 self.softkeyPage = 0
@@ -1350,7 +1386,7 @@ class Motorola:
 
         self.txMsgQueue.put_nowait(msg)
 
-    def pressButton(self, code):
+    def toggleButton(self, code):
         """
         Press and release a button (this is a feature of SB9600, you can simulate a button press just by using code 0x2 instead of 0x1)
 
@@ -1359,6 +1395,24 @@ class Motorola:
             duration (float): duration to press in seconds
         """
         self.sendButton(code, 0x02)
+
+    def pressButton(self, code):
+        """
+        Press a button (don't release it)
+
+        Args:
+            code (hex): button code in hex
+        """
+        self.sendButton(code, 0x01)
+
+    def releaseButton(self, code):
+        """
+        Same as above, but release the button
+
+        Args:
+            code (hex): button code in hex
+        """
+        self.sendButton(code, 0x00)
 
     def holdButton(self, code, duration):
         """

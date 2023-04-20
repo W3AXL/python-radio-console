@@ -168,6 +168,24 @@ class Radio():
         """
         self.interface.toggleSoftkey(idx)
 
+    def pressSoftkey(self, idx):
+        """
+        Press a softkey (don't release it)
+
+        Args:
+            idx (int): 1-6, index of softkey
+        """
+        self.interface.pressSoftkey(idx)
+
+    def releaseSoftkey(self, idx):
+        """
+        Release a softkey
+
+        Args:
+            idx (int): 1-6, index of softkey
+        """
+        self.interface.releaseSoftkey(idx)
+
     def leftArrow(self):
         """
         Scrolls left through softkeys
