@@ -1019,7 +1019,7 @@ class Motorola:
 
                 # Fallback
                 else:
-                    self.printMsg("Channel","Unknown state: {} {}".format(hex(data[0]),hex(data[1])))
+                    self.logger.logWarn("Unknown channel state: {} {}".format(hex(data[0]),hex(data[1])))
                     return
 
             # Active Mode Update (ACTMDU) opcode

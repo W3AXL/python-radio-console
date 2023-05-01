@@ -70,9 +70,12 @@ class Config():
 configFile = ""
 config = Config()
 
-# List of AIORTC recorders (so we can keep track of and close them during shutdown) and blackholes (so we can dump additional incoming tracks)
-recorders = []
-blackholes = []
+# AIORTC recorder & player (for mic & speaker tracks)
+recorder = None
+player = None
+
+# Create a relay for the incoming mic track
+micRelay = None
 
 # FFMPEG device format (alsa for linux, dshow for windows, loaded at runtime)
 ffmpegFormat = None
@@ -413,119 +416,114 @@ def getRadioStatusJson():
     WebRTC Functions
 -------------------------------------------------------------------------------"""     
 
-async def gotRtcOffer(offerObj):
+async def gotRtcDescription(desc):
     """
     Called when we receive a WebRTC offer from the client
 
     Args:
-        offerObj (dict): WebRTC SDP offer object
+        offerObj (dict): WebRTC description object
     """
 
     global rtcPeer
+    global player
+    global recorder
+    global micRelay
 
-    logger.logInfo("Got WebRTC offer")
-    logger.logVerbose("SDP: {}".format(offerObj['sdp']))
+    logger.logVerbose("Got WebRTC description")
+    logger.logDebug(desc)
 
-    # Start audio on radios
-    #logger.logVerbose("Starting audio devices on radios")
-    #startSound()
+    # Create peer connection if it doesn't already exist
+    if not rtcPeer:
+        rtcPeer = RTCPeerConnection()
+
+    # If offer, do offer-related things
+    if desc["type"] == "offer":
     
-    # Create SDP offer and peer connection objects
-    offer = RTCSessionDescription(sdp=offerObj["sdp"], type=offerObj["type"])
-    rtcPeer = RTCPeerConnection()
+        # Create SDP offer and peer connection objects
+        offer = RTCSessionDescription(sdp=desc["sdp"], type=desc["type"])
 
-    # Create UUID for peer
-    pcUuid = "Peer({})".format(uuid.uuid4())
-    logger.logVerbose("Creating peer connection {}".format(pcUuid))
+        # Create speaker track
+        if not player:
+            logger.logInfo("Creating RTC speaker track for radio {}, device {}".format(config.Radio.name, config.Radio.rxDev))
+            player = MediaPlayer(config.Radio.rxDev, format=ffmpegFormat)
+            rtcPeer.addTrack(player.audio)
+        else:
+            logger.logVerbose("RTC speaker track already exists")
 
-    # Create speaker track
-    logger.logInfo("Creating RTC speaker track for radio {}, device {}".format(config.Radio.name, config.Radio.rxDev))
-    player = MediaPlayer(config.Radio.rxDev, format=ffmpegFormat)
-    rtcPeer.addTrack(player.audio)
+        # Create callbacks
 
-    # ICE connection state callback
-    @rtcPeer.on("iceconnectionstatechange")
-    async def onIceConnectionStateChange():
-        logger.logVerbose("Ice connection state is now {}".format(rtcPeer.iceConnectionState))
-        if rtcPeer.iceConnectionState == "failed":
-            await rtcPeer.close()
-            logger.logError("WebRTC peer connection {} failed".format(pcUuid))
-    
-    # Audio track callback when we get the mic track from the client
-    @rtcPeer.on("track")
-    async def onTrack(track):
+        # ICE connection state callback
+        @rtcPeer.on("iceconnectionstatechange")
+        async def onIceConnectionStateChange():
+            logger.logVerbose("Ice connection state is now {}".format(rtcPeer.iceConnectionState))
+            if rtcPeer.iceConnectionState == "failed":
+                await rtcPeer.close()
+                logger.logError("WebRTC peer connection failed")
+        
+        # Audio track callback when we get the mic track from the client
+        @rtcPeer.on("track")
+        async def onTrack(track):
 
-        global micTrack
-        global spkrTrack
-        global blackHole
-        global rtcPeer
-        global recorders
-        global blackholes
-        global gotMicTrack
-        global ffmpegFormat
+            global micRelay
+            global recorder
+            global ffmpegFormat
 
-        logger.logVerbose("Got {} track from peer {}".format(track.kind, pcUuid))
+            logger.logVerbose("Got {} track from peer".format(track.kind))
 
-        # make sure it's audio
-        if track.kind != "audio":
-            logger.logError("Got non-audio track from peer {}".format(pcUuid))
-            return
+            # make sure it's audio
+            if track.kind != "audio":
+                logger.logError("Got non-audio track from peer")
+                return
 
-        # if we already got a mic track, ignore this one
-        if gotMicTrack:
-            logger.logWarn("Ignoring additional track from peer since we already have the mic")
-            blackhole = MediaBlackhole()
-            blackhole.addTrack(track)
-            await blackhole.start()
-            blackholes.append(blackhole)
-            logger.logVerbose("added additional track to blackhole list")
-            return
+            # Only open the mic recorder if it's not already open
+            if not recorder:
+                logger.logInfo("Opening TX audio device stream: {}".format(config.Radio.txDev))
+                recorder = MediaRecorder(config.Radio.txDev, format=ffmpegFormat)
 
-        gotMicTrack = True
+            # Create a mic relay
+            if not micRelay:
+                micRelay = MediaRelay()
 
-        # Create a relay for the incoming mic track
-        micRelay = MediaRelay()
-        # Add the mic track to each radio's tx device
-        logger.logInfo("Creating RTC mic track for radio {} using device {}, format {}".format(config.Radio.name, config.Radio.txDev, ffmpegFormat))
-        recorder = MediaRecorder(config.Radio.txDev, format=ffmpegFormat)
-        #recorder = MediaBlackhole() # debug for memory leak testing
-        recorder.addTrack(micRelay.subscribe(track))
-        recorders.append(recorder)
-        await recorder.start()
+            # Connect the mic track to the recorder via the relay
+            recorder.addTrack(micRelay.subscribe(track))
+            await recorder.start()
 
-        # Track ended handler
-        @track.on("ended")
-        async def onEnded():
-            global gotMicTrack
-            global recorders
-            global blackholes
+            # Track ended handler (don't really do anything here for now)
+            @track.on("ended")
+            async def onEnded():
+                logger.logVerbose("Audio track from peer ended")
 
-            logger.logVerbose("Audio track from {} ended".format(pcUuid))
-            logger.logInfo("Shutting down media devices")
-            for recorder in recorders:
-                await recorder.stop()
-            for blackhole in blackholes:
-                await blackhole.stop()
-            # Reset mic track variable
-            gotMicTrack = False
+        # Send RTC resposne back to console
 
-    await doRtcAnswer(offer)
+        await doRtcAnswer(offer)
 
-    logger.logVerbose("done")
+        logger.logVerbose("done")
 
     return
 
 async def stopRtc():
-
-    global gotMicTrack
-
+    global rtcPeer
+    global player
+    global recorder
+    global micRelay
     # Stop the peer if it's open
     logger.logInfo("Stopping RTC connection")
     if rtcPeer:
         await rtcPeer.close()
-    # Reset mic track variable
-    gotMicTrack = False
-
+        rtcPeer = None
+    # Stop and clear recorder
+    if recorder:
+        logger.logVerbose("Stopping TX audio recorder")
+        await recorder.stop()
+        recorder = None
+    # Stop and clear player
+    if player:
+        logger.logVerbose("Stopping RX audio player")
+        player = None
+    # Stop and clear the mic relay
+    if micRelay:
+        logger.logVerbose("Clearing mic relay")
+        micRelay = None
     return
 
 async def doRtcAnswer(offer):
@@ -544,7 +542,7 @@ async def doRtcAnswer(offer):
     # Send answer
     logger.logVerbose("sending SDP answer")
     message = '{{ "webRtcAnswer": {{ "type": "{}", "sdp": {} }} }}'.format(rtcPeer.localDescription.type, json.dumps(rtcPeer.localDescription.sdp))
-    logger.logVerbose(message.replace("\\r\\n", "\r\n"))
+    logger.logDebug(message.replace("\\r\\n", "\r\n"))
     messageQueue.put_nowait(message)
 
     return
@@ -654,23 +652,20 @@ async def consumer_handler(websocket, path):
 
         # New way - proper asyncio consumer per documentation
         async for msg in websocket:
+            logger.logDebug("Got data from websocket:")
+            logger.logDebug(msg)
 
-            # Try and convert the recieved data to JSON and warn on fail
-            try:
-                cmdObject = json.loads(msg)
-            except ValueError as e:
-                logger.logWarn("Invalid data recieved from client, {}\nData: {}".format(e.args[0], msg))
-                continue
+            obj = json.loads(msg)
 
             # Iterate through the received command keys (there should only ever be one, but it's possible to recieve multiple)
 
-            for key in cmdObject.keys():
+            for key in obj.keys():
 
                 #
                 # Radio Query Command
                 #
 
-                if key == "radio" and cmdObject[key]["command"] == "query":
+                if key == "radio" and obj[key]["command"] == "query":
                     await messageQueue.put("status")
 
                 #
@@ -679,7 +674,7 @@ async def consumer_handler(websocket, path):
 
                 elif key == "radioControl":
                     # Get object inside
-                    params = cmdObject[key]
+                    params = obj[key]
                     command = params["command"]
                     options = params["options"]
 
@@ -729,13 +724,16 @@ async def consumer_handler(websocket, path):
                             softkeyidx = int(button[7])
                             releaseSoftkey(softkeyidx)
 
+                    else:
+                        logger.logWarn("Unknown radio control command {}".format(command))
+
                 #
                 #   Audio Control Messages
                 #
 
                 elif key == "audioControl":
                     # Get params
-                    params = cmdObject[key]
+                    params = obj[key]
                     command = params["command"]
 
                     # Start audio command
@@ -753,18 +751,25 @@ async def consumer_handler(websocket, path):
                 #   WebRTC Messages
                 #
 
-                elif key == "webRtcOffer":
+                elif key == "webRtc":
                     # Get params
-                    offerObj = cmdObject[key]
+                    rtcObj = obj[key]
+                    logger.logVerbose("Got webRtc object from console")
+                    logger.logDebug(rtcObj)
+                    
+                    # Determine if we have a candidate or a description
+                    if 'desc' in rtcObj:
+                        await gotRtcDescription(rtcObj['desc'])
 
-                    # Create peer connection
-                    await gotRtcOffer(offerObj)
+                    if 'cand' in rtcObj:
+                        logger.logWarn("Got WebRTC candidate, but we don't handle those yet")
 
                 #
                 #   NACK if command wasn't handled above
                 #
 
                 else:
+                    logger.logError("Unknown command from console: {}".format(obj))
                     # Send NACK
                     await messageQueue.put('NACK')
 

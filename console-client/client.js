@@ -97,7 +97,8 @@ var rtcConf = {
     rxBaseLatency: 500,
     txBaseLatency: 300,
     // RTT (round-trip time) parameters for RTC connection
-    rttLimit: 0.05
+    rttLimit: 0.1,
+    rttSize: 25
 }
 
 testInput = null;
@@ -583,14 +584,14 @@ function startPtt() {
         // Only send the TX command if we have a valid socket
         if (radios[selectedRadioIdx].wsConn) {
             setTimeout( function() {
-                radios[selectedRadioIdx].wsConn.send(
-                    `{
-                        "radioControl": {
-                            "command": "startTx",
-                            "options": null
+                radios[selectedRadioIdx].wsConn.send(JSON.stringify(
+                    {
+                        radioControl: {
+                            command: "startTx",
+                            options: null
                         }
-                    }`
-                );
+                    }
+                ));
             }, radios[selectedRadioIdx].rtc.txLatency);
         }
     } else if (!pttActive && !selectedRadio) {
@@ -609,14 +610,14 @@ function stopPtt() {
         if (radios[selectedRadioIdx].wsConn && selectedRadio) {
             // Wait and then stop TX (handles mic latency)
             setTimeout( function() {
-                radios[selectedRadioIdx].wsConn.send(
-                    `{
-                        "radioControl": {
-                            "command": "stopTx",
-                            "options": null
+                radios[selectedRadioIdx].wsConn.send(JSON.stringify(
+                    {
+                        radioControl: {
+                            command: "stopTx",
+                            options: null
                         }
-                    }`
-                );
+                    }
+                ));
                 playSound("sound-ptt-end");
             }, radios[selectedRadioIdx].rtc.txLatency);
         }
@@ -634,27 +635,27 @@ function changeChannel(down) {
                 playSound("sound-click");
             }
             console.log("Changing channel down on " + selectedRadio);
-            radios[selectedRadioIdx].wsConn.send(
-                `{
-                    "radioControl": {
-                        "command": "chanDn",
-                        "options": null
+            radios[selectedRadioIdx].wsConn.send(JSON.stringify(
+                {
+                    radioControl: {
+                        command: "chanDn",
+                        options: null
                     }
-                }`
-            );
+                }
+            ));
         } else {
             if (config.btnSounds) {
                 playSound("sound-click");
             }
             console.log("Changing channel up on " + selectedRadio);
-            radios[selectedRadioIdx].wsConn.send(
-                `{
-                    "radioControl": {
-                        "command": "chanUp",
-                        "options": null
+            radios[selectedRadioIdx].wsConn.send(JSON.stringify(
+                {
+                    radioControl: {
+                        command: "chanUp",
+                        options: null
                     }
-                }`
-            );
+                }
+            ));
         }
     }
 }
@@ -705,28 +706,28 @@ function button_right() {
 function toggleButton(buttonName) {
     if (!pttActive && selectedRadio && radios[selectedRadioIdx].wsConn) {
         console.log(`Sending button toggle: ${buttonName}`);
-        radios[selectedRadioIdx].wsConn.send(
-            `{
-                "radioControl": {
-                    "command": "buttonToggle",
-                    "options": "${buttonName}"
+        radios[selectedRadioIdx].wsConn.send(JSON.stringify(
+            {
+                radioControl: {
+                    command: "buttonToggle",
+                    options: buttonName
                 }
-            }`
-        )
+            }
+        ));
     }
 }
 
 function pressButton(buttonName) {
     if (!pttActive && selectedRadio && radios[selectedRadioIdx].wsConn) {
         console.log(`Sending button depress: ${buttonName}`);
-        radios[selectedRadioIdx].wsConn.send(
-            `{
-                "radioControl": {
-                    "command": "buttonPress",
-                    "options": "${buttonName}"
+        radios[selectedRadioIdx].wsConn.send(JSON.stringify(
+            {
+                radioControl: {
+                    command: "buttonPress",
+                    options: buttonName
                 }
-            }`
-        )
+            }
+        ));
     }
     // Set a timeout to release the button in the event that something breaks
     setTimeout(() => {
@@ -738,14 +739,14 @@ function pressButton(buttonName) {
 function releaseButton(buttonName) {
     if (!pttActive && selectedRadio && radios[selectedRadioIdx].wsConn) {
         console.log(`Sending button release: ${buttonName}`);
-        radios[selectedRadioIdx].wsConn.send(
-            `{
-                "radioControl": {
-                    "command": "buttonRelease",
-                    "options": "${buttonName}"
+        radios[selectedRadioIdx].wsConn.send(JSON.stringify(
+            {
+                radioControl: {
+                    command: "buttonRelease",
+                    options: buttonName
                 }
-            }`
-        )
+            }
+        ));
     }
 }
 
@@ -763,22 +764,22 @@ function toggleMute(event, obj) {
         // Change mute status
         if (radios[idx].status.muted) {
             console.log("Unmuting " + radioId);
-            radios[idx].wsConn.send(
-                `{
-                    "audioControl": {
-                        "command": "unmute"
+            radios[idx].wsConn.send(JSON.stringify(
+                {
+                    audioControl: {
+                        command: "unmute"
                     }
-                }`
-            )
+                }
+            ));
         } else {
             console.log("Muting " + radioId);
-            radios[idx].wsConn.send(
-                `{
-                    "audioControl": {
-                        "command": "mute"
+            radios[idx].wsConn.send(JSON.stringify(
+                {
+                    audioControl: {
+                        command: "mute"
                     }
-                }`
-            )
+                }
+            ));
         }
         // Update card
         //updateRadioCard(idx);
@@ -1039,7 +1040,11 @@ function readUserConfig() {
         $("#client-timeformat").val(config.timeFormat);
         $("#client-rxagc").prop("checked", config.audio.rxAgc);
         $(`#unselected-vol option[value=${config.audio.unselectedVol}]`).attr('selected', 'selected');
+        // Tone volume elements
         $(`#tone-vol option[value=${config.audio.toneVol}]`).attr('selected', 'selected');
+        $('#sound-ptt').prop("volume", dbToGain(config.audio.toneVol));
+        $('#sound-ptt-end').prop("volume", dbToGain(config.audio.toneVol));
+        $('#sound-click').prop("volume", dbToGain(config.audio.toneVol));
     } else {
         console.warn("No config cookie detected, using defaults");
     }
@@ -1181,21 +1186,19 @@ function startWebRtc(idx) {
                     audio.inputStream.connect(audio.inputMicGain);
                     audio.inputMicGain.connect(audio.inputDest);
                     audio.inputMicGain.connect(audio.inputAnalyzer);
-                    // Get the first available track for the destination
-                    audio.inputTrack = audio.inputDest.stream.getTracks()[0];
                     // Add a listener for when the mic track ends (happens occasionally, not sure why) and try to reconnect
-                    audio.inputTrack.addEventListener("ended", (event) => {
-                        console.error(`Mic track ended, attempting to reconnect`);
-                        restartMicTrack();
+                    audio.inputStream.addEventListener("ended", (event) => {
+                        console.error(`Mic track ended`);
+                        restartMicStream();
                     })
                     // Setup DTMF generator once we have our input audio nodes
                     audio.dtmf = new DualTone(audio.context, 100, 200);
                     // We've now set up audio, yay
                     audio.running = true;
-                    // Add the first available mic track to the peer connection
+                    // Add the first available mic track to the peer connection, this will call the onnegotiationneeded handler which will send a new SDP offer
+                    audio.inputTrack = audio.inputDest.stream.getTracks()[0];
                     radios[idx].rtc.peer.addTrack(audio.inputTrack);
                     // Create and send the WebRTC offer
-                    return sendRtcOffer(idx);
                 },
                 // Report a failure to capture mic
                 function(e) {
@@ -1208,10 +1211,16 @@ function startWebRtc(idx) {
             return false;
         }
     } else {
-        console.log("Audio setup already complete, connecting mic track to new WebRTC connection");
-        // Just connect the existing mic
+        console.log("Initial audio setup already complete, connecting mic track to new WebRTC connection");
+        // See if we need to re-create the input destination
+        if (!audio.inputDest.stream.active) {
+            console.debug("Audio destination stream stopped, re-creating");
+            audio.inputDest = audio.context.createMediaStreamDestination();
+            audio.inputMicGain.connect(audio.inputDest);
+        }
+        // Just connect the existing mic, this will call the onnegotiationneeded handler which will send a new SDP offer
+        audio.inputTrack = audio.inputDest.stream.getTracks()[0];
         radios[idx].rtc.peer.addTrack(audio.inputTrack);
-        return sendRtcOffer(idx);
     }
 }
 
@@ -1228,33 +1237,22 @@ function restartMicTrack() {
         }
     // Reconnect the track
     }).then(function(stream) {
-        // Reconnect mic stream
+        // Recreate input stream
         audio.inputStream = audio.context.createMediaStreamSource(stream);
         // Connect new input mic stream to gain
         audio.inputStream.connect(audio.inputMicGain);
-        // Create a new MediaStreamDestination for sending to the WebRTC peer
-        audio.inputDest = audio.context.createMediaStreamDestination();
-        // Connect new input mic stream to gain
-        audio.inputStream.connect(audio.inputMicGain);
-        // Get the first available track for the destination
-        audio.inputTrack = audio.inputDest.stream.getTracks()[0];
         // Add a listener for when the mic track ends (happens occasionally, not sure why) and try to reconnect
-        audio.inputTrack.addEventListener("ended", (event) => {
-            console.error(`Mic track ended, attempting to reconnect`);
-            restartMicTrack();
-        })
-        // Replace mic tracks in WebRTC connection
-        radios.forEach(radio => {
-            const sender = radio.rtc.peer.getSenders().find((s) => s.track.kind === audio.inputTrack.kind);
-            console.debug("Found sender for mic track: ", sender);
-            console.debug("Replacing with mic track: ", audio.inputTrack);
-            sender.replaceTrack(audio.inputTrack);
+        audio.inputStream.addEventListener("ended", (event) => {
+            console.error(`Mic track ended`);
+            restartMicStream();
         })
         return true;
     }).catch((err) => {
-        console.error(`Error on replacing mic track: ${err}, disconnecting`);
-        stopWebRtc(idx);
-        disconnectRadio(idx);
+        console.error(`Error on restarting mic stream: ${err}, disconnecting all radios`);
+        for (var idx = 0; idx < radios.length; idx++) {
+            stopWebRtc(idx);
+            disconnectRadio(idx);
+        }
         return false;
     });
 }
@@ -1279,10 +1277,10 @@ function stopWebRtc(idx) {
     }
 
     // Close any local audio
-    //radios[idx].rtc.peer.getSenders().forEach(function(sender, idx) {
-    //    console.debug(`Stopping RTC sender ${idx}`);
-    //    sender.track.stop();
-    //});
+    radios[idx].rtc.peer.getSenders().forEach(function(sender, idx) {
+        console.debug(`Stopping RTC sender ${idx}`);
+        sender.track.stop();
+    });
 
     // Close any active peer transceivers
     if (radios[idx].rtc.peer.getTransceivers) {
@@ -1294,12 +1292,12 @@ function stopWebRtc(idx) {
         })
     }
 
-    // Close peer connection
-    setTimeout(function() {
-        console.debug("Closing peer connection");
-        radios[idx].rtc.peer.close();
-        radios[idx].audioSrc = null;
-    }, 500);
+    // Close the peer connection
+    console.log("Closing peer connection");
+    radios[idx].rtc.peer.close();
+
+    // Reset audio routing
+    radios[idx].audioSrc = null;
 }
 
 /**
@@ -1328,7 +1326,7 @@ function createPeerConnection(idx) {
             // update UI
             radioConnected(idx);
             // Create array for averaging roundTripTime
-            radios[idx].rtc.rttArray = new Array(10).fill(0);
+            radios[idx].rtc.rttArray = new Array(rtcConf.rttSize).fill(0);
             // Start monitoring roundTripTime
             checkRoundTripTime(idx);
         } else if (peer.iceConnectionState == "failed") {
@@ -1351,10 +1349,19 @@ function createPeerConnection(idx) {
 
     peer.addEventListener('connectionstatechange', function() {
         console.log(`new peer connectionState for radio ${radios[idx].name}: ${peer.connectionState}`);
+        if (peer.connectionState === "connecting") {
+            $(`#radio${idx} .icon-connect`).removeClass('connected');
+            $(`#radio${idx} .icon-connect`).removeClass('disconnected');
+            $(`#radio${idx} .icon-connect`).addClass('connecting');
+            $(`#radio${idx} .icon-connect`).parent().prop('title','WebRTC peer connecting');
+        }
     })
 
+    // This fires when we restart ICE candidates due to exceeding RTT or restarting the mic track
     peer.addEventListener('negotiationneeded', function() {
-        console.log(`WebRTC ICE negotiation needed for radio ${radios[idx].name}`);
+        console.warn(`WebRTC ICE negotiation needed for radio ${radios[idx].name}`);
+        // Create and send a new RTC offer for the radio
+        createRtcOffer(idx);
     })
 
     // Print initial states
@@ -1380,50 +1387,58 @@ function createPeerConnection(idx) {
             audio.dummyOutputs.push(newDummy);
             console.debug(`Started dummy audio element for radio ${radios[idx].name}`);
 
-            // Create audio source from the track and put it in an object with a local gain node
-            var newSource = {
-                audioNode: audio.context.createMediaStreamSource(newStream),
-                filterNode: audio.context.createBiquadFilter(),
-                agcNode: audio.context.createDynamicsCompressor(),
-                makeupNode: audio.context.createGain(),
-                gainNode: audio.context.createGain(),
-                muteNode: audio.context.createGain(),
-                panNode: audio.context.createStereoPanner(),
-                analyzerNode: audio.context.createAnalyser(),
-                leftSpkr: true,
-                rightSpkr: true
+            // If we already created the audiosrc, don't do it again. Just reconnect the new audio
+            if (radios[idx].audioSrc) {
+                // Create the new audio source node
+                var newAudioNode = audio.context.createMediaStreamSource(newStream);
+                radios[idx].audioSrc.audioNode = newAudioNode;
+                // Reconnect it
+                radios[idx].audioSrc.audioNode.connect(radios[idx].audioSrc.filterNode);
+            // Set up the new audio source
+            } else {
+                // Create audio source from the track and put it in an object with a local gain node
+                var newSource = {
+                    audioNode: audio.context.createMediaStreamSource(newStream),
+                    filterNode: audio.context.createBiquadFilter(),
+                    agcNode: audio.context.createDynamicsCompressor(),
+                    makeupNode: audio.context.createGain(),
+                    gainNode: audio.context.createGain(),
+                    muteNode: audio.context.createGain(),
+                    panNode: audio.context.createStereoPanner(),
+                    analyzerNode: audio.context.createAnalyser(),
+                    leftSpkr: true,
+                    rightSpkr: true
+                }
+                // Create this afterwards because we need the value from the above node
+                newSource.analyzerData = new Float32Array(newSource.analyzerNode.fftSize);
+
+                // Setup lowpass filter
+                newSource.filterNode.type = 'lowpass'
+                newSource.filterNode.frequency.setValueAtTime(audio.filterCutoff, audio.context.currentTime);
+
+                // Setup AGC node
+                newSource.agcNode.knee.setValueAtTime(audio.agcKnee, audio.context.currentTime);
+                newSource.agcNode.ratio.setValueAtTime(audio.agcRatio, audio.context.currentTime);
+                newSource.agcNode.attack.setValueAtTime(audio.agcAttack, audio.context.currentTime);
+                newSource.agcNode.release.setValueAtTime(audio.agcRelease, audio.context.currentTime);
+
+                // Set current pan setting
+                var newPan = $(`#radio${idx}`).find('.radio-pan').val();
+                newSource.panNode.pan.setValueAtTime(newPan, audio.context.currentTime);
+
+                // Update radio connections
+                newSource.audioNode.connect(newSource.filterNode);
+                newSource.filterNode.connect(newSource.agcNode);
+                newSource.agcNode.connect(newSource.makeupNode);
+                newSource.makeupNode.connect(newSource.muteNode);
+                newSource.muteNode.connect(newSource.gainNode);
+                newSource.muteNode.connect(newSource.analyzerNode);
+                newSource.gainNode.connect(newSource.panNode);
+                newSource.panNode.connect(audio.outputGain);
+
+                // Add to list of radio streams
+                radios[idx].audioSrc = newSource;
             }
-            // Create this afterwards because we need the value from the above node
-            newSource.analyzerData = new Float32Array(newSource.analyzerNode.fftSize);
-
-            // Setup lowpass filter
-            newSource.filterNode.type = 'lowpass'
-            newSource.filterNode.frequency.setValueAtTime(audio.filterCutoff, audio.context.currentTime);
-
-            // Setup AGC node
-            newSource.agcNode.knee.setValueAtTime(audio.agcKnee, audio.context.currentTime);
-            newSource.agcNode.ratio.setValueAtTime(audio.agcRatio, audio.context.currentTime);
-            newSource.agcNode.attack.setValueAtTime(audio.agcAttack, audio.context.currentTime);
-            newSource.agcNode.release.setValueAtTime(audio.agcRelease, audio.context.currentTime);
-
-            // Set current pan setting
-            var newPan = $(`#radio${idx}`).find('.radio-pan').val();
-            newSource.panNode.pan.setValueAtTime(newPan, audio.context.currentTime);
-
-            // Update radio connections
-            newSource.audioNode.connect(newSource.filterNode);
-            newSource.filterNode.connect(newSource.agcNode);
-            newSource.agcNode.connect(newSource.makeupNode);
-            newSource.makeupNode.connect(newSource.muteNode);
-            newSource.muteNode.connect(newSource.gainNode);
-            newSource.muteNode.connect(newSource.analyzerNode);
-            newSource.gainNode.connect(newSource.panNode);
-            newSource.panNode.connect(audio.outputGain);
-
-            console.debug(`New source ID: ${newSource.audioNode.id}`);
-
-            // Add to list of radio streams
-            radios[idx].audioSrc = newSource;
 
             // Update the radio audio
             updateRadioAudio();
@@ -1438,55 +1453,46 @@ function createPeerConnection(idx) {
 }
 
 /**
- * Create and send the SDP offer to the server
- * @param {int} idx index of radio in radios[]
- * @returns {boolean} true on success
+ * Creates and sends a new RTC SDP offer to the radio daemon
+ * @param {int} idx index of radio
+ * @returns true if successful, false otherwise
  */
-function sendRtcOffer(idx) {
-    // Generate the SDP offer and assign it to the peer object
-    radios[idx].rtc.peer.createOffer().then(function(offer) {
-        return radios[idx].rtc.peer.setLocalDescription(offer);
-    }).then(function() {
-        // Wait for ICE gathering to complete (this looks messy but it's just waiting for that)
+function createRtcOffer(idx) {
+    // Generate the SDP offer and set the local description
+    radios[idx].rtc.peer.createOffer().then((offer) => {
+        radios[idx].rtc.peer.setLocalDescription(offer);
+    }).then(() => {
+        // Once we've set the local description, wait for ICE gathering to complete
+        console.debug("Waiting for icegatheringstate complete");
         return new Promise(function(resolve) {
             if (radios[idx].rtc.peer.iceGatheringState === 'complete') {
+                console.debug("...done!")
                 resolve();
             } else {
                 function checkState() {
                     if (radios[idx].rtc.peer.iceGatheringState === 'complete') {
                         radios[idx].rtc.peer.removeEventListener('icegatheringstatechange', checkState);
+                        console.debug("...done!")
                         resolve();
                     }
                 }
                 radios[idx].rtc.peer.addEventListener('icegatheringstatechange', checkState);
             }
         });
-    }).then(function() {
-        // Generate the specifics of the offer
-        var offer = radios[idx].rtc.peer.localDescription;
-        offer.sdp = sdpFilterCodec('audio', rtcConf.codec, offer.sdp);
-
-        // Get fmtp line for replacement
-        var rx = /a=fmtp:.*/g;
-        var fmtpLine = rx.exec(offer.sdp);
-        // Append bitrate info to SDP
-        offer.sdp = offer.sdp.replace(fmtpLine,`${fmtpLine};maxplaybackrate=${rtcConf.bitrate};sprop-maxcapturerate=${rtcConf.bitrate};stereo=0`);
-
-        // Debug
-        console.debug("SDP offer:");
-        console.debug(offer.sdp);
-
+    }).then(() => {
+        // Modify the offer for the codec we want to use (basically just filters available RTC codecs for the one we're looking for)
+        radios[idx].rtc.peer.localDescription.sdp = sdpFilterCodec('audio', rtcConf.codec, rtcConf.bitrate, radios[idx].rtc.peer.localDescription.sdp);
         // Send the offer to the server via WebSocket
-        radios[idx].wsConn.send(
-        `{
-            "webRtcOffer": {
-                "type": ${JSON.stringify(offer.type)},
-                "sdp": ${JSON.stringify(offer.sdp)}
+        console.debug("Sending local description to daemon");
+        radios[idx].wsConn.send(JSON.stringify(
+            {
+                webRtc: {
+                    desc: radios[idx].rtc.peer.localDescription
+                }
             }
-        }`
-        );
+        ));
     }).catch(function(e) {
-        console.error(e);
+        console.error(`"Got exception during RTC offer creation: \n${e}`);
         return false;
     });
     // Return true if nothing bad happened
@@ -1516,10 +1522,10 @@ function gotRtcResponse(idx, answerType, answerSdp) {
  * @param {string} kind 'audio' or 'video'
  * @param {string} codec specific codec descriptor
  * @param {*} realSdp existing SDP
- * @param {int} numberOfTracks number of audio tracks to add (should be the same as the number of radios configured)
+ * @param {int} bitrate codec bitrate to use
  * @returns new SDP using specified codec
  */
-function sdpFilterCodec(kind, codec, realSdp) {
+function sdpFilterCodec(kind, codec, bitrate, realSdp) {
     var allowed = []
     var rtxRegex = new RegExp('a=fmtp:(\\d+) apt=(\\d+)\r$');
     var codecRegex = new RegExp('a=rtpmap:([0-9]+) ' + escapeRegExp(codec))
@@ -1573,6 +1579,12 @@ function sdpFilterCodec(kind, codec, realSdp) {
         }
     }
 
+    // Get fmtp line for replacement
+    var rx = /a=fmtp:.*/g;
+    var fmtpLine = rx.exec(sdp);
+    // Append bitrate info to SDP
+    sdp = sdp.replace(fmtpLine,`${fmtpLine};maxplaybackrate=${bitrate};sprop-maxcapturerate=${bitrate};stereo=0`);
+
     return sdp;
 }
 
@@ -1592,15 +1604,22 @@ function checkRoundTripTime(idx) {
                     radios[idx].rtc.rttArray.shift();
                     radios[idx].rtc.rttArray.push(report.currentRoundTripTime);
                     // Get the current average of all 10
-                    radios[idx].rtc.rttAvg = (radios[idx].rtc.rttArray.reduce((a ,b) => a + b) / 10).toFixed(3);
+                    radios[idx].rtc.rttAvg = (radios[idx].rtc.rttArray.reduce((a ,b) => a + b) / rtcConf.rttSize).toFixed(3);
                     // Update the radio latency parameters
                     radios[idx].rtc.txLatency = rtcConf.txBaseLatency + (radios[idx].rtc.rttAvg * 1000);
                     radios[idx].rtc.rxLatency = rtcConf.rxBaseLatency + (radios[idx].rtc.rttAvg * 1000);
                     //console.debug(`Current RTT average for radio ${idx}: ${rttAvg}`);
                     // If we're above the threshold, throw a disconnect warning
                     if (radios[idx].rtc.rttAvg > rtcConf.rttLimit) {
-                        console.error(`WebRTC round trip time (${radios[idx].rtc.rttAvg}) exceeded limit (${rtcConf.rttLimit}) for radio ${idx}, disconnecting`);
+                        console.error(`WebRTC round trip time (${radios[idx].rtc.rttAvg}) exceeded limit (${rtcConf.rttLimit}) for radio ${idx}, restarting ICE`);
                         disconnectRadio(idx);
+                        setTimeout(() => {
+                            connectRadio(idx);
+                        }, 500);
+                        //stopWebRtc(idx);
+                        //startWebRtc(idx);
+                        // restarting ICE didn't seem to fix latency
+                        //radios[idx].rtc.peer.restartIce();
                     }
                 }
             })
@@ -2096,13 +2115,13 @@ function onConnectWebsocket(idx) {
     console.log(`Websocket connected for radio ${radios[idx].name}`);
     // Query radio status
     console.log(`Querying radio ${radios[idx].name} status`);
-    radios[idx].wsConn.send(
-        `{
-            "radio": {
-                "command": "query"
+    radios[idx].wsConn.send(JSON.stringify(
+        {
+            radio: {
+                command: "query"
             }
-        }`
-    )
+        }
+    ));
     // Start webrtc
     waitForRadioStatus(idx, function() { startWebRtc(idx) });
 }
@@ -2134,7 +2153,9 @@ function disconnectRadio(idx) {
     // Disconnect if we had a connection open
     if (radios[idx].wsConn) {
         if (radios[idx].wsConn.readyState == WebSocket.OPEN) {
-            console.log(`Disconnecting from radio ${radios[idx].name}`);
+            console.log(`Disconnecting from radio WebRTC connection ${radios[idx].name}`);
+            stopWebRtc(idx);
+            console.log(`Disconnecting from radio websocket ${radios[idx].name}`);
             radios[idx].wsConn.close();
         }
     }
