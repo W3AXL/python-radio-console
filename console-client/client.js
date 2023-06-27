@@ -59,6 +59,8 @@ var audio = {
     agcMakeup: 1.1,     // right now any makeup gain causes clipping
     // TX/RX audio filter cutoff (hz)
     filterCutoff: 4000,
+    // Delay for unmuting microphone after PTT (for ignoring the TPT tone)
+    micTptDelay: 450
 }
 
 // DTMF array
@@ -248,7 +250,7 @@ $(document).on("keydown", function (e) {
         // Spacebar
         case 32:
             e.preventDefault();
-            startPtt();
+            startPtt(true);
             break;
     }
 });
@@ -575,14 +577,17 @@ function connectButton(event, obj) {
 /**
  * Start radio PTT
  */
-function startPtt() {
+function startPtt(micActive) {
     if (!pttActive && selectedRadio) {
-        console.log("Starting PTT on " + selectedRadio);
-        pttActive = true;
-        // Play TPT
-        playSound("sound-ptt");
-        // Only send the TX command if we have a valid socket
+        // Only send the TX command and unmute the mic if we have a valid socket
         if (radios[selectedRadioIdx].wsConn) {
+            console.log("Starting PTT on " + selectedRadio);
+            pttActive = true;
+            // Unmute mic after timeout, if requested
+            if (micActive) {setTimeout( unmuteMic, audio.micTptDelay);}
+            // Play TPT
+            playSound("sound-ptt");
+            // Send radio keyup after latency timeout
             setTimeout( function() {
                 radios[selectedRadioIdx].wsConn.send(JSON.stringify(
                     {
@@ -607,6 +612,9 @@ function stopPtt() {
     if (pttActive) {
         console.log("PTT released");
         pttActive = false;
+        // Mute mic
+        muteMic();
+        // Send the stop command if connected
         if (radios[selectedRadioIdx].wsConn && selectedRadio) {
             // Wait and then stop TX (handles mic latency)
             setTimeout( function() {
@@ -789,10 +797,8 @@ function toggleMute(event, obj) {
 }
 
 function startDTMF(radioId, number, digitTime, delayTime) {
-    // Mute mic
-    audio.inputMicGain.gain.value = 0;
     // Start PTT
-    startPtt();
+    startPtt(false);
     // Dial (will wait for transmit active before dialing)
     dialNumber(radioId, number, digitTime, delayTime);
 }
@@ -829,7 +835,6 @@ function dialNumber(radioId, number, digitTime, delayTime) {
         }, startTime + ((digitTime + delayTime) * number.length));
         // Re-enable mic and DTMF keypad a little later
         setTimeout(()=> {
-            audio.inputMicGain.gain.value = 1;
             enableDTMFKeypad(radioId, true);
             clearDTMFDialpad(radioId);
         }, startTime + ((digitTime + delayTime) * number.length) + rtcConf.txBaseLatency);
@@ -1177,9 +1182,9 @@ function startWebRtc(idx) {
                     audio.inputStream = audio.context.createMediaStreamSource(stream);
                     audio.inputAnalyzer = audio.context.createAnalyser();
                     audio.inputPcmData = new Float32Array(audio.inputAnalyzer.fftSize);
-                    // Create a mic gain for muting the mic during DTMF, tones, etc
+                    // Create a mic gain for muting the mic when we're not talking
                     audio.inputMicGain = audio.context.createGain();
-                    audio.inputMicGain.gain.value = 1;
+                    muteMic();
                     // Create a MediaStreamDestination for sending to the WebRTC peer
                     audio.inputDest = audio.context.createMediaStreamDestination();
                     // Connect input mic stream to gain, and gain to destination and analyzer
@@ -1222,6 +1227,14 @@ function startWebRtc(idx) {
         audio.inputTrack = audio.inputDest.stream.getTracks()[0];
         radios[idx].rtc.peer.addTrack(audio.inputTrack);
     }
+}
+
+function muteMic() {
+    audio.inputMicGain.gain.value = 0;
+}
+
+function unmuteMic() {
+    audio.inputMicGain.gain.value = 1;
 }
 
 function restartMicTrack() {
