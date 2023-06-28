@@ -821,6 +821,9 @@ class Motorola:
                                 self.lowpower = True
                             elif state == "off":
                                 self.lowpower = False
+
+                    self.updateSoftkeys()
+                    self.newStatus = True
                 
                 # If we're told to use LEDs for RX states, then do that
                 if (self.useLedsForRx and name in ["ind_nonpri", "ind_pri"]):
@@ -834,9 +837,6 @@ class Motorola:
                             self.logger.logInfo("Radio no longer receiving, source: {} state".format(name, state))
                             self.state = RadioState.Idle
                             self.newStatus = True
-                    
-                    self.updateSoftkeys()
-                    self.newStatus = True
                     
         
         # Fallback
