@@ -115,6 +115,7 @@ Once you've determined you have a working client interface, it's time to configu
             "address": "1.2.3.4",
             "port": 9501,
             "color": "blue"
+            "pan": -1
         },
         {
             "name": "Motorola XPR",
@@ -130,6 +131,7 @@ Once you've determined you have a working client interface, it's time to configu
 * `address`: the address of the radio daemon (configured below)
 * `port`: the port of the radio daemon (again, configured below)
 * `color`: the color of the radio card in the UI. Available options are `red`, `amber`, `green`, `blue`, or `purple`
+* `pan`: the default panning of the radio in stereo speaker environments. Valid ranges are -1 (full left) to 1 (full right)
 
 Once this file is configured, a refresh of the web client will show the configured radios as cards in the main window. They start in a disconnected state, and clicking on the red signal bar will start the connection process.
 
@@ -154,12 +156,27 @@ example `config.json`:
 {
     "Radio":
     {
-        "name": "Test Radio",
-        "desc": "Bench Testing Radio",
-        "ctrlMode": "SB9600-XTL-O",
-        "ctrlPort": "/dev/ttyUSB0",
-        "txDev": "out0",
-        "rxDev": "mic0"
+        "name": "800 XTL Scanner",
+        "desc": "800MHz XTL5000",
+        "ctrlMode": "Motorola-W9",
+        "ctrlPort": "/dev/ttyUSB4",
+        "txDev": "spkr0",
+        "rxDev": "mic0",
+        "chanLookupFile": "channels.csv",
+        "zoneLookup":
+        {
+            "Radio Zone Name": "Displayed Zone Name"
+        },
+        "btnBinding":
+        {
+        },
+        "softkeyList": [
+            "HOME",
+            "NUIS",
+            "SEL"
+        ],
+        "useLedsForRx": true,
+        "rxOnly": true
     },
     "Certfile": "certs/private/console-cert.crt",
     "Keyfile": "certs/private/console-cert.key"
@@ -170,12 +187,11 @@ example `config.json`:
 * `desc`: Radio description. Not used anywhere yet, but might be at some point. Can be blank I suppose.
 * `ctrlMode`: Radio control mode. Options are
   * **Implemented**:
-    * `SB9600-XTL-O`: XTL5000 with O5 control head
+    * `Motorola-W9`: Motorola Spectra/XTL W9 head
+    * `Motorola-M3`: Motorola MCS2000 M3 head
+    * `Motorola-O5`: Motorola XTL O/M5 head
     * `XCMP-XPR`: XPR4000/5000 series mobiles
   * **Planned**:
-    * `SB9600-XTL-W`: XTL5000 with W9 control head
-    * `SB9600-MCS-3`: MCS2000 with model 3 control head
-    * `SB9600-AS-W`: Astro spectra with W9 control head (will probably just work with the XTL W profile)
     * `Soundcard-CM108`: CM108B/CM119 soundcard PTT control (for a generic radio. No control besides PTT will be available)
     * `Soundcard-VOX`: VOX-based PTT control. Same as above except relying on radio VOX circuit for PTT. Don't ever use this and I probably won't actually do it.
 * `ctrlPort`
@@ -183,6 +199,13 @@ example `config.json`:
     * **For XCMP:** IP address of the radio
 * `txDev`: transmit audio device name. For linux, query device names with `aplay -L`. For windows, this is the name shown in the sound manager.
 * `rxDev`: receive audio device name. For linux, query device names with `arecord -L`. For windows, this is the name shown in the sound manager.
+* `chanLookup`: a list of channel names to perform a lookup on, see the zoneLookup item for explanation
+* `chanLookupFile`: a CSV file to perform the same lookup as mentioned above
+* `zoneLookup`: same as channel lookup above, but for zone text
+* `btnBinding`: button binding, used for W9 & M3 heads to allow the softkey system to work. See the W9 example config
+* `softkeyList`: used in tandem with the above button binding list to display the correct softkeys in the console
+* `useLedsForRx`: whether to use the control head LED statuses to detect RX states, useful for no-affiliate scan where the normal detection doesn't work
+* `rxOnly`: whether the radio is receive-only or not. This will disable PTT
 * `Certfile`: path to the SSL certificate file you created above
 * `Keyfile`: path to the SSL certificate key you created above
 
