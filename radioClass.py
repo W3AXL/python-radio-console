@@ -1,4 +1,5 @@
 
+from typing import Dict
 from interface.motorola import Motorola
 from interface.xcmp import XPR
 
@@ -9,6 +10,8 @@ from radioState import RadioState
 from logger import Logger
 
 import numpy as np
+
+from csv import DictReader
 
 class Radio():
     """Radio Class for generic radio control
@@ -23,7 +26,7 @@ class Radio():
                     "Soundcard-CM108",  # CM108 GPIO PTT
                     "Soundcard-VOX"]    # Radio-controlled VOX PTT
 
-    def __init__(self, name, desc=None, ctrlMode=None, ctrlPort=None, txDev=None, rxDev=None, logger=Logger(), zoneLookup=None, chanLookup=None, btnBinding=None, softkeyList=None):
+    def __init__(self, name, desc=None, ctrlMode=None, ctrlPort=None, txDev=None, rxDev=None, logger=Logger(), zoneLookup=None, chanLookup=None, btnBinding=None, softkeyList=None, useLedsForRx=False, rxOnly=False):
         """Radio configuration object
 
         Args:
@@ -38,6 +41,9 @@ class Radio():
         # Make sure control mode is valid
         if ctrlMode not in self.controlModes:
             raise ValueError("Invalid control mode specified: {}".format(ctrlMode))
+
+        # Create logger
+        self.logger = logger
 
         # Save parameters
         self.name = name
@@ -67,6 +73,15 @@ class Radio():
         self.btnBinding = btnBinding
         self.softkeyList = softkeyList
 
+        # Use LEDs for RX states
+        self.useLedsForRx = useLedsForRx
+
+        # RX Only radio
+        self.rxOnly = rxOnly
+
+        if self.rxOnly:
+            self.logger.logInfo("Radio configured for RX only, PTT will be disabled")
+
         # Radio interface class
         self.interface = None
 
@@ -75,9 +90,6 @@ class Radio():
 
         # Set starting status to disconnected
         self.state = RadioState.Disconnected
-
-        # Create logger
-        self.logger = logger
 
         # Speaker & Mic Sample Queues
         self.micQueue = None
@@ -111,13 +123,13 @@ class Radio():
 
         # Motorola O5 head
         if self.ctrlMode == "Motorola-O5":
-            self.interface = Motorola(self.name, self.ctrlPort, 'O5', self.statusCallback, self.zoneLookup, self.chanLookup, self.logger)
+            self.interface = Motorola(self.name, self.ctrlPort, 'O5', self.statusCallback, self.zoneLookup, self.chanLookup, self.logger, self.useLedsForRx)
         # Motorola W9 head
         elif self.ctrlMode == "Motorola-W9":
-            self.interface = Motorola(self.name, self.ctrlPort, 'W9', self.statusCallback, self.zoneLookup, self.chanLookup, self.logger, self.btnBinding, self.softkeyList)
+            self.interface = Motorola(self.name, self.ctrlPort, 'W9', self.statusCallback, self.zoneLookup, self.chanLookup, self.logger, self.btnBinding, self.softkeyList, self.useLedsForRx)
         # Motorola MCS2000 M3 head
         elif self.ctrlMode == "Motorola-M3":
-            self.interface = Motorola(self.name, self.ctrlPort, "M3", self.statusCallback, self.zoneLookup, self.chanLookup, self.logger, self.btnBinding, self.softkeyList)
+            self.interface = Motorola(self.name, self.ctrlPort, "M3", self.statusCallback, self.zoneLookup, self.chanLookup, self.logger, self.btnBinding, self.softkeyList, self.useLedsForRx)
         # XPR XCMP Control
         elif self.ctrlMode == "XCMP-XPR":
             self.interface = XPR(self.name, self.ctrlPort, self.statusCallback, self.logger)
@@ -145,6 +157,9 @@ class Radio():
         Args:
             transmit (bool): transmit state
         """
+        # Don't do anything if RX only
+        if self.rxOnly:
+            return
         if transmit:
             self.interface.transmit(True)
         else:
@@ -321,15 +336,29 @@ class Radio():
         chanLookup = None
         btnBinding = None
         softkeyList = None
+        useLedsForRx = False
+        rxOnly = False
 
         if 'zoneLookup' in radioDict:
             zoneLookup = radioDict['zoneLookup']
         if 'chanLookup' in radioDict:
             chanLookup = radioDict['chanLookup']
+        if 'chanLookupFile' in radioDict:
+            with open(radioDict['chanLookupFile'], 'r') as f:
+                chanDict = {}
+                for line in f:
+                    data = line.rstrip().split(',')
+                    chanDict[data[0]] = data[1]
+                print(chanDict)
+                chanLookup = chanDict
         if 'btnBinding' in radioDict:
             btnBinding = radioDict['btnBinding']
         if 'softkeyList' in radioDict:
             softkeyList = radioDict['softkeyList']
+        if 'useLedsForRx' in radioDict:
+            useLedsForRx = radioDict['useLedsForRx']
+        if 'rxOnly' in radioDict:
+            rxOnly = radioDict['rxOnly']
 
         # create a new radio object from config data
         return Radio(radioDict['name'],
@@ -342,4 +371,6 @@ class Radio():
                      zoneLookup,
                      chanLookup,
                      btnBinding,
-                     softkeyList)
+                     softkeyList,
+                     useLedsForRx,
+                     rxOnly)

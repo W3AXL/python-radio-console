@@ -229,7 +229,7 @@ class Motorola:
             'flashing_2': 0x3
         }
 
-    def __init__(self, name, port, head, statusCallback, zoneLookup=None, chanLookup=None, logger=Logger(), btnBinding=None, softkeyList=None):
+    def __init__(self, name, port, head, statusCallback, zoneLookup=None, chanLookup=None, logger=Logger(), btnBinding=None, softkeyList=None, useLedsForRx=False):
 
         # Store status callback
         self.statusCallback = statusCallback
@@ -257,6 +257,12 @@ class Motorola:
         # lookup tables for extended zone/channel text mapping
         self.zoneLookup = zoneLookup
         self.chanLookup = chanLookup
+
+        # Whether or not to use the RX leds on the head for RX states (useful for NAS where we don't get the usual RX statuses)
+        self.useLedsForRx = useLedsForRx
+
+        if self.useLedsForRx:
+            self.logger.logVerbose("Using LED states for RX control")
 
         """
         These variables are common to all radio interface classes and are 
@@ -815,9 +821,22 @@ class Motorola:
                                 self.lowpower = True
                             elif state == "off":
                                 self.lowpower = False
-                    
+
                     self.updateSoftkeys()
                     self.newStatus = True
+                
+                # If we're told to use LEDs for RX states, then do that
+                if (self.useLedsForRx and name in ["ind_nonpri", "ind_pri"]):
+                    if state in ["on", "flashing_1", "flashing_2"]:
+                        if self.state != RadioState.Receiving:
+                            self.logger.logInfo("Radio now receiving, source: {} state {}".format(name, state))
+                            self.state = RadioState.Receiving
+                            self.newStatus = True
+                    elif state == "off":
+                        if self.state != RadioState.Idle and self.state != RadioState.Transmitting:
+                            self.logger.logInfo("Radio no longer receiving, source: {} state".format(name, state))
+                            self.state = RadioState.Idle
+                            self.newStatus = True
                     
         
         # Fallback
@@ -1019,7 +1038,7 @@ class Motorola:
 
                 # Fallback
                 else:
-                    self.printMsg("Channel","Unknown state: {} {}".format(hex(data[0]),hex(data[1])))
+                    self.logger.logWarn("Unknown channel state: {} {}".format(hex(data[0]),hex(data[1])))
                     return
 
             # Active Mode Update (ACTMDU) opcode
