@@ -20,7 +20,10 @@ var config = {
     
     serverAddress: "",
     serverPort: 0,
-    serverAutoConn: false
+    serverAutoConn: false,
+
+    extensionAddress: "",
+    extensionPort: 0
 }
 
 // Radio List (read from radio config initially and populated with audio sources/sinks and rtc connections)
@@ -60,7 +63,9 @@ var audio = {
     // TX/RX audio filter cutoff (hz)
     filterCutoff: 4000,
     // Delay for unmuting microphone after PTT (for ignoring the TPT tone)
-    micTptDelay: 450
+    micUnmuteDelay: 450,
+    // Delay for muting the mic after PTT is released (to account for PC audio latency)
+    micMuteDelay: 100
 }
 
 // DTMF array
@@ -84,9 +89,9 @@ const dtmfFrequencies = {
 }
 
 const dtmfTiming = {
-    "initialDelay": 300,
-    "digitDuration": 250,
-    "digitDelay": 125
+    "initialDelay": 250,
+    "digitDuration": 350,
+    "digitDelay": 150
 }
 
 // WebRTC Variables
@@ -95,11 +100,12 @@ var rtcConf = {
     codec: "opus/48000/2",  // I've found that OPUS seems to have better latency than PCMU
     bitrate: 8000,
     //codec: "PCMU/8000",
-    // Base audio encoding/decoding latency. This is added to the current webRTC round trip time when audio functions are called
+    // Base audio encoding/decoding latency. This is added to the current webRTC round trip time when audio functions are called so that actions align with the audio
+    // This is found experimentally and varies slightly depending on daemon system performance.
     rxBaseLatency: 500,
     txBaseLatency: 300,
     // RTT (round-trip time) parameters for RTC connection
-    rttLimit: 0.1,
+    rttLimit: 0.25,
     rttSize: 25
 }
 
@@ -113,6 +119,9 @@ const alertTemplate = document.querySelector("#alert-dialog-template");
 
 // Radio JSON validation
 const validColors = ["red","amber","green","blue","purple"];
+
+// Extension websocket connection
+var extensionWs = null;
 
 /***********************************************************************************
     State variables
@@ -286,6 +295,11 @@ $(document).ready(pageLoad());
  * @param {string} id the id of the radio to select
  */
 function selectRadio(id) {
+    // Check that the id is valid
+    if (!$(`#${id}`).length) {
+        console.warn(`Tried to select invalid radio id ${id}`);
+        return;
+    }
     // Check that the radio is connected before we select it
     if (radios[getRadioIndex(id)].status.state == "Disconnected") { return; }
     // Log
@@ -315,6 +329,8 @@ function selectRadio(id) {
         updateRadioControls();
         updateRadioAudio();
     }
+    // Update the extension
+    exUpdateSelected();
 }
 
 /**
@@ -534,11 +550,11 @@ function updateRadioControls() {
         radio.status.softkeys.forEach(function(keytext, index) {
             $(`#softkey${index+1} .btn-text`).html(keytext);
         });
-        // Set softkeys on/off
+        // Set softkeys on/off & update extension accordingly
         radio.status.softkeyStates.forEach(function(state, index) {
             if (state) { $(`#softkey${index+1}`).addClass("pressed") } else { $(`#softkey${index+1}`).removeClass("pressed") }
         });
-    
+        exUpdateSoftkeys(radio.status.softkeyStates);
         // Clear if we don't
     } else {
         for (i=0; i<6; i++) {
@@ -547,7 +563,10 @@ function updateRadioControls() {
         // Disable softkeys
         $("#radio-controls .btn").addClass("disabled");
         $("#radio-controls .btn").removeClass("pressed");
+        // Clear softkey states on extension
+        exUpdateSoftkeys([false, false, false, false, false, false]);
     }
+    exUpdateSoftkeys();
 }
 
 /**
@@ -584,7 +603,7 @@ function startPtt(micActive) {
             console.log("Starting PTT on " + selectedRadio);
             pttActive = true;
             // Unmute mic after timeout, if requested
-            if (micActive) {setTimeout( unmuteMic, audio.micTptDelay);}
+            if (micActive) {setTimeout( unmuteMic, audio.micUnmuteDelay);}
             // Play TPT
             playSound("sound-ptt");
             // Send radio keyup after latency timeout
@@ -613,7 +632,7 @@ function stopPtt() {
         console.log("PTT released");
         pttActive = false;
         // Mute mic
-        muteMic();
+        setTimeout( muteMic, audio.micMuteDelay );
         // Send the stop command if connected
         if (radios[selectedRadioIdx].wsConn && selectedRadio) {
             // Wait and then stop TX (handles mic latency)
@@ -905,6 +924,7 @@ function connectAllButton() {
     // Connect if button is red
     if ($(`#navbar-connect`).hasClass("disconnected")) {
         radios.forEach((radio, index) => {
+            // Start connecting to the radio
             connectRadio(index);
         });
     } else if ($(`#navbar-connect`).hasClass("connected")) {
@@ -1019,6 +1039,22 @@ function saveClientConfig() {
 }
 
 /**
+ * Save the extension config
+ */
+function saveExtensionConfig() {
+    // Get values
+    const extensionAddress = $("#extension-address").val();
+    const extensionPort = $("#extension-port").val();
+
+    // Set
+    config.extensionAddress = extensionAddress;
+    config.extensionPort = parseInt(extensionPort);
+
+    // Save
+    saveUserConfig();
+}
+
+/**
  * Save config to cookie, as JSON
  */
 function saveUserConfig() {
@@ -1045,6 +1081,9 @@ function readUserConfig() {
         $("#client-timeformat").val(config.timeFormat);
         $("#client-rxagc").prop("checked", config.audio.rxAgc);
         $(`#unselected-vol option[value=${config.audio.unselectedVol}]`).attr('selected', 'selected');
+        // Update extension popup values
+        $("#extension-address").val(config.extensionAddress);
+        $("#extension-port").val(config.extensionPort);
         // Tone volume elements
         $(`#tone-vol option[value=${config.audio.toneVol}]`).attr('selected', 'selected');
         $('#sound-ptt').prop("volume", dbToGain(config.audio.toneVol));
@@ -1140,134 +1179,35 @@ function dummyTrack() {
  */
 function startWebRtc(idx) {
     console.log(`Starting WebRTC session for ${radios[idx].name}`);
-
-    // Create peer
-    radios[idx].rtc.peer = createPeerConnection(idx);
-    if (radios[idx].rtc.peer) {
-        console.log("Created peer connection");
-    } else {
-        console.error("Failed to create peer connection");
-        return false
-    }
     
     // Find the right getUserMedia()
     // This isn't needed with the new method below
     /*if (!navigator.getUserMedia) {
         navigator.getUserMedia = navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia || navigator.msGetUserMedia;
     }*/
+    // Check if the input track has ended, and restart if so
 
-    // Only do all this initial setup if we haven't yet (we only need to set up all the tracks, etc once per session)
     if (!audio.running) {
-        console.log("Running initial microphone and audio routing setup");
-        // Open the microphone
-        if (navigator.getUserMedia) {
-            // Get the microphone
-
-            // Old, deprecated way
-            //navigator.getUserMedia({audio:true},
-
-            // New, better (?) way
-            navigator.mediaDevices.getUserMedia({
-                audio: {
-                    latency: 0.02,
-                    echoCancellation: false,
-                    autoGainControl: false,
-                    mozNoiseSuppression: false,
-                    mozAutoGainControl: false
-                }
-            }).then(
-                // Add tracks to peer connection and negotiate if successful
-                function(stream) {
-                    // Set up mic meter dependecies
-                    audio.inputStream = audio.context.createMediaStreamSource(stream);
-                    audio.inputAnalyzer = audio.context.createAnalyser();
-                    audio.inputPcmData = new Float32Array(audio.inputAnalyzer.fftSize);
-                    // Create a mic gain for muting the mic when we're not talking
-                    audio.inputMicGain = audio.context.createGain();
-                    muteMic();
-                    // Create a MediaStreamDestination for sending to the WebRTC peer
-                    audio.inputDest = audio.context.createMediaStreamDestination();
-                    // Connect input mic stream to gain, and gain to destination and analyzer
-                    audio.inputStream.connect(audio.inputMicGain);
-                    audio.inputMicGain.connect(audio.inputDest);
-                    audio.inputMicGain.connect(audio.inputAnalyzer);
-                    // Add a listener for when the mic track ends (happens occasionally, not sure why) and try to reconnect
-                    audio.inputStream.addEventListener("ended", (event) => {
-                        console.error(`Mic track ended`);
-                        restartMicStream();
-                    })
-                    // Setup DTMF generator once we have our input audio nodes
-                    audio.dtmf = new DualTone(audio.context, 100, 200);
-                    // We've now set up audio, yay
-                    audio.running = true;
-                    // Add the first available mic track to the peer connection, this will call the onnegotiationneeded handler which will send a new SDP offer
-                    audio.inputTrack = audio.inputDest.stream.getTracks()[0];
-                    radios[idx].rtc.peer.addTrack(audio.inputTrack);
-                    // Create and send the WebRTC offer
-                },
-                // Report a failure to capture mic
-                function(e) {
-                    alert('Error capturing microphone device');
-                    return false;
-                }
-            );
-        } else {
-            alert('Cannot capture microphone: getUserMedia() not supported in this browser');
-            return false;
-        }
+        console.warn(`Waiting for mic services to be running for radio ${idx}`);
+        setTimeout(startWebRtc, 100, idx);
     } else {
-        console.log("Initial audio setup already complete, connecting mic track to new WebRTC connection");
-        // See if we need to re-create the input destination
+        // Restart mic track if needed
         if (!audio.inputDest.stream.active) {
-            console.debug("Audio destination stream stopped, re-creating");
-            audio.inputDest = audio.context.createMediaStreamDestination();
-            audio.inputMicGain.connect(audio.inputDest);
+            console.warn(`Mic stream was inactive, restarting`);
+            restartMicTrack();
         }
-        // Just connect the existing mic, this will call the onnegotiationneeded handler which will send a new SDP offer
-        audio.inputTrack = audio.inputDest.stream.getTracks()[0];
+        // Create peer
+        radios[idx].rtc.peer = createPeerConnection(idx);
+        if (radios[idx].rtc.peer) {
+            console.log("Created peer connection");
+        } else {
+            console.error("Failed to create peer connection");
+            return false
+        }
+        // Connect track
+        console.log(`Adding mic track to radio ${idx}`);
         radios[idx].rtc.peer.addTrack(audio.inputTrack);
     }
-}
-
-function muteMic() {
-    audio.inputMicGain.gain.value = 0;
-}
-
-function unmuteMic() {
-    audio.inputMicGain.gain.value = 1;
-}
-
-function restartMicTrack() {
-    console.log("Restarting mic track");
-    // Re-get the mic
-    navigator.mediaDevices.getUserMedia({
-        audio: {
-            latency: 0.02,
-            echoCancellation: false,
-            autoGainControl: false,
-            mozNoiseSuppression: false,
-            mozAutoGainControl: false
-        }
-    // Reconnect the track
-    }).then(function(stream) {
-        // Recreate input stream
-        audio.inputStream = audio.context.createMediaStreamSource(stream);
-        // Connect new input mic stream to gain
-        audio.inputStream.connect(audio.inputMicGain);
-        // Add a listener for when the mic track ends (happens occasionally, not sure why) and try to reconnect
-        audio.inputStream.addEventListener("ended", (event) => {
-            console.error(`Mic track ended`);
-            restartMicStream();
-        })
-        return true;
-    }).catch((err) => {
-        console.error(`Error on restarting mic stream: ${err}, disconnecting all radios`);
-        for (var idx = 0; idx < radios.length; idx++) {
-            stopWebRtc(idx);
-            disconnectRadio(idx);
-        }
-        return false;
-    });
 }
 
 /**
@@ -1290,10 +1230,10 @@ function stopWebRtc(idx) {
     }
 
     // Close any local audio
-    radios[idx].rtc.peer.getSenders().forEach(function(sender, idx) {
+    /*radios[idx].rtc.peer.getSenders().forEach(function(sender, idx) {
         console.debug(`Stopping RTC sender ${idx}`);
         sender.track.stop();
-    });
+    });*/
 
     // Close any active peer transceivers
     if (radios[idx].rtc.peer.getTransceivers) {
@@ -1402,6 +1342,7 @@ function createPeerConnection(idx) {
 
             // If we already created the audiosrc, don't do it again. Just reconnect the new audio
             if (radios[idx].audioSrc) {
+                console.log(`Reconnecting audio nodes to audio source for radio ${idx}`);
                 // Create the new audio source node
                 var newAudioNode = audio.context.createMediaStreamSource(newStream);
                 radios[idx].audioSrc.audioNode = newAudioNode;
@@ -1409,6 +1350,7 @@ function createPeerConnection(idx) {
                 radios[idx].audioSrc.audioNode.connect(radios[idx].audioSrc.filterNode);
             // Set up the new audio source
             } else {
+                console.log(`Creating new audio source for radio ${idx}`);
                 // Create audio source from the track and put it in an object with a local gain node
                 var newSource = {
                     audioNode: audio.context.createMediaStreamSource(newStream),
@@ -1710,8 +1652,122 @@ function startAudioDevices() {
     audio.outputGain.gain.value = 0.75;
     audio.outputGain.connect(audio.context.destination);
 
+    // Start audio input
+    console.log("Running initial microphone setup");
+    // New, better (?) way
+    navigator.mediaDevices.getUserMedia({
+        audio: {
+            latency: 0.02,
+            echoCancellation: false,
+            autoGainControl: false,
+            mozNoiseSuppression: false,
+            mozAutoGainControl: false
+        }
+    }).then(
+        // Add tracks to peer connection and negotiate if successful
+        function(stream) {
+            // Set up mic meter dependecies
+            audio.inputStream = audio.context.createMediaStreamSource(stream);
+            // Add handler for when the mic stream ends
+            audio.inputStream.addEventListener("inactive", (event) => {
+                console.warn("Mic input stream ended!");
+                restartMicStream();
+            });
+            audio.inputAnalyzer = audio.context.createAnalyser();
+            audio.inputPcmData = new Float32Array(audio.inputAnalyzer.fftSize);
+            // Create a mic gain for muting the mic when we're not talking
+            audio.inputMicGain = audio.context.createGain();
+            muteMic();
+            // Create a MediaStreamDestination for sending to the WebRTC peer
+            audio.inputDest = audio.context.createMediaStreamDestination();
+            // Connect input mic stream to gain, and gain to destination and analyzer
+            audio.inputStream.connect(audio.inputMicGain);
+            audio.inputMicGain.connect(audio.inputDest);
+            audio.inputMicGain.connect(audio.inputAnalyzer);
+            // Setup DTMF generator once we have our input audio nodes
+            audio.dtmf = new DualTone(audio.context, 100, 200);
+            // Add the first available mic track to the peer connection, this will call the onnegotiationneeded handler which will send a new SDP offer
+            audio.inputTrack = audio.inputDest.stream.getTracks()[0];
+            // Add a listener to restart the track when it ends (happens sometimes)
+            audio.inputTrack.addEventListener("ended", (event) => {
+                console.warn(`Mic input track ended!`);
+                restartMicTrack();
+            });
+            audio.running = true;
+        },
+        // Report a failure to capture mic
+        function(e) {
+            alert('Error capturing microphone device');
+            return false;
+        }
+    );
+
     // Enable volume slider
     $("#console-volume").prop('disabled', false);
+}
+
+function muteMic() {
+    audio.inputMicGain.gain.value = 0;
+}
+
+function unmuteMic() {
+    audio.inputMicGain.gain.value = 1;
+}
+
+function restartMicStream() {
+    console.warn("Restarting mic input stream...");
+    // Re-get user media
+    navigator.mediaDevices.getUserMedia({
+        audio: {
+            latency: 0.02,
+            echoCancellation: false,
+            autoGainControl: false,
+            mozNoiseSuppression: false,
+            mozAutoGainControl: false
+        }
+    }).then( function(stream) {
+        // Recreate the input stream
+        audio.inputStream = audio.context.createMediaStreamSource(stream);
+        // Add handler for when the mic stream ends
+        audio.inputStream.addEventListener("inactive", (event) => {
+            console.warn("Mic input stream ended!");
+            restartMicStream();
+        });
+        // Restart the mic track to reconnect everything
+        restartMicTrack();
+    });
+}
+
+function restartMicTrack() {
+    console.warn(`Restarting mic input track...`);
+    // Recreate the MediaStreamDestination for sending to the WebRTC peer
+    audio.inputDest = audio.context.createMediaStreamDestination();
+    // Reconnect input mic stream to gain, and gain to destination and analyzer
+    audio.inputStream.connect(audio.inputMicGain);
+    audio.inputMicGain.connect(audio.inputDest);
+    audio.inputMicGain.connect(audio.inputAnalyzer);
+    // Add the first available mic track to the peer connection, this will call the onnegotiationneeded handler which will send a new SDP offer
+    audio.inputTrack = audio.inputDest.stream.getTracks()[0];
+    // Add a listener to restart the track when it ends (happens sometimes)
+    audio.inputTrack.addEventListener("ended", (event) => {
+        console.warn(`Mic input track ended!`);
+        restartMicTrack();
+    });
+    console.info("Done!");
+}
+
+function reconnectRadioMicTrack(idx) {
+    console.log(`Reconnecting audio track for radio ${idx}`);
+    const sender = radios[idx].rtc.peer.getSenders()[0];
+    if (sender && radios[idx].rtc.peer.connectionState == 'connected') {
+        // If the sender still exists, just replace the track
+        console.log("Sender still alive, replacing track");
+        sender.replaceTrack(audio.inputTrack);
+    } else {
+        // Add a new track if the sender died
+        console.log("Sender dead, adding new track");
+        radios[idx].rtc.peer.addTrack(audio.inputTrack);
+    }
 }
 
 /**
@@ -2080,7 +2136,7 @@ function sendDigit(digit, duration, delay) {
  * Create websocket connection to radio and wait for it to connect
  * @param {int} idx index of radio in radios[]
  */
- function connectRadio(idx) {
+function connectRadio(idx) {
     // Log
     console.info(`Connecting to radio ${radios[idx].name}`);
     // Update radio connection icon
@@ -2214,6 +2270,8 @@ function recvSocketMessage(event, idx) {
                 updateRadioControls();
                 // Update radio mute status
                 updateMute(idx);
+                // Send extension update
+                exUpdateRadio(idx);
                 break;
 
             // WebRTC SDP answer
@@ -2282,6 +2340,126 @@ function handleSocketError(event, idx) {
     console.error(`Websocket connection error for radio ${radios[idx].name}`);
     console.debug(event);
     //window.alert("Server connection errror: " + event.data);
+}
+
+/***********************************************************************************
+    Extension Websocket Functions
+***********************************************************************************/
+
+function extensionConnect() {
+    // Disconnect if connected
+    if (extensionWs) {
+        extensionWs.close();
+        return;
+    }
+    // Create the connection
+    extensionWs = new WebSocket(`ws://${config.extensionAddress}:${config.extensionPort}`);
+    // Create websocket
+    extensionWs.onerror = function(event) { handleExtensionError(event) };
+    extensionWs.onmessage = function(event) { recvExtensionMessage(event) };
+    extensionWs.onclose = function(event) { handleExtensionClose(event) };
+    // Wait for active
+    waitForWebSocket(extensionWs, extensionConnected);
+}
+
+function extensionConnected() {
+    $("#extension-status").removeClass("disconnected");
+    $("#extension-status").html("Connected");
+    $("#extension-status").addClass("connected");
+    $("#connect-extension").html("Disconnect");
+}
+
+function handleExtensionError(event) {
+    console.error(`Got extension socket error: ${event}`);
+}
+
+function recvExtensionMessage(event) {
+    // Convert to JSON
+    var msgObj;
+    try {
+        msgObj = JSON.parse(event.data);
+        console.debug(msgObj);
+    } catch (e) {
+        console.warn(`Got invalid data from extension websocket: ` + event.data);
+        console.warn(e);
+        return;
+    }
+
+    // Iterate through each message and its data (normally we'd only get one at a time, but I suppose you could get more than one)
+    for (const [key, value] of Object.entries(msgObj)) {
+        // Handle message data based on key type
+        switch (key) {
+            // Radio status update
+            case "selRadio":
+                selectRadio(`radio${value}`);
+                break;
+            // Key radio
+            case "keyRadio":
+                if (selectedRadioIdx != value) {
+                    selectRadio(`radio${value}`);
+                }
+                startPtt(true);
+                break;
+            // Dekey radio
+            case "dekeyRadio":
+                stopPtt();
+                break;
+            // Press softkey
+            case "pressSoftkey":
+                pressSoftkey(parseInt(value)+1);
+                break;
+            // Release softkey
+            case "releaseSoftkey":
+                releaseSoftkey(parseInt(value)+1);
+                break;
+        }
+    }
+}
+
+function handleExtensionClose(event) {
+    $("#extension-status").removeClass("connected");
+    $("#extension-status").html("Disconnected");
+    $("#extension-status").addClass("disconnected");
+    $("#connect-extension").html("Connect");
+    extensionWs = null;
+}
+
+function exUpdateRadio(idx) {
+    if (extensionWs) {
+        if (extensionWs.readyState == WebSocket.OPEN) {
+            obj = {
+                radioIdx: idx,
+                status: radios[idx].status
+            };
+            extensionWs.send(JSON.stringify(obj));
+        }
+    }
+}
+
+function exUpdateSelected() {
+    if (extensionWs) {
+        if (extensionWs.readyState == WebSocket.OPEN) {
+            obj = {
+                selRadioIdx: selectedRadioIdx
+            }
+            extensionWs.send(JSON.stringify(obj));
+        }
+    }
+}
+
+/**
+ * Sends the status of the six softkeys to the extension
+ * @param {bool[6]} states 
+ */
+function exUpdateSoftkeys(states) {
+    if (extensionWs) {
+        if (extensionWs.readyState == WebSocket.OPEN) {
+            obj = {
+                softkeys: states
+            }
+            extensionWs.send(JSON.stringify(obj));
+        }
+    }
 }
 
 /***********************************************************************************

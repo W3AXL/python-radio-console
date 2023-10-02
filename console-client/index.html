@@ -92,6 +92,12 @@
                         </a>
                     </li>
                     <li>
+                        <a href="#" onclick="showConfigPopup('#extension-config-popup');toggleMainMenu();">
+                            <span class="sidebar-icon"><ion-icon name="settings-sharp"></ion-icon></span>
+                            <span class="sidebar-item">Extension Config</span>
+                        </a>
+                    </li>
+                    <li>
                         <a href="#">
                             <span class="sidebar-icon"><ion-icon name="information-circle-sharp"></ion-icon></span>
                             <span class="sidebar-item">About</span>
@@ -309,6 +315,54 @@
                         <td></td>
                         <td>
                             <button class="topcoat-button--cta" onclick="saveClientConfig()">Save</button>
+                        </td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+
+        <!-- Extension Config Popup -->
+        <div id="extension-config-popup" class="popup" style="display: none;">
+            <div class="popup-header">
+                <h2>Extension Config</h2>
+                <div class="popup-buttons">
+                    <a href="#" onclick="closePopup(this)"><ion-icon name="close-circle-sharp"></ion-icon></a>
+                </div>
+            </div>
+            <div class="popup-content">
+                <table class="popup-table">
+                    <!-- Extension Address -->
+                    <tr>
+                        <td>
+                            <h3>Etension Address</h3>
+                        </td>
+                        <td>
+                            <input type="text" id="extension-address" class="topcoat-text-input" placeholder="localhost" value="">
+                        </td>
+                    </tr>
+                    <!-- Extension Port -->
+                    <tr>
+                        <td>
+                            <h3>Etension Port</h3>
+                        </td>
+                        <td>
+                            <input type="text" id="extension-port" class="topcoat-text-input" placeholder="10800" value="">
+                        </td>
+                    </tr>
+                    <!-- Connect Button -->
+                    <tr>
+                        <td style="text-align: right;">
+                            <button class="topcoat-button--cta" id="connect-extension" onclick="extensionConnect()">Connect</button>
+                        </td>
+                        <td>
+                            <span id="extension-status" class="disconnected">Disconnected</span>
+                        </td>
+                    </tr>
+                    <!-- Save Config Button -->
+                    <tr>
+                        <td></td>
+                        <td>
+                            <button class="topcoat-button--cta" onclick="saveExtensionConfig()">Save</button>
                         </td>
                     </tr>
                 </table>

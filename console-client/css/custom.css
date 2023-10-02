@@ -401,14 +401,15 @@ ion-icon {
 .radio-card {
     display: inline-block;
     position: relative;
-    margin-left: 10px;
-    margin-top: 10px;
+    margin-left: 8px;
+    margin-top: 8px;
     width: 294px;
     height: 124px;
     font-family: "B612";
     /* Clip Path for Angles */
     clip-path: polygon(0 0, 100% 0, 100% 83%, 93% 100%, 0 100%);
     background-color: rgba(0,0,0,0);
+    user-select: none;
 }
 
 .radio-card .card {
@@ -762,7 +763,7 @@ ion-icon {
 
 .radio-card #zone-text {
     font-family: "Iosevka Bold";
-    font-size: 20px;
+    font-size: 22px;
 }
 
 /* Dynamic Zone Text Color */
@@ -784,7 +785,7 @@ ion-icon {
 
 .radio-card #channel-text {
     font-family: "Iosevka Bold";
-    font-size: 30px;
+    font-size: 28px;
     color: var(--color-txt-light);
     margin-top: -4px;
 }
@@ -848,7 +849,7 @@ ion-icon {
 #controlbar {
     position: absolute;
     bottom: 0;
-    height: 72px;
+    height: 60px;
     width: 100%;
     background-color: var(--color-bg-mid);
     display: flex;
@@ -869,7 +870,7 @@ ion-icon {
 
 #radio-controls .btn {
     display: inline-flex;
-    height: 40px;
+    height: 36px;
     color: var(--color-txt-mid);
     background-color: var(--color-btn-normal);
     font-family: "Iosevka Extended Bold";
@@ -1048,6 +1049,14 @@ ion-icon {
     color: var(--color-txt-light);
     font-weight: normal;
     text-align: right;
+}
+
+.popup-content .connected {
+    color: var(--color-alert-green-light);
+}
+
+.popup-content .disconnected {
+    color: var(--color-alert-red-light);
 }
 
 /********************************
