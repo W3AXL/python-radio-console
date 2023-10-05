@@ -1833,6 +1833,7 @@ function changeVolume(increment) {
     var newVal = parseInt($("#console-volume").val()) + increment;
     if (newVal < 0) { newVal = 0} else if (newVal > 100) { newVal = 100 }
     $("#console-volume").val(newVal);
+    volumeSlider();
 }
 
 /**
