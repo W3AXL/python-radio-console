@@ -262,17 +262,20 @@ ion-icon {
     border-radius: 4px;
 }
 
-#navbar-connect {
+#navbar-connect,
+#navbar-ext {
     float: right;
     padding-left: 0;
     padding-right: 16px;
 }
 
-#navbar-connect.connected .btn {
+#navbar-connect.connected .btn,
+#navbar-ext.connected .btn {
     color: var(--color-alert-green-mid);
 }
 
-#navbar-connect.disconnected .btn {
+#navbar-connect.disconnected .btn,
+#navbar-ext.disconnected .btn {
     color: var(--color-alert-red-mid);
 }
 

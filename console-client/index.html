@@ -53,6 +53,11 @@
                 <div id="clock"></div>
             </div>
 
+            <!-- Extension Connect/Disconnect Button -->
+            <div id="navbar-ext" class="navbar-item disconnected" title="Connect to extension" onclick="extensionConnect()">
+                <div class="btn"><ion-icon name="magnet-sharp"></ion-icon></div>
+            </div>
+
             <!-- Connect/Disconnect All Button -->
             <div id="navbar-connect" class="navbar-item disconnected" title="Connect All Radios" onclick="connectAllButton()">
                 <div class="btn"><ion-icon name="power-sharp"></ion-icon></div>
@@ -61,7 +66,7 @@
             <!-- Volume Slider -->
             <div id="navbar-volume" class="navbar-item">
                 <ion-icon name="volume-medium-sharp"></ion-icon>
-                <input type="range" class="topcoat-range" id="console-volume" value="75" oninput="changeVolume()" disabled>
+                <input type="range" class="topcoat-range" id="console-volume" value="75" oninput="volumeSlider()" disabled>
             </div>
 
             <!-- Mic & Speaker Volume Meters (deprecated in version 2) -->
@@ -143,7 +148,7 @@
                                             <input type="range" class="topcoat-range radio-pan" min="-1" max="1" value="0" step="0.1" onclick="stopClick(event, this)" oninput="changePan(event, this)" ondblclick="centerPan(event, this)">
                                         </div>
                                     <!-- Mute Button -->
-                                    <a href="#" onclick="toggleMute(event, this)" class="enabled"><ion-icon name="volume-high-sharp" id="icon-mute"></ion-icon></a>
+                                    <a href="#" onclick="muteButton(event, this)" class="enabled"><ion-icon name="volume-high-sharp" id="icon-mute"></ion-icon></a>
                                     <!-- Connection Icon -->
                                     <a href="#" onclick="connectButton(event, this)" title="Disconnected"><ion-icon name="connection-sharp" class="icon-connect disconnected"></ion-icon></a>
                                 </div>

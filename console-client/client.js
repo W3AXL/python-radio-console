@@ -777,20 +777,27 @@ function releaseButton(buttonName) {
     }
 }
 
-/**
- * Toggle the status of radio mute
- * @param {string} obj element whose parent radio to toggle mute on
- */
-function toggleMute(event, obj) {
+function muteButton(event, obj) {
     // Get ID of radio to mute
     const radioId = $(obj).closest(".radio-card").attr('id');
     // Get index of radio in list
     const idx = getRadioIndex(radioId);
+    // toggle mute
+    toggleMute(idx);
+    // stop prop
+    event.stopPropagation();
+}
+
+/**
+ * Toggle the status of radio mute
+ * @param {string} obj element whose parent radio to toggle mute on
+ */
+function toggleMute(idx) {
     // Only do stuff if we have a socket connection
     if (radios[idx].wsConn != null) {
         // Change mute status
         if (radios[idx].status.muted) {
-            console.log("Unmuting " + radioId);
+            console.log("Unmuting " + radios[idx].name);
             radios[idx].wsConn.send(JSON.stringify(
                 {
                     audioControl: {
@@ -799,7 +806,7 @@ function toggleMute(event, obj) {
                 }
             ));
         } else {
-            console.log("Muting " + radioId);
+            console.log("Muting " + radios[idx].name);
             radios[idx].wsConn.send(JSON.stringify(
                 {
                     audioControl: {
@@ -808,10 +815,6 @@ function toggleMute(event, obj) {
                 }
             ));
         }
-        // Update card
-        //updateRadioCard(idx);
-        // Stop propagation so we don't also select the muted radio
-        event.stopPropagation();
     }
 }
 
@@ -1810,7 +1813,7 @@ function audioMeterCallback() {
 /**
  *  Change volume of console based on slider
  */
-function changeVolume() {
+function volumeSlider() {
     // Convert 0-100 to 0-1 for multiplication with audio, using an inverse-square curve for better "logarithmic" volume
     const newVol = Math.pow($("#console-volume").val() / 100, 2);
     // Set gain node to new value
@@ -1820,6 +1823,16 @@ function changeVolume() {
     for (var i = 0; i < uiSounds.length; i++) {
         uiSounds.item(i).volume = newVol;
     }
+}
+
+/**
+ * Changes the value of the volume slider, which will then update the console volume through the slider callback
+ * @param {int} increment 
+ */
+function changeVolume(increment) {
+    var newVal = parseInt($("#console-volume").val()) + increment;
+    if (newVal < 0) { newVal = 0} else if (newVal > 100) { newVal = 100 }
+    $("#console-volume").val(newVal);
 }
 
 /**
@@ -2367,6 +2380,9 @@ function extensionConnected() {
     $("#extension-status").html("Connected");
     $("#extension-status").addClass("connected");
     $("#connect-extension").html("Disconnect");
+    // Navbar icon
+    $("#navbar-ext").removeClass("disconnected");
+    $("#navbar-ext").addClass("connected");
 }
 
 function handleExtensionError(event) {
@@ -2412,6 +2428,37 @@ function recvExtensionMessage(event) {
             case "releaseSoftkey":
                 releaseSoftkey(parseInt(value)+1);
                 break;
+            // Channel command
+            case "channel":
+                switch (value) {
+                    case "up":
+                        changeChannel(false);
+                        break;
+                    case "down":
+                        changeChannel(true);
+                        break;
+                }
+                break;
+            // Volume command
+            case "volume":
+                switch (value) {
+                    case "up":
+                        changeVolume(10);
+                        break;
+                    case "down":
+                        changeVolume(-10);
+                        break;
+                    case "mute":
+                        if (selectedRadioIdx != null) {
+                            toggleMute(selectedRadioIdx);
+                        }
+                        break;
+                }
+                break;
+            // Fallback
+            default:
+                console.warn(`Unknown message from extension: ${JSON.stringify(msgObj)}`);
+                break;
         }
     }
 }
@@ -2421,6 +2468,9 @@ function handleExtensionClose(event) {
     $("#extension-status").html("Disconnected");
     $("#extension-status").addClass("disconnected");
     $("#connect-extension").html("Connect");
+    // Navbar icon
+    $("#navbar-ext").removeClass("connected");
+    $("#navbar-ext").addClass("disconnected");
     extensionWs = null;
 }
 
