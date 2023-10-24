@@ -97,9 +97,9 @@ const dtmfTiming = {
 // WebRTC Variables
 var rtcConf = {
     // Audio codec
-    codec: "opus/48000/2",  // I've found that OPUS seems to have better latency than PCMU
     bitrate: 8000,
-    //codec: "PCMU/8000",
+    //codec: "opus/48000/2",  // I've found that OPUS seems to have better latency than PCMU
+    codec: "PCMU/8000",
     // Base audio encoding/decoding latency. This is added to the current webRTC round trip time when audio functions are called so that actions align with the audio
     // This is found experimentally and varies slightly depending on daemon system performance.
     rxBaseLatency: 500,
@@ -1781,6 +1781,16 @@ function audioMeterCallback() {
     radios.forEach((radio, idx) => {
         // Ignore radios with no connected audio
         if (radios[idx].audioSrc == null) {
+            if ($(`.radio-card#radio${idx} #rx-bar`).width != 0) {
+                $(`.radio-card#radio${idx} #rx-bar`).width(0);
+            }
+            return
+        }
+        // Ignore radio that isn't receiving (checking for the class compensates for the rx delay)
+        if (!$(`.radio-card#radio${idx}`).hasClass("receiving")) {
+            if ($(`.radio-card#radio${idx} #rx-bar`).width != 0) {
+                $(`.radio-card#radio${idx} #rx-bar`).width(0);
+            }
             return
         }
         // Get data
@@ -1793,11 +1803,10 @@ function audioMeterCallback() {
         $(`.radio-card#radio${idx} #rx-bar`).width(newPct);
     });
 
-    // Get data from mic
-    audio.inputAnalyzer.getFloatTimeDomainData(audio.inputPcmData);
-
     // Input meter (only show when PTT)
     if (pttActive) {
+        // Get data from mic
+        audio.inputAnalyzer.getFloatTimeDomainData(audio.inputPcmData);
         sumSquares = 0.0;
         for (const amplitude of audio.inputPcmData) { sumSquares += amplitude * amplitude; }
         const newPct = String(Math.sqrt(sumSquares / audio.outputPcmData.length).toFixed(3) * 300);

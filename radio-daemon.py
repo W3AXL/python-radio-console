@@ -51,13 +51,19 @@ from logger import Logger
 # Used for loading config and sending messages
 import json
 
-# CPU profiling
-#import yappi
+# CPU profiling (don't fail if user doesn't have yappi installed)
+try:
+    import yappi
+except ImportError:
+    pass
 
 # Memory profiling
-#import tracemalloc
-#import gc
-#from pympler import summary, muppy
+try:
+    import tracemalloc
+    import gc
+    #from pympler import summary, muppy
+except ImportError:
+    pass
 
 # Config class (loaded from JSON)
 class Config():
@@ -474,8 +480,13 @@ async def gotRtcDescription(desc):
             if track.kind != "audio":
                 logger.logError("Got non-audio track from peer")
                 return
+            
+            # Discard the mic track if we're RX only
+            if config.Radio.rxOnly:
+                logger.logWarn("Radio is configured as RX only, mic track will be discarded")
+                recorder = MediaBlackhole()
 
-            # Only open the mic recorder if it's not already open
+            # Only open the mic recorder if it's not already open (from previous config or above rx only catch)
             if not recorder:
                 logger.logInfo("Opening TX audio device stream: {}".format(config.Radio.txDev))
                 recorder = MediaRecorder(config.Radio.txDev, format=ffmpegFormat)
@@ -954,23 +965,23 @@ if __name__ == "__main__":
         parseArguments()
 
         # Start CPU profiling
-        #if cpuProfiling:
-        #    yappi.set_clock_type('cpu')
-        #    yappi.start(builtins=True)
+        if cpuProfiling:
+            yappi.set_clock_type('cpu')
+            yappi.start(builtins=True)
 
         # Start Memory Profiling
-        #if memProfiling:
-        #    logger.logInfo("Memory profiling enabled")
-        #    tracemalloc.start(10)
+        if memProfiling:
+            logger.logInfo("Memory profiling enabled")
+            tracemalloc.start(10)
             # Start tracking with muppy
             #logger.logInfo("Starting memory summary thread")
             #sumThread = threading.Thread(target=getSummary)
             #sumThread.start()
 
         # Start Garbage Collector Debug
-        #if gcProfiling:
-        #    logger.logInfo("Garbage collector profiling enabled")
-        #    gc.set_debug(gc.DEBUG_LEAK)
+        if gcProfiling:
+            logger.logInfo("Garbage collector profiling enabled")
+            gc.set_debug(gc.DEBUG_LEAK)
 
         # Get sound devices
         getSoundDevices()
@@ -1006,9 +1017,9 @@ if __name__ == "__main__":
                 logger.logInfo(stat)
             # Print final diff
             #sumStop = True
-            logger.logInfo("Final memory summary")
-            sum = summary.summarize(muppy.get_objects())
-            summary.print_(sum)
+            #logger.logInfo("Final memory summary")
+            #sum = summary.summarize(muppy.get_objects())
+            #summary.print_(sum)
 
         # Print Garbage Statistics
         if gcProfiling:
