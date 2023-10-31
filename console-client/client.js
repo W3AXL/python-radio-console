@@ -2,7 +2,7 @@
     Global Variables
 ***********************************************************************************/
 
-var version = "2.0.1";
+var version = "2.1.0";
 
 // Local user config variables (saved to cookie)
 var config = {
@@ -68,6 +68,19 @@ var audio = {
     micMuteDelay: 100
 }
 
+const userMediaSettings = {
+    audio: {
+        autoGainControl: false,
+        channelCount: 1,
+        echoCancellation: false,
+        latency: 0,
+        noiseSuppression: false,
+        sampleRate: 48000,
+        sampleSize: 16,
+        volume: 1.0
+    }
+}
+
 // DTMF array
 const dtmfFrequencies = {
 	"1": {f1: 697, f2: 1209},
@@ -90,24 +103,32 @@ const dtmfFrequencies = {
 
 const dtmfTiming = {
     "initialDelay": 250,
-    "digitDuration": 350,
-    "digitDelay": 150
+    "digitDuration": 200,
+    "digitDelay": 100
 }
 
 // WebRTC Variables
-var rtcConf = {
+const rtcConf = {
     // Audio codec
-    bitrate: 8000,
-    //codec: "opus/48000/2",  // I've found that OPUS seems to have better latency than PCMU
-    codec: "PCMU/8000",
+    bitrate: 16000,
+    codec: "opus/48000/2",  // stereo opus
+    //codec: "PCMU/8000",
+    
     // Base audio encoding/decoding latency. This is added to the current webRTC round trip time when audio functions are called so that actions align with the audio
     // This is found experimentally and varies slightly depending on daemon system performance.
     rxBaseLatency: 500,
     txBaseLatency: 300,
     // RTT (round-trip time) parameters for RTC connection
     rttLimit: 0.25,
-    rttSize: 25
+    rttSize: 25,
+    
+    // Whether to disable FEC and enable CBR (this actually causes more latency annoyingly)
+    cbr: false
 }
+
+const meter_fps = 30;
+const fps_interval = 1000 / meter_fps;
+var fps_now, fps_then, fps_elapsed;
 
 testInput = null;
 
@@ -1401,7 +1422,8 @@ function createPeerConnection(idx) {
             // Update the radio audio
             updateRadioAudio();
             
-            // If we got a speaker track back, we have both audio streams and can start the meter frame callback
+            // If we got a speaker track back, we have both audio streams and can start the meter frame callback & fps limiting stuff
+            fps_then = window.performance.now();
             window.requestAnimationFrame(audioMeterCallback);
         }
     })
@@ -1442,6 +1464,7 @@ function createRtcOffer(idx) {
         radios[idx].rtc.peer.localDescription.sdp = sdpFilterCodec('audio', rtcConf.codec, rtcConf.bitrate, radios[idx].rtc.peer.localDescription.sdp);
         // Send the offer to the server via WebSocket
         console.debug("Sending local description to daemon");
+        console.debug(radios[idx].rtc.peer.localDescription.sdp);
         radios[idx].wsConn.send(JSON.stringify(
             {
                 webRtc: {
@@ -1489,6 +1512,8 @@ function sdpFilterCodec(kind, codec, bitrate, realSdp) {
     var codecRegex = new RegExp('a=rtpmap:([0-9]+) ' + escapeRegExp(codec))
     var videoRegex = new RegExp('(m=' + kind + ' .*?)( ([0-9]+))*\\s*$')
     
+    console.debug("Starting with SDP:\n" + realSdp);
+
     var lines = realSdp.split('\n');
 
     var isKind = false;
@@ -1541,7 +1566,15 @@ function sdpFilterCodec(kind, codec, bitrate, realSdp) {
     var rx = /a=fmtp:.*/g;
     var fmtpLine = rx.exec(sdp);
     // Append bitrate info to SDP
-    sdp = sdp.replace(fmtpLine,`${fmtpLine};maxplaybackrate=${bitrate};sprop-maxcapturerate=${bitrate};stereo=0`);
+    if (bitrate != null)
+    {
+        sdp = sdp.replace(fmtpLine,`${fmtpLine};maxplaybackrate=${bitrate};sprop-maxcapturerate=${bitrate};stereo=0`);
+    }
+    // Replace FEC with CBR if we want to
+    if (rtcConf.cbr) {
+        console.debug("CBR enabled, replacing FEC line in SDP");
+        sdp = sdp.replace('useinbandfec=1','cbr=1');
+    }
 
     return sdp;
 }
@@ -1658,15 +1691,7 @@ function startAudioDevices() {
     // Start audio input
     console.log("Running initial microphone setup");
     // New, better (?) way
-    navigator.mediaDevices.getUserMedia({
-        audio: {
-            latency: 0.02,
-            echoCancellation: false,
-            autoGainControl: false,
-            mozNoiseSuppression: false,
-            mozAutoGainControl: false
-        }
-    }).then(
+    navigator.mediaDevices.getUserMedia(userMediaSettings).then(
         // Add tracks to peer connection and negotiate if successful
         function(stream) {
             // Set up mic meter dependecies
@@ -1720,15 +1745,7 @@ function unmuteMic() {
 function restartMicStream() {
     console.warn("Restarting mic input stream...");
     // Re-get user media
-    navigator.mediaDevices.getUserMedia({
-        audio: {
-            latency: 0.02,
-            echoCancellation: false,
-            autoGainControl: false,
-            mozNoiseSuppression: false,
-            mozAutoGainControl: false
-        }
-    }).then( function(stream) {
+    navigator.mediaDevices.getUserMedia(userMediaSettings).then( function(stream) {
         // Recreate the input stream
         audio.inputStream = audio.context.createMediaStreamSource(stream);
         // Add handler for when the mic stream ends
@@ -1776,47 +1793,57 @@ function reconnectRadioMicTrack(idx) {
 /**
  * Updates audio meters based on current data. Only called after both mic & speaker are set up and running (otherwise errors)
  */
-function audioMeterCallback() {
-    // Per-Radio RX Level Bar
-    radios.forEach((radio, idx) => {
-        // Ignore radios with no connected audio
-        if (radios[idx].audioSrc == null) {
-            if ($(`.radio-card#radio${idx} #rx-bar`).width != 0) {
-                $(`.radio-card#radio${idx} #rx-bar`).width(0);
-            }
-            return
-        }
-        // Ignore radio that isn't receiving (checking for the class compensates for the rx delay)
-        if (!$(`.radio-card#radio${idx}`).hasClass("receiving")) {
-            if ($(`.radio-card#radio${idx} #rx-bar`).width != 0) {
-                $(`.radio-card#radio${idx} #rx-bar`).width(0);
-            }
-            return
-        }
-        // Get data
-        radios[idx].audioSrc.analyzerNode.getFloatTimeDomainData(radios[idx].audioSrc.analyzerData);
-        // Process into average amplitude
-        var sumSquares = 0.0;
-        for (const amplitude of radios[idx].audioSrc.analyzerData) { sumSquares += amplitude * amplitude; }
-        // We calculate the geometric mean of these samples, and then multiply by an experimentally-found value to get approximately 0-100% scaling
-        const newPct = String(Math.sqrt(sumSquares / radios[idx].audioSrc.analyzerData.length).toFixed(3) * 300);
-        $(`.radio-card#radio${idx} #rx-bar`).width(newPct);
-    });
-
-    // Input meter (only show when PTT)
-    if (pttActive) {
-        // Get data from mic
-        audio.inputAnalyzer.getFloatTimeDomainData(audio.inputPcmData);
-        sumSquares = 0.0;
-        for (const amplitude of audio.inputPcmData) { sumSquares += amplitude * amplitude; }
-        const newPct = String(Math.sqrt(sumSquares / audio.outputPcmData.length).toFixed(3) * 300);
-        // Apply to selected radio only
-        $(`.radio-card#radio${selectedRadioIdx} #tx-bar`).width(newPct);
-    } else {
-        $(`.radio-card#radio${selectedRadioIdx} #tx-bar`).width('0');
-    }
-
+function audioMeterCallback(newtime) {
+    // We request the next animation frame first
     window.requestAnimationFrame(audioMeterCallback);
+
+    // FPS limiting
+    fps_now = newtime;
+    fps_elapsed = fps_now - fps_then;
+
+    if (fps_elapsed > fps_interval) {
+        // Adjust times for the next frame
+        fps_then = fps_now - (fps_elapsed % fps_interval);
+
+        // Draw stuff
+        radios.forEach((radio, idx) => {
+            // Ignore radios with no connected audio
+            if (radios[idx].audioSrc == null) {
+                if ($(`.radio-card#radio${idx} #rx-bar`).width != 0) {
+                    $(`.radio-card#radio${idx} #rx-bar`).width(0);
+                }
+                return
+            }
+            // Ignore radio that isn't receiving (checking for the class compensates for the rx delay)
+            if (!$(`.radio-card#radio${idx}`).hasClass("receiving")) {
+                if ($(`.radio-card#radio${idx} #rx-bar`).width != 0) {
+                    $(`.radio-card#radio${idx} #rx-bar`).width(0);
+                }
+                return
+            }
+            // Get data
+            radios[idx].audioSrc.analyzerNode.getFloatTimeDomainData(radios[idx].audioSrc.analyzerData);
+            // Process into average amplitude
+            var sumSquares = 0.0;
+            for (const amplitude of radios[idx].audioSrc.analyzerData) { sumSquares += amplitude * amplitude; }
+            // We calculate the geometric mean of these samples, and then multiply by an experimentally-found value to get approximately 0-100% scaling
+            const newPct = String(Math.sqrt(sumSquares / radios[idx].audioSrc.analyzerData.length).toFixed(3) * 300);
+            $(`.radio-card#radio${idx} #rx-bar`).width(newPct);
+        });
+
+        // Input meter (only show when PTT)
+        if (pttActive) {
+            // Get data from mic
+            audio.inputAnalyzer.getFloatTimeDomainData(audio.inputPcmData);
+            sumSquares = 0.0;
+            for (const amplitude of audio.inputPcmData) { sumSquares += amplitude * amplitude; }
+            const newPct = String(Math.sqrt(sumSquares / audio.outputPcmData.length).toFixed(3) * 300);
+            // Apply to selected radio only
+            $(`.radio-card#radio${selectedRadioIdx} #tx-bar`).width(newPct);
+        } else {
+            $(`.radio-card#radio${selectedRadioIdx} #tx-bar`).width('0');
+        }
+    }
 }
 
 /**

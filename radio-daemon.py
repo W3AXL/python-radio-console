@@ -222,6 +222,7 @@ def parseArguments():
         noreset = True
 
     if args.cpu_profiling:
+        logger.logInfo("CPU profiling enabled")
         cpuProfiling = True
 
     if args.memory_profiling:
@@ -942,22 +943,6 @@ def getSummary():
 if __name__ == "__main__":
     
     try:
-        # Enable garbage collector
-        #gc.enable()
-
-        # Enable AIORTC debug
-        logging.basicConfig(level=logging.ERROR)
-
-        # Get asyncio event loop
-        eventLoop = asyncio.get_event_loop()
-
-        # get & print OS
-        if os.name == 'nt':
-            ffmpegFormat = 'dshow'
-        elif os.name == 'posix':
-            ffmpegFormat = 'alsa'
-        logger.logVerbose("Detected operating system: {}, using input mode {}".format(os.name, ffmpegFormat))
-
         # add cli arguments
         addArguments()
 
@@ -983,6 +968,19 @@ if __name__ == "__main__":
             logger.logInfo("Garbage collector profiling enabled")
             gc.set_debug(gc.DEBUG_LEAK)
 
+        # Enable AIORTC debug
+        logging.basicConfig(level=logging.ERROR)
+
+        # Get asyncio event loop
+        eventLoop = asyncio.get_event_loop()
+
+        # get & print OS
+        if os.name == 'nt':
+            ffmpegFormat = 'dshow'
+        elif os.name == 'posix':
+            ffmpegFormat = 'alsa'
+        logger.logVerbose("Detected operating system: {}, using input mode {}".format(os.name, ffmpegFormat))
+
         # Get sound devices
         getSoundDevices()
 
@@ -1006,7 +1004,9 @@ if __name__ == "__main__":
         if cpuProfiling:
             stats = yappi.get_func_stats()
             timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
-            stats.save("callgrind_{}.out".format(timestamp), type='callgrind')
+            cgfn = "callgrind_{}.out".format(timestamp)
+            stats.save(cgfn, type='callgrind')
+            logger.logInfo("Saved CPU callgrind as {}".format(cgfn))
 
         # Stop memory profiling
         if memProfiling:
