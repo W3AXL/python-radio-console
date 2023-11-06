@@ -126,9 +126,8 @@ const rtcConf = {
     cbr: false
 }
 
-const meter_fps = 30;
-const fps_interval = 1000 / meter_fps;
-var fps_now, fps_then, fps_elapsed;
+// Flag to start/stop animation callback for audio meters (to save CPU when we're not doing anything)
+var audio_playing = false;
 
 testInput = null;
 
@@ -1421,10 +1420,6 @@ function createPeerConnection(idx) {
 
             // Update the radio audio
             updateRadioAudio();
-            
-            // If we got a speaker track back, we have both audio streams and can start the meter frame callback & fps limiting stuff
-            fps_then = window.performance.now();
-            window.requestAnimationFrame(audioMeterCallback);
         }
     })
 
@@ -1793,56 +1788,74 @@ function reconnectRadioMicTrack(idx) {
 /**
  * Updates audio meters based on current data. Only called after both mic & speaker are set up and running (otherwise errors)
  */
-function audioMeterCallback(newtime) {
-    // We request the next animation frame first
-    window.requestAnimationFrame(audioMeterCallback);
+function audioMeterCallback() {
+    // Stop if we're told to
+    if (!audio_playing) {
+        return;
+    }
 
-    // FPS limiting
-    fps_now = newtime;
-    fps_elapsed = fps_now - fps_then;
-
-    if (fps_elapsed > fps_interval) {
-        // Adjust times for the next frame
-        fps_then = fps_now - (fps_elapsed % fps_interval);
-
-        // Draw stuff
-        radios.forEach((radio, idx) => {
-            // Ignore radios with no connected audio
-            if (radios[idx].audioSrc == null) {
-                if ($(`.radio-card#radio${idx} #rx-bar`).width != 0) {
-                    $(`.radio-card#radio${idx} #rx-bar`).width(0);
-                }
-                return
+    // Draw stuff
+    radios.forEach((radio, idx) => {
+        // Ignore radios with no connected audio
+        if (radios[idx].audioSrc == null) {
+            if ($(`.radio-card#radio${idx} #rx-bar`).width != 0) {
+                $(`.radio-card#radio${idx} #rx-bar`).width(0);
             }
-            // Ignore radio that isn't receiving (checking for the class compensates for the rx delay)
-            if (!$(`.radio-card#radio${idx}`).hasClass("receiving")) {
-                if ($(`.radio-card#radio${idx} #rx-bar`).width != 0) {
-                    $(`.radio-card#radio${idx} #rx-bar`).width(0);
-                }
-                return
-            }
-            // Get data
-            radios[idx].audioSrc.analyzerNode.getFloatTimeDomainData(radios[idx].audioSrc.analyzerData);
-            // Process into average amplitude
-            var sumSquares = 0.0;
-            for (const amplitude of radios[idx].audioSrc.analyzerData) { sumSquares += amplitude * amplitude; }
-            // We calculate the geometric mean of these samples, and then multiply by an experimentally-found value to get approximately 0-100% scaling
-            const newPct = String(Math.sqrt(sumSquares / radios[idx].audioSrc.analyzerData.length).toFixed(3) * 300);
-            $(`.radio-card#radio${idx} #rx-bar`).width(newPct);
-        });
-
-        // Input meter (only show when PTT)
-        if (pttActive) {
-            // Get data from mic
-            audio.inputAnalyzer.getFloatTimeDomainData(audio.inputPcmData);
-            sumSquares = 0.0;
-            for (const amplitude of audio.inputPcmData) { sumSquares += amplitude * amplitude; }
-            const newPct = String(Math.sqrt(sumSquares / audio.outputPcmData.length).toFixed(3) * 300);
-            // Apply to selected radio only
-            $(`.radio-card#radio${selectedRadioIdx} #tx-bar`).width(newPct);
-        } else {
-            $(`.radio-card#radio${selectedRadioIdx} #tx-bar`).width('0');
+            return
         }
+        // Ignore radio that isn't receiving (checking for the class compensates for the rx delay)
+        if (!$(`.radio-card#radio${idx}`).hasClass("receiving")) {
+            if ($(`.radio-card#radio${idx} #rx-bar`).width != 0) {
+                $(`.radio-card#radio${idx} #rx-bar`).width(0);
+            }
+            return
+        }
+        // Get data
+        radios[idx].audioSrc.analyzerNode.getFloatTimeDomainData(radios[idx].audioSrc.analyzerData);
+        // Process into average amplitude
+        var sumSquares = 0.0;
+        for (const amplitude of radios[idx].audioSrc.analyzerData) { sumSquares += (amplitude * amplitude); }
+        // We just scale this summed squared value by a constant to avoid actually doing an RMS calculation every single frame
+        const newPct = String(Math.sqrt(sumSquares / radios[idx].audioSrc.analyzerData.length).toFixed(3) * 300);
+        $(`.radio-card#radio${idx} #rx-bar`).width(newPct);
+    });
+
+    // Input meter (only show when PTT)
+    if (pttActive) {
+        // Get data from mic
+        audio.inputAnalyzer.getFloatTimeDomainData(audio.inputPcmData);
+        sumSquares = 0.0;
+        for (const amplitude of audio.inputPcmData) { sumSquares += amplitude * amplitude; }
+        const newPct = String(Math.sqrt(sumSquares / audio.outputPcmData.length).toFixed(3) * 300);
+        // Apply to selected radio only
+        $(`.radio-card#radio${selectedRadioIdx} #tx-bar`).width(newPct);
+    } else {
+        $(`.radio-card#radio${selectedRadioIdx} #tx-bar`).width(0);
+    }
+
+    // Request next frame
+    window.requestAnimationFrame(audioMeterCallback);
+}
+
+function checkAudioMeterCallback()
+{
+    // Get the overall "audio doing something" status
+    audio_active = false;
+    radios.forEach((radio, idx) => {
+        if (radio.status.state == "Receiving" || radio.status.state == "Transmitting")
+        {
+            audio_active = true;
+        }
+    });
+    // If audio was active and isn't any longer, stop things
+    if (audio_playing && !audio_active) {
+        console.debug("Stopping audio meter callback, all radios idle");
+        audio_playing = false;
+    // If audio wasn't active and now is, start up the animation callback again
+    } else if (!audio_playing && audio_active) {
+        console.debug("Starting audio meter callback, radio is active");
+        audio_playing = true;
+        window.requestAnimationFrame(audioMeterCallback);
     }
 }
 
@@ -1927,29 +1940,27 @@ function muteRadio(idx, mute) {
 }
 
 /**
- * Updates the status of the mute for each radio audio source
+ * Various audio updates for the specified radio
  */
-function updateMute() {
-    console.debug("Updating radio source mute statuses");
-    radios.forEach(function(radio, idx) {
-        // Ignore if we haven't created the node yet
-        if (radios[idx].audioSrc == null) { 
-            console.debug(`Audio not connected for radio ${radios[idx].name}, skipping`);
-            return;
-        }
-        // Mute if we're muted or not receiving, after the specified delay in rtc.rxLatency
-        if (radios[idx].status.muted || (radios[idx].status.state != 'Receiving')) {
-            setTimeout(function() {
-                console.debug(`Muting audio for radio ${radios[idx].name}`);
-                radios[idx].audioSrc.muteNode.gain.setValueAtTime(0, audio.context.currentTime);
-            }, radios[idx].rtc.rxLatency);
-        } else {
-            setTimeout(function() {
-                console.debug(`Unmuting audio for radio ${radios[idx].name}`);
-                radios[idx].audioSrc.muteNode.gain.setValueAtTime(1, audio.context.currentTime);
-            }, radios[idx].rtc.rxLatency);
-        }
-    });
+function updateAudio(idx) {
+    console.debug(`Updating audio for radio ${idx}`);
+    // Do nothing if audio sources aren't connected
+    if (radios[idx].audioSrc == null) { 
+        console.debug(`Audio not connected for radio ${radios[idx].name}, skipping`);
+        return;
+    }
+    // Mute if we're muted or not receiving, after the specified delay in rtc.rxLatency
+    if (radios[idx].status.muted || (radios[idx].status.state != 'Receiving')) {
+        setTimeout(function() {
+            console.debug(`Muting audio for radio ${radios[idx].name}`);
+            radios[idx].audioSrc.muteNode.gain.setValueAtTime(0, audio.context.currentTime);
+        }, radios[idx].rtc.rxLatency);
+    } else {
+        setTimeout(function() {
+            console.debug(`Unmuting audio for radio ${radios[idx].name}`);
+            radios[idx].audioSrc.muteNode.gain.setValueAtTime(1, audio.context.currentTime);
+        }, radios[idx].rtc.rxLatency);
+    }
 }
 
 /**
@@ -2319,9 +2330,11 @@ function recvSocketMessage(event, idx) {
                 // Update bottom controls
                 updateRadioControls();
                 // Update radio mute status
-                updateMute(idx);
+                updateAudio(idx);
                 // Send extension update
                 exUpdateRadio(idx);
+                // Check audio meter state
+                checkAudioMeterCallback();
                 break;
 
             // WebRTC SDP answer
