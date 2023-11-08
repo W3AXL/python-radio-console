@@ -26,7 +26,13 @@ class Radio():
                     "Soundcard-CM108",  # CM108 GPIO PTT
                     "Soundcard-VOX"]    # Radio-controlled VOX PTT
 
-    def __init__(self, name, desc=None, ctrlMode=None, ctrlPort=None, txDev=None, rxDev=None, logger=Logger(), zoneLookup=None, chanLookup=None, btnBinding=None, softkeyList=None, useLedsForRx=False, rxOnly=False):
+    def __init__(self, name, desc=None, 
+                 ctrlMode=None, ctrlPort=None, 
+                 txDev=None, rxDev=None, 
+                 logger=Logger(), 
+                 zoneLookup=None, chanLookup=None, 
+                 btnBinding=None, softkeyList=None, 
+                 useLedsForRx=False, rxOnly=False):
         """Radio configuration object
 
         Args:

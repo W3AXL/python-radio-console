@@ -8,7 +8,7 @@ import os
 import argparse
 import platform
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 #import time
 import json
 #import queue
@@ -77,11 +77,23 @@ configFile = ""
 config = Config()
 
 # AIORTC recorder & player (for mic & speaker tracks)
+micRecorder = None
+spkrPlayer = None
+
+# Local recording config
+recDirectory = None
+recHangtime = None
+recFormat = None
 recorder = None
-player = None
+recording = False
+recTimeout = None
+recTimeoutTask = None
+recChannel = None
+recState = None
 
 # Create a relay for the incoming mic track
 micRelay = None
+spkrRelay = None
 
 # FFMPEG device format (alsa for linux, dshow for windows, loaded at runtime)
 ffmpegFormat = None
@@ -255,6 +267,9 @@ def loadConfig(filename):
     """
 
     global certfile
+    global recDirectory
+    global recHangtime
+    global recFormat
     global keyfile
     global ffmpegFormat
 
@@ -278,6 +293,14 @@ def loadConfig(filename):
                 keyfile = configDict["Keyfile"]
                 logger.logInfo("Using SSL keyfile: {}".format(keyfile))
 
+            # Get recording config
+            if "recording" in configDict.keys():
+                recDirectory = configDict["recording"]["directory"]
+                recHangtime = configDict["recording"]["hangtime"]
+                recFormat = configDict["recording"]["format"]
+                logger.logInfo("Local recording enabled, will record to {}".format(recDirectory))
+                logger.logDebug("Recording hangtime: {}, format: {}".format(recHangtime, recFormat))
+
             # Print on success
             logger.logInfo("Sucessfully loaded config file {}".format(filename))
             logger.logVerbose(config)
@@ -299,6 +322,56 @@ def printRadios():
 """-------------------------------------------------------------------------------
     Radio Functions
 -------------------------------------------------------------------------------"""
+
+async def handleStatus():
+    global recording
+    global recTimeout
+    global recTimeoutTask
+    global recChannel
+    global recState
+
+    # Don't do anything unless our audio is connected and running
+    if rtcPeer and micRelay and spkrRelay:
+        # See if radio is receiving or transmitting
+        if config.Radio.state == RadioState.Transmitting or config.Radio.state == RadioState.Receiving:
+            # Start recording if we weren't
+            if not recording:
+                recChannel = config.Radio.chan
+                recState = config.Radio.state
+                if recState == RadioState.Transmitting:
+                    await startRecording(recChannel, True)
+                else:
+                    await startRecording(recChannel, False)
+            
+            # Restart recording if the channel changed (commented out for now since it also catched MDC IDs, TGs, etc which we don't want)
+            if recChannel != config.Radio.chan:
+                pass
+                #logger.logVerbose("Channel changed, restarting recording")
+                #await stopRecording()
+                #recChannel = config.Radio.chan
+                #recState = config.Radio.state
+                #if recState == RadioState.Transmitting:
+                #    await startRecording(recChannel, True)
+                #else:
+                #    await startRecording(recChannel, False)
+            
+            # Channel TX/RX state change handler
+            elif recState != config.Radio.state:
+                logger.logVerbose("Channel switched TX/RX state, restarting recording")
+                await stopRecording()
+                recChannel = config.Radio.chan
+                recState = config.Radio.state
+                if recState == RadioState.Transmitting:
+                    await startRecording(recChannel, True)
+                else:
+                    await startRecording(recChannel, False)
+        
+        else:
+            if recording and not recTimeout:
+                logger.logVerbose("Radio idle, starting recorder timeout timer")
+                recTimeout = datetime.now()
+                # Start recorder timeout monitoring
+                recTimeoutTask = asyncio.create_task(checkRecTimer())
 
 def connectRadio():
     """
@@ -432,9 +505,10 @@ async def gotRtcDescription(desc):
     """
 
     global rtcPeer
-    global player
-    global recorder
+    global spkrPlayer
+    global micRecorder
     global micRelay
+    global spkrRelay
 
     logger.logVerbose("Got WebRTC description")
     logger.logDebug(desc)
@@ -450,12 +524,18 @@ async def gotRtcDescription(desc):
         offer = RTCSessionDescription(sdp=desc["sdp"], type=desc["type"])
 
         # Create speaker track
-        if not player:
+        if not spkrPlayer:
             logger.logInfo("Creating RTC speaker track for radio {}, device {}".format(config.Radio.name, config.Radio.rxDev))
-            player = MediaPlayer(config.Radio.rxDev, format=ffmpegFormat)
-            rtcPeer.addTrack(player.audio)
+            # Create speaker track
+            spkrPlayer = MediaPlayer(config.Radio.rxDev, format=ffmpegFormat)
+            # Create speaker relay
+            if not spkrRelay:
+                spkrRelay = MediaRelay()
+            # Connect
+            rtcPeer.addTrack(spkrRelay.subscribe(spkrPlayer.audio))
         else:
             logger.logVerbose("RTC speaker track already exists")
+
 
         # Create callbacks
 
@@ -472,10 +552,13 @@ async def gotRtcDescription(desc):
         async def onTrack(track):
 
             global micRelay
-            global recorder
+            global micTrack
+            global micRecorder
             global ffmpegFormat
 
             logger.logVerbose("Got {} track from peer".format(track.kind))
+
+            micTrack = track
 
             # make sure it's audio
             if track.kind != "audio":
@@ -485,20 +568,20 @@ async def gotRtcDescription(desc):
             # Discard the mic track if we're RX only
             if config.Radio.rxOnly:
                 logger.logWarn("Radio is configured as RX only, mic track will be discarded")
-                recorder = MediaBlackhole()
+                micRecorder = MediaBlackhole()
 
             # Only open the mic recorder if it's not already open (from previous config or above rx only catch)
-            if not recorder:
+            if not micRecorder:
                 logger.logInfo("Opening TX audio device stream: {}".format(config.Radio.txDev))
-                recorder = MediaRecorder(config.Radio.txDev, format=ffmpegFormat)
+                micRecorder = MediaRecorder(config.Radio.txDev, format=ffmpegFormat)
 
             # Create a mic relay
             if not micRelay:
                 micRelay = MediaRelay()
 
             # Connect the mic track to the recorder via the relay
-            recorder.addTrack(micRelay.subscribe(track))
-            await recorder.start()
+            micRecorder.addTrack(micRelay.subscribe(track))
+            await micRecorder.start()
 
             # Track ended handler (don't really do anything here for now)
             @track.on("ended")
@@ -515,27 +598,37 @@ async def gotRtcDescription(desc):
 
 async def stopRtc():
     global rtcPeer
-    global player
-    global recorder
+    global spkrPlayer
+    global micRecorder
     global micRelay
+    global micTrack
+    global spkrRelay
     # Stop the peer if it's open
     logger.logInfo("Stopping RTC connection")
     if rtcPeer:
         await rtcPeer.close()
         rtcPeer = None
+    # Stop and clear mic track
+    if micTrack:
+        logger.logVerbose("Stopping Mic track")
+        micTrack = None
     # Stop and clear recorder
-    if recorder:
+    if micRecorder:
         logger.logVerbose("Stopping TX audio recorder")
-        await recorder.stop()
-        recorder = None
+        await micRecorder.stop()
+        micRecorder = None
     # Stop and clear player
-    if player:
+    if spkrPlayer:
         logger.logVerbose("Stopping RX audio player")
-        player = None
+        spkrPlayer = None
     # Stop and clear the mic relay
     if micRelay:
         logger.logVerbose("Clearing mic relay")
         micRelay = None
+    # Stop and clear the speaker relay
+    if spkrRelay:
+        logger.logVerbose("Clearing speaker relay")
+        spkrRelay = None
     return
 
 async def doRtcAnswer(offer):
@@ -557,6 +650,57 @@ async def doRtcAnswer(offer):
     logger.logDebug(message.replace("\\r\\n", "\r\n"))
     messageQueue.put_nowait(message)
 
+    return
+
+async def startRecording(channelName, tx):
+    global recorder
+    global recording
+    global recTimeout
+
+    if not os.path.exists(recDirectory):
+        os.mkdir(recDirectory)
+
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+    
+    if tx:
+        # Record TX stream
+        filename = "{}/{}_{}_TX.{}".format(recDirectory, channelName, timestamp, recFormat)
+        recorder = MediaRecorder(filename)
+        logger.logVerbose("Starting recording TX to file {}".format(filename))
+        recorder.addTrack(micRelay.subscribe(micTrack))
+    else:
+        # Record RX stream 
+        filename = "{}/{}_{}_RX.{}".format(recDirectory, channelName, timestamp, recFormat)
+        recorder = MediaRecorder(filename)
+        logger.logVerbose("Starting recording RX to file {}".format(filename))
+        recorder.addTrack(spkrRelay.subscribe(spkrPlayer.audio))
+
+    # Start
+    await recorder.start()
+
+    recording = True
+    recTimeout = None
+    return
+
+async def stopRecording():
+    global recording
+    global recTimeout
+
+    await recorder.stop()
+    logger.logVerbose("Stopped recording")
+    recording = False
+    recTimeout = None
+    return
+
+# this runs in a thread
+async def checkRecTimer():
+    while recTimeout:
+        if datetime.now() - recTimeout > timedelta(seconds=recHangtime):
+            logger.logVerbose("Recorder hangtime expired, stopping!")
+            await stopRecording()
+        else:
+            await asyncio.sleep(0.01)
+    logger.logVerbose("Recording timeout cleared")
     return
 
 """-------------------------------------------------------------------------------
@@ -818,6 +962,8 @@ async def producer_hander(websocket, path):
                 response = '{{ "status": {} }}'.format(getRadioStatusJson())
                 # Send
                 await websocket.send(response)
+                # Handle status message (for local recording, etc)
+                await handleStatus()
             
             # send NACK to unknown command
             elif "NACK" in message:
@@ -826,6 +972,7 @@ async def producer_hander(websocket, path):
         
     except websockets.exceptions.ConnectionClosed:
         # The consumer handler should already cover this
+        logger.logWarn("Websocket connection closed!")
         return
 
 def startWsServer():
