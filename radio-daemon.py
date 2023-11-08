@@ -330,8 +330,8 @@ async def handleStatus():
     global recChannel
     global recState
 
-    # Don't do anything unless our audio is connected and running
-    if rtcPeer and micRelay and spkrRelay:
+    # Don't do anything unless our audio is connected and running, and we're configured to record
+    if rtcPeer and micRelay and spkrRelay and recDirectory and recHangtime and recFormat:
         # See if radio is receiving or transmitting
         if config.Radio.state == RadioState.Transmitting or config.Radio.state == RadioState.Receiving:
             # Start recording if we weren't
