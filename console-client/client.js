@@ -503,11 +503,15 @@ function updateRadioCard(idx) {
         case "Transmitting":
             setTimeout(function() {
                 radioCard.addClass("transmitting");
+                // Check audio meter state
+                checkAudioMeterCallback();
             }, radios[idx].rtc.txLatency);
             break;
         case "Receiving":
             setTimeout(function() {
                 radioCard.addClass("receiving");
+                // Check audio meter state
+                checkAudioMeterCallback();
             }, radios[idx].rtc.rxLatency); // used to unmute after latency delay but this makes sure we don't miss anything
             break;
         case "Disconnected":
@@ -1409,8 +1413,8 @@ function createPeerConnection(idx) {
                 newSource.filterNode.connect(newSource.agcNode);
                 newSource.agcNode.connect(newSource.makeupNode);
                 newSource.makeupNode.connect(newSource.muteNode);
+                newSource.makeupNode.connect(newSource.analyzerNode);
                 newSource.muteNode.connect(newSource.gainNode);
-                newSource.muteNode.connect(newSource.analyzerNode);
                 newSource.gainNode.connect(newSource.panNode);
                 newSource.panNode.connect(audio.outputGain);
 
@@ -1839,11 +1843,13 @@ function audioMeterCallback() {
 
 function checkAudioMeterCallback()
 {
-    // Get the overall "audio doing something" status
+    // Get the overall "audio doing something" status (we check classes instead of actual statuses to account for the latency delays)
+    console.debug("Checking if any radio's audio is active");
     audio_active = false;
     radios.forEach((radio, idx) => {
-        if (radio.status.state == "Receiving" || radio.status.state == "Transmitting")
+        if ($(`.radio-card#radio${idx}`).hasClass("receiving") || $(`.radio-card#radio${idx}`).hasClass("transmitting"))
         {
+            console.debug(`${radio.name} audio active`);
             audio_active = true;
         }
     });
@@ -1851,12 +1857,24 @@ function checkAudioMeterCallback()
     if (audio_playing && !audio_active) {
         console.debug("Stopping audio meter callback, all radios idle");
         audio_playing = false;
+        zeroAudioMeters();
     // If audio wasn't active and now is, start up the animation callback again
     } else if (!audio_playing && audio_active) {
         console.debug("Starting audio meter callback, radio is active");
         audio_playing = true;
         window.requestAnimationFrame(audioMeterCallback);
     }
+}
+
+/**
+ * Set all audio meters on all radio cards to zero
+ */
+function zeroAudioMeters()
+{
+    radios.forEach((radio, idx) => {
+        $(`.radio-card#radio${idx} #rx-bar`).width(0);
+        $(`.radio-card#radio${idx} #tx-bar`).width(0);
+    });
 }
 
 /**
@@ -2333,8 +2351,6 @@ function recvSocketMessage(event, idx) {
                 updateAudio(idx);
                 // Send extension update
                 exUpdateRadio(idx);
-                // Check audio meter state
-                checkAudioMeterCallback();
                 break;
 
             // WebRTC SDP answer
