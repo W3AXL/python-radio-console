@@ -418,7 +418,7 @@ class Motorola:
                         self.txDelayList.pop(idx)
 
             # give the CPU a break
-            time.sleep(0.01)
+            time.sleep(0.001)
 
         # Print debug on thread close
         self.logger.logVerbose("SB9600 listener thread stopped for radio {}".format(self.name))
