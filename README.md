@@ -1,3 +1,5 @@
+**NOTE: As of 2024, this repository has been deprecated in favor of the [bigger, better RadioConsole2 project](https://github.com/W3AXL/RadioConsole2). Check it out!**
+
 # Python Radio Console
 Control Motorola radios with your computer and some basic hardware!
 
